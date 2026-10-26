@@ -1,0 +1,279 @@
+package app.painter.core.stroke
+
+import kotlin.math.exp
+import kotlin.math.floor
+import kotlin.math.max
+import kotlin.math.min
+
+/** Decoded image (the app decodes PNG): 8-bit [channels] = 1 (gray) or 4 (straight RGBA), row-major. */
+class ImageData(val width: Int, val height: Int, val channels: Int, val pixels: ByteArray) {
+    init {
+        require(channels == 1 || channels == 4) { "channels must be 1 or 4" }
+        require(width > 0 && height > 0 && pixels.size == width * height * channels) { "bad image size" }
+    }
+}
+
+/** One mip level: [w]×[h] floats, [rgba] premultiplied colour when the head is coloured. */
+internal class MipLevel(val w: Int, val h: Int, val mask: FloatArray, val rgba: FloatArray?)
+
+/**
+ * Pyramid of one (possibly softened) head mask. Sampling is bilinear between texel centres with a
+ * transparent border, UV (0,0)–(1,1) covering the whole image.
+ */
+class HeadPyramid internal constructor(private val levels: Array<MipLevel>, private val srcSize: Int) {
+    val levelCount: Int get() = levels.size
+
+    /** Mip level for dab diameter [d]: `clamp(floor(log2(srcSize / d)), 0, max)`. */
+    fun level(d: Float): Int {
+        if (d <= 0f) return levels.size - 1
+        val r = srcSize / d
+        if (r < 2f) return 0
+        val l = floor(log2(r)).toInt()
+        return l.coerceIn(0, levels.size - 1)
+    }
+
+    /** Mask coverage 0..1 at ([u], [v]). */
+    fun sample(level: Int, u: Float, v: Float): Float {
+        val m = levels[level]
+        val fx = u * m.w - 0.5f
+        val fy = v * m.h - 0.5f
+        if (fx <= -1f || fy <= -1f || fx >= m.w || fy >= m.h) return 0f
+        val x0 = floor(fx).toInt()
+        val y0 = floor(fy).toInt()
+        val ax = fx - x0
+        val ay = fy - y0
+        val a = m.mask
+        val w = m.w
+        val inX0 = x0 >= 0
+        val inX1 = x0 + 1 < w
+        var top = 0f
+        var bot = 0f
+        if (y0 >= 0) {
+            val row = y0 * w
+            val p0 = if (inX0) a[row + x0] else 0f
+            val p1 = if (inX1) a[row + x0 + 1] else 0f
+            top = p0 + (p1 - p0) * ax
+        }
+        if (y0 + 1 < m.h) {
+            val row = (y0 + 1) * w
+            val p0 = if (inX0) a[row + x0] else 0f
+            val p1 = if (inX1) a[row + x0 + 1] else 0f
+            bot = p0 + (p1 - p0) * ax
+        }
+        return top + (bot - top) * ay
+    }
+
+    /** Premultiplied RGBA at ([u], [v]) into [out]; a gray head yields white × mask. */
+    fun sampleRgba(level: Int, u: Float, v: Float, out: FloatArray) {
+        val m = levels[level]
+        val rgba = m.rgba
+        if (rgba == null) {
+            val a = sample(level, u, v)
+            out[0] = a; out[1] = a; out[2] = a; out[3] = a
+            return
+        }
+        out.fill(0f, 0, 4)
+        val fx = u * m.w - 0.5f
+        val fy = v * m.h - 0.5f
+        val x0 = floor(fx).toInt()
+        val y0 = floor(fy).toInt()
+        val ax = fx - x0
+        val ay = fy - y0
+        for (dy in 0..1) for (dx in 0..1) {
+            val x = x0 + dx
+            val y = y0 + dy
+            if (x < 0 || y < 0 || x >= m.w || y >= m.h) continue
+            val wgt = (if (dx == 0) 1f - ax else ax) * (if (dy == 0) 1f - ay else ay)
+            val i = (y * m.w + x) * 4
+            out[0] += rgba[i] * wgt; out[1] += rgba[i + 1] * wgt
+            out[2] += rgba[i + 2] * wgt; out[3] += rgba[i + 3] * wgt
+        }
+    }
+
+    private fun log2(x: Float): Float = (kotlin.math.ln(x.toDouble()) / LN2).toFloat()
+
+    private companion object {
+        val LN2 = kotlin.math.ln(2.0)
+    }
+}
+
+/**
+ * Bitmap brush head (spec/tools/m2-brush.md §1.1). The mask is the gray value (white = coverage) or the
+ * alpha of an RGBA image; [curve] (256-entry LUT) and [invert] are applied once at load. Softness is a
+ * Gaussian blur with σ = (1 − hardness)·0.15·srcSize, quantised to [SOFT_LEVELS] cached pyramids.
+ */
+class HeadImage(src: ImageData, curve: Curve? = null, invert: Boolean = false) {
+    val width = src.width
+    val height = src.height
+    val colored = src.channels == 4
+    private val srcSize = max(width, height)
+    private val base: FloatArray
+    private val baseRgba: FloatArray?
+    private val pyramids = arrayOfNulls<HeadPyramid>(SOFT_LEVELS)
+
+    init {
+        val lut = FloatArray(256) { i ->
+            var v = i / 255f
+            if (invert) v = 1f - v
+            curve?.eval(v) ?: v
+        }
+        val n = width * height
+        base = FloatArray(n)
+        baseRgba = if (colored) FloatArray(n * 4) else null
+        val px = src.pixels
+        for (i in 0 until n) {
+            if (colored) {
+                val a = lut[px[i * 4 + 3].toInt() and 0xFF]
+                base[i] = a
+                for (c in 0..2) baseRgba!![i * 4 + c] = (px[i * 4 + c].toInt() and 0xFF) / 255f * a
+                baseRgba!![i * 4 + 3] = a
+            } else {
+                base[i] = lut[px[i].toInt() and 0xFF]
+            }
+        }
+    }
+
+    /** Unsoftened pyramid. */
+    val sharp: HeadPyramid get() = pyramid(1f)
+
+    /** Pyramid for [hardness] (0 = softest). */
+    fun pyramid(hardness: Float): HeadPyramid {
+        val q = ((1f - hardness.coerceIn(0f, 1f)) * (SOFT_LEVELS - 1) + 0.5f).toInt()
+        synchronized(pyramids) {
+            pyramids[q]?.let { return it }
+            val p = build(q)
+            pyramids[q] = p
+            return p
+        }
+    }
+
+    /** Mip level of the unsoftened pyramid for diameter [d]. */
+    fun level(d: Float): Int = sharp.level(d)
+
+    /** Unsoftened mask sample. */
+    fun sample(level: Int, u: Float, v: Float): Float = sharp.sample(level, u, v)
+
+    /** Unsoftened premultiplied colour sample. */
+    fun sampleRgba(level: Int, u: Float, v: Float, out: FloatArray) = sharp.sampleRgba(level, u, v, out)
+
+    private fun build(q: Int): HeadPyramid {
+        val sigma = q.toFloat() / (SOFT_LEVELS - 1) * 0.15f * srcSize
+        val m0 = if (q == 0) base else blur(base, width, height, 1, sigma)
+        val c0 = baseRgba?.let { if (q == 0) it else blur(it, width, height, 4, sigma) }
+        val levels = ArrayList<MipLevel>()
+        var cur = MipLevel(width, height, m0, c0)
+        levels.add(cur)
+        while (cur.w > 1 || cur.h > 1) {
+            cur = downsample(cur)
+            levels.add(cur)
+        }
+        return HeadPyramid(levels.toTypedArray(), srcSize)
+    }
+
+    private fun downsample(m: MipLevel): MipLevel {
+        val w = max(1, m.w / 2)
+        val h = max(1, m.h / 2)
+        val mask = FloatArray(w * h)
+        val rgba = m.rgba?.let { FloatArray(w * h * 4) }
+        for (y in 0 until h) for (x in 0 until w) {
+            var s = 0f
+            var cnt = 0
+            val acc = FloatArray(4)
+            for (dy in 0..1) for (dx in 0..1) {
+                val sx = min(m.w - 1, x * 2 + dx)
+                val sy = min(m.h - 1, y * 2 + dy)
+                val i = sy * m.w + sx
+                s += m.mask[i]
+                if (m.rgba != null) for (c in 0..3) acc[c] += m.rgba[i * 4 + c]
+                cnt++
+            }
+            mask[y * w + x] = s / cnt
+            if (rgba != null) for (c in 0..3) rgba[(y * w + x) * 4 + c] = acc[c] / cnt
+        }
+        return MipLevel(w, h, mask, rgba)
+    }
+
+    private fun blur(src: FloatArray, w: Int, h: Int, ch: Int, sigma: Float): FloatArray {
+        val r = (sigma * 3f).toInt().coerceAtLeast(1)
+        val k = FloatArray(2 * r + 1) { val x = (it - r).toFloat(); exp(-x * x / (2f * sigma * sigma)) }
+        val sum = k.sum()
+        for (i in k.indices) k[i] /= sum
+        val tmp = FloatArray(src.size)
+        val out = FloatArray(src.size)
+        for (y in 0 until h) for (x in 0 until w) for (c in 0 until ch) {
+            var s = 0f
+            for (j in -r..r) {
+                val xx = x + j
+                if (xx in 0 until w) s += src[(y * w + xx) * ch + c] * k[j + r]
+            }
+            tmp[(y * w + x) * ch + c] = s
+        }
+        for (y in 0 until h) for (x in 0 until w) for (c in 0 until ch) {
+            var s = 0f
+            for (j in -r..r) {
+                val yy = y + j
+                if (yy in 0 until h) s += tmp[(yy * w + x) * ch + c] * k[j + r]
+            }
+            out[(y * w + x) * ch + c] = s
+        }
+        return out
+    }
+
+    companion object {
+        const val SOFT_LEVELS = 8
+    }
+}
+
+/**
+ * Tiling gray texture sampled bilinearly with wrap-around; `u, v` in texture periods. Grain processing
+ * (curve, softness, stretch…) arrives with S2.
+ */
+class TextureImage(src: ImageData, invert: Boolean = false) {
+    val width = src.width
+    val height = src.height
+    private val v = FloatArray(width * height) { i ->
+        val raw = if (src.channels == 1) src.pixels[i] else src.pixels[i * 4]
+        val f = (raw.toInt() and 0xFF) / 255f
+        if (invert) 1f - f else f
+    }
+
+    /** Value 0..1 at ([u], [v]) in periods (1 = one texture width). */
+    fun sample(u: Float, vv: Float): Float {
+        val fx = u * width - 0.5f
+        val fy = vv * height - 0.5f
+        val x0 = floor(fx).toInt()
+        val y0 = floor(fy).toInt()
+        val ax = fx - x0
+        val ay = fy - y0
+        val xa = Math.floorMod(x0, width)
+        val xb = Math.floorMod(x0 + 1, width)
+        val ya = Math.floorMod(y0, height) * width
+        val yb = Math.floorMod(y0 + 1, height) * width
+        val top = v[ya + xa] + (v[ya + xb] - v[ya + xa]) * ax
+        val bot = v[yb + xa] + (v[yb + xb] - v[yb + xa]) * ax
+        return top + (bot - top) * ay
+    }
+}
+
+/** Loads image references (`asset:heads/x.png`, `brush:head.png`); implemented by the app. */
+fun interface ResourceResolver {
+    fun image(ref: String): ImageData
+}
+
+/** Decoded resources of one brush. */
+class BrushResources(val head: HeadImage? = null, val texture: TextureImage? = null, val particle: HeadImage? = null) {
+    companion object {
+        val EMPTY = BrushResources()
+
+        /** Resolves and decodes every resource [brush] references. */
+        fun load(brush: Brush, resolver: ResourceResolver): BrushResources {
+            val h = brush.params.head
+            val t = brush.params.texture
+            return BrushResources(
+                head = brush.resources.head?.let { HeadImage(resolver.image(it), h.curve, h.invert) },
+                texture = brush.resources.texture?.let { TextureImage(resolver.image(it), t?.invert ?: false) },
+                particle = brush.resources.particle?.let { HeadImage(resolver.image(it)) },
+            )
+        }
+    }
+}
