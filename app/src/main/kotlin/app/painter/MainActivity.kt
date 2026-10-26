@@ -41,6 +41,11 @@ class MainActivity : ComponentActivity() {
         setContent { PainterTheme { App(vm, updateVm) } }
     }
 
+    override fun onResume() {
+        super.onResume()
+        updateVm.onResume()
+    }
+
     override fun onStop() {
         super.onStop()
         vm.save()

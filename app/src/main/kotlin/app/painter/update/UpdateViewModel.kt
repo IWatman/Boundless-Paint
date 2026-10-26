@@ -104,6 +104,11 @@ class UpdateViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** Continues the update when the user comes back from granting the install permission. */
+    fun onResume() {
+        if (_state.value is UpdateUiState.NeedsPermission && installer.canInstall()) update()
+    }
+
     /** Resets the dialog; an already downloaded APK is kept for a later install. */
     fun dismiss() {
         val current = _state.value

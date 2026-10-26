@@ -1,5 +1,10 @@
 package app.painter.ui.home
 
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.withStyle
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -91,10 +96,8 @@ private fun UpdateStateBody(
                 Text(stringResource(R.string.update_notes_title), style = MaterialTheme.typography.labelLarge)
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    notes,
+                    releaseNotesText(notes),
                     style = MaterialTheme.typography.bodySmall,
-                    maxLines = 12,
-                    overflow = TextOverflow.Ellipsis,
                     modifier = Modifier
                         .heightIn(max = 180.dp)
                         .verticalScroll(rememberScrollState()),
@@ -157,5 +160,31 @@ private fun UpdateConfirmButton(
             Text(stringResource(R.string.update_check))
         }
         else -> Unit
+    }
+}
+
+/**
+ * Minimal Markdown for release notes: `**bold**`, `- ` / `* ` bullets and `#` headings; other
+ * syntax is shown as typed.
+ */
+internal fun releaseNotesText(md: String): AnnotatedString = buildAnnotatedString {
+    md.lines().forEachIndexed { i, raw ->
+        if (i > 0) append('\n')
+        var line = raw.trimEnd()
+        val heading = line.startsWith("#")
+        if (heading) line = line.trimStart('#').trimStart()
+        val bullet = Regex("^(\\s*)[-*] ").find(line)
+        if (bullet != null) line = bullet.groupValues[1] + "• " + line.substring(bullet.value.length)
+        if (heading) pushStyle(SpanStyle(fontWeight = FontWeight.Bold))
+        var rest = line
+        while (true) {
+            val start = rest.indexOf("**")
+            val end = if (start >= 0) rest.indexOf("**", start + 2) else -1
+            if (start < 0 || end < 0) { append(rest); break }
+            append(rest.substring(0, start))
+            withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(rest.substring(start + 2, end)) }
+            rest = rest.substring(end + 2)
+        }
+        if (heading) pop()
     }
 }
