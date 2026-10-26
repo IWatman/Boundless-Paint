@@ -174,6 +174,10 @@ object Compositor : NodeRenderer {
     fun renderGroup(group: GroupNode, width: Int, height: Int): TileGrid =
         TileGrid(width, height).also { Stack(null).render(group.children, it, false, null) }
 
+    /** [renderGroup] limited to the tile at [key]. */
+    fun renderGroupTile(group: GroupNode, key: TileKey, width: Int, height: Int): Tile? =
+        TileGrid(width, height).also { Stack(key).render(group.children, it, false, null) }.get(key)
+
     /** Copy of [grid] with every pixel multiplied by the effective value of [mask] (null = [grid] itself). */
     fun applyMask(grid: TileGrid, mask: LayerMask?): TileGrid {
         if (mask == null || !mask.enabled) return grid

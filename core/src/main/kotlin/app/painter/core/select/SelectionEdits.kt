@@ -2,6 +2,7 @@ package app.painter.core.select
 
 import app.painter.core.blend.Compositor
 import app.painter.core.color.Rgba
+import app.painter.core.doc.AdjustmentLayer
 import app.painter.core.doc.Document
 import app.painter.core.doc.GroupNode
 import app.painter.core.doc.RasterLayer
@@ -63,6 +64,7 @@ object SelectionEdits {
     fun fromLayerAlpha(doc: Document, nodeId: String, mode: SelectMode): Command? {
         val node = doc.findNode(nodeId) ?: return null
         val grid = when (node) {
+            is AdjustmentLayer -> return null
             is RasterLayer -> node.pixels
             is GroupNode -> {
                 val src = Region.source(doc, RefSource.Layer(nodeId))

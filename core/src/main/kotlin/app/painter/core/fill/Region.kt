@@ -2,6 +2,7 @@ package app.painter.core.fill
 
 import app.painter.core.blend.Compositor
 import app.painter.core.color.Rgba
+import app.painter.core.doc.AdjustmentLayer
 import app.painter.core.doc.Document
 import app.painter.core.doc.GroupNode
 import app.painter.core.doc.Node
@@ -65,7 +66,8 @@ object Region {
     private fun nodeSource(doc: Document, node: Node?): PixelSource = when (node) {
         null -> PixelSource { null }
         is RasterLayer -> PixelSource { node.pixels.get(it) }
-        is GroupNode -> PixelSource { NodeFlatten.tile(node, it, doc.width, doc.height) }
+        is GroupNode -> PixelSource { Compositor.renderGroupTile(node, it, doc.width, doc.height) }
+        is AdjustmentLayer -> PixelSource { null }
     }
 
     /** Straight color of the pixel ([x], [y]) in [src]. */
@@ -286,34 +288,3 @@ object Region {
     }
 }
 
-/** Composites a node's own subtree for one tile, without the paper (groups used as fill references). */
-internal object NodeFlatten {
-    fun tile(node: Node, key: TileKey, w: Int, h: Int): Tile? = when (node) {
-        is RasterLayer -> node.pixels.get(key)
-        is GroupNode -> TileGrid(w, h).also { render(node.children, it, key) }.get(key)
-    }
-
-    private fun view(grid: TileGrid, key: TileKey): TileGrid =
-        TileGrid(grid.width, grid.height).also { v -> grid.get(key)?.let { v.put(key, it) } }
-
-    private fun content(n: Node, acc: TileGrid, key: TileKey): TileGrid = when (n) {
-        is RasterLayer -> view(n.pixels, key)
-        is GroupNode -> TileGrid(acc.width, acc.height).also { render(n.children, it, key) }
-    }
-
-    private fun render(children: List<Node>, acc: TileGrid, key: TileKey) {
-        var base: TileGrid? = null
-        for (n in children) {
-            if (n.clipped) {
-                val b = base ?: continue
-                if (n.visible) Compositor.compositeInto(acc, content(n, acc, key), n.blendMode, n.opacity, b)
-                continue
-            }
-            base = null
-            if (!n.visible) continue
-            val c = content(n, acc, key)
-            Compositor.compositeInto(acc, c, n.blendMode, n.opacity)
-            base = c
-        }
-    }
-}

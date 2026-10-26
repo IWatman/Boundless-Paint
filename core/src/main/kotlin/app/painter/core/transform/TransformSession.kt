@@ -1,5 +1,6 @@
 package app.painter.core.transform
 
+import app.painter.core.doc.AdjustmentLayer
 import app.painter.core.doc.Document
 import app.painter.core.doc.GroupNode
 import app.painter.core.doc.RasterLayer
@@ -70,7 +71,7 @@ class TransformSession(
                 val raster = when (val n = doc.findNode(id)) {
                     is RasterLayer -> listOf(n)
                     is GroupNode -> ArrayList<RasterLayer>().also { l -> n.walk { if (it is RasterLayer) l.add(it) } }
-                    null -> emptyList()
+                    is AdjustmentLayer, null -> emptyList()
                 }
                 for (l in raster) {
                     if (l.id in ids || l.id in skip) continue
