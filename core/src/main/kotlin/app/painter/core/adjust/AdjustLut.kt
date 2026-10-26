@@ -87,7 +87,7 @@ object AdjustLut {
     }
 
     private fun gradient(p: GradientMapParams): FloatArray {
-        val stops = p.stops.sortedBy { it.pos }
+        val stops = p.stops.take(MAX_GRADIENT_STOPS).sortedBy { it.pos }
         val out = FloatArray(SIZE * 4)
         if (stops.isEmpty()) return out
         for (i in 0 until SIZE) {
@@ -130,7 +130,8 @@ class MonotoneCurve(points: List<Pt>) {
     private val ms: DoubleArray
 
     init {
-        val sorted = points.sortedBy { it.x }
+        // Untrusted files may carry huge lists: cap to the editor limit before any O(n) work per sample.
+        val sorted = points.take(MAX_POINTS).sortedBy { it.x }
         val px = ArrayList<Double>()
         val py = ArrayList<Double>()
         for (p in sorted) {
@@ -177,3 +178,7 @@ class MonotoneCurve(points: List<Pt>) {
             (-2 * t3 + 3 * t2) * ys[k + 1] + (t3 - t2) * h * ms[k + 1]
     }
 }
+
+/** Editor limits, also enforced on load (spec m2-layers-adjust L5/L6, m2-select-transform-fill §4.4). */
+const val MAX_POINTS = 16
+const val MAX_GRADIENT_STOPS = 32
