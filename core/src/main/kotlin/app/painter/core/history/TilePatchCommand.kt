@@ -10,13 +10,16 @@ import app.painter.core.raster.TilePatch
 /**
  * Pixel change on one raster layer. Tiles inside [patch] are owned snapshots: they are never put
  * into the layer directly, only copies are, so later painting cannot corrupt history.
+ * Applying onto a locked layer fails with [LockedException].
  */
 class TilePatchCommand(
     val patch: TilePatch,
     override val name: String = "Stroke",
 ) : Command {
     override fun apply(doc: Document) {
-        writeTiles(layer(doc).pixels, patch.after)
+        val l = layer(doc)
+        requireUnlocked(l)
+        writeTiles(l.pixels, patch.after)
         doc.touch()
     }
 

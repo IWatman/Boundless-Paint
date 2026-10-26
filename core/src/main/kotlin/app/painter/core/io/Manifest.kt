@@ -2,8 +2,9 @@ package app.painter.core.io
 
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
 
-internal const val MANIFEST_SCHEMA = 1
+internal const val MANIFEST_SCHEMA = 2
 
 internal val manifestJson = Json {
     ignoreUnknownKeys = true
@@ -27,7 +28,24 @@ internal data class ManifestDto(
     val modified: Long = 0,
     val paper: PaperDto = PaperDto(),
     val activeId: String? = null,
+    val activeTarget: String = "layer",
     val nodes: List<NodeDto> = emptyList(),
+    /** Present only when the document has a non-empty selection; tiles live in `selection/`. */
+    val selection: SelectionDto? = null,
+    /** Opaque guides block (schema owned by core/guide). */
+    val guides: JsonObject? = null,
+)
+
+@Serializable
+internal data class SelectionDto(val active: Boolean = true)
+
+@Serializable
+internal data class MaskDto(
+    val enabled: Boolean = true,
+    val linked: Boolean = true,
+    val density: Float = 1f,
+    /** Value of missing tiles, 0..255. */
+    val default: Int = 255,
 )
 
 @Serializable
@@ -53,6 +71,11 @@ internal data class NodeDto(
     val locked: Boolean = false,
     val alphaLock: Boolean = false,
     val expanded: Boolean = true,
+    val colorTag: String = "none",
+    val reference: Boolean = false,
+    val mask: MaskDto? = null,
+    /** Adjustment parameters (kind = adjustment), see [app.painter.core.adjust.AdjustCodec]. */
+    val adjust: JsonObject? = null,
     val children: List<NodeDto> = emptyList(),
 )
 
@@ -69,4 +92,5 @@ internal data class ManifestHeaderDto(
 internal object NodeKind {
     const val RASTER = "raster"
     const val GROUP = "group"
+    const val ADJUSTMENT = "adjustment"
 }

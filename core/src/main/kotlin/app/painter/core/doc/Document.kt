@@ -1,6 +1,7 @@
 package app.painter.core.doc
 
 import app.painter.core.raster.TileGrid
+import kotlinx.serialization.json.JsonObject
 import java.util.UUID
 
 enum class ProjectType { REGULAR, PATTERN, CHALLENGE, ANIMATION, MANUSCRIPT }
@@ -30,6 +31,9 @@ class Document(
 
     val selection = Selection(width, height)
 
+    /** Guides block of the manifest, kept opaque and round-tripped as is (schema owned by core/guide). */
+    var guides: JsonObject? = null
+
     /** The node flagged as reference for fill / wand, if any. */
     val referenceNode: Node? get() { var r: Node? = null; root.walk { if (it.reference) r = it }; return r }
 
@@ -44,7 +48,8 @@ class Document(
     val activeNode: Node? get() = activeId?.let(::findNode)
     val activeRaster: RasterLayer? get() = activeNode as? RasterLayer
 
-    fun layerCount(): Int { var n = 0; root.walk { if (it !is GroupNode) n++ }; return n }
+    /** Number of raster layers (groups and adjustment layers do not count). */
+    fun layerCount(): Int { var n = 0; root.walk { if (it is RasterLayer) n++ }; return n }
 
     companion object {
         /** Creates a document with one empty raster layer, set active. */

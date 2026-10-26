@@ -1,18 +1,26 @@
 package app.painter.core.io
 
+import app.painter.core.adjust.AdjustCodec
+import app.painter.core.adjust.UnknownAdjust
 import app.painter.core.blend.BlendMode
 import app.painter.core.color.Rgba
+import app.painter.core.doc.AdjustmentLayer
+import app.painter.core.doc.ColorTag
 import app.painter.core.doc.Document
+import app.painter.core.doc.EditTarget
 import app.painter.core.doc.GroupNode
+import app.painter.core.doc.LayerMask
 import app.painter.core.doc.Node
 import app.painter.core.doc.ProjectType
 import app.painter.core.doc.RasterLayer
-
+import app.painter.core.raster.MaskGrid
+import app.painter.core.raster.MaskTile
 import app.painter.core.raster.Tile
 import app.painter.core.raster.TileGrid
 import app.painter.core.raster.TileKey
 import net.jpountz.lz4.LZ4FrameInputStream
 import net.jpountz.lz4.LZ4FrameOutputStream
+import kotlinx.serialization.json.JsonObject
 import java.io.BufferedOutputStream
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
@@ -39,17 +47,24 @@ object ProjectIO {
     internal const val MANIFEST = "manifest.json"
     internal const val THUMB = "thumb.png"
     internal const val LAYERS = "layers"
+    internal const val MASKS = "masks"
+    internal const val SELECTION = "selection"
     internal const val TILES_IDX = "tiles.idx"
     internal const val TILES_BIN = "tiles.bin"
 
     private const val INDEX_ENTRY_BYTES = 12
     private const val TILE_FLOATS = Tile.SIZE * Tile.SIZE * 4
     private const val TILE_RAW_BYTES = TILE_FLOATS * 2
-    private val OWNED = setOf(MANIFEST, THUMB, LAYERS, FsUtil.COMPLETE_MARKER)
+    private const val MASK_RAW_BYTES = Tile.SIZE * Tile.SIZE
+    private val OWNED = setOf(MANIFEST, THUMB, LAYERS, MASKS, SELECTION, FsUtil.COMPLETE_MARKER)
+
+    /** Receives non-fatal load warnings (e.g. skipped unknown node kinds). */
+    @Volatile
+    var warn: (String) -> Unit = { System.err.println("ProjectIO: " + it) }
 
     /**
-     * Atomically saves [doc] into [dir]: everything is written into a sibling `<dir>.tmp`
-     * which then replaces [dir]. Empty tiles are skipped. Entries of an existing project
+     * Atomically saves [doc] into [dir] (manifest schema 2): everything is written into a sibling `<dir>.tmp`
+     * which then replaces [dir]. Empty tiles, and mask tiles equal to the mask default, are skipped. Entries of an existing project
      * that this writer does not own (refs, history, ...) are carried over.
      */
     fun save(doc: Document, dir: File, thumbnailPng: ByteArray?) {
@@ -60,16 +75,22 @@ object ProjectIO {
 
         val layersDir = File(tmp, LAYERS)
         layersDir.mkdirs()
+        val masksDir = File(tmp, MASKS)
         doc.root.walk { node ->
             if (node is RasterLayer) writeTiles(node.pixels, File(layersDir, safeName(node.id)))
+            node.mask?.let { writeMaskTiles(it.tiles, File(masksDir, safeName(node.id))) }
         }
+        if (!doc.selection.isEmpty) writeMaskTiles(doc.selection.mask, File(tmp, SELECTION))
         if (thumbnailPng != null) File(tmp, THUMB).writeBytes(thumbnailPng)
         File(tmp, MANIFEST).writeText(manifestJson.encodeToString(ManifestDto.serializer(), toDto(doc)))
         File(tmp, FsUtil.COMPLETE_MARKER).writeBytes(ByteArray(0))
         commit(dir, tmp)
     }
 
-    /** Loads a project directory written by [save]. Recovers from an interrupted save first. */
+    /**
+     * Loads a project directory written by [save] (schema 1 or 2). Recovers from an interrupted save first.
+     * Nodes of unknown kind are skipped with a [warn]ing.
+     */
     fun load(dir: File): Document {
         recover(dir)
         val m = manifestJson.decodeFromString(ManifestDto.serializer(), File(dir, MANIFEST).readText())
@@ -85,8 +106,16 @@ object ProjectIO {
         doc.paper.textureOpacity = m.paper.texOpacity
         doc.paper.textureScale = m.paper.texScale
         val layersDir = File(dir, LAYERS)
-        for (n in m.nodes) doc.root.add(fromDto(n, doc, layersDir))
+        val masksDir = File(dir, MASKS)
+        for (n in m.nodes) fromDto(n, doc, layersDir, masksDir)?.let { doc.root.add(it) }
         doc.activeId = m.activeId?.takeIf { doc.findNode(it) != null }
+        doc.activeTarget =
+            if (m.activeTarget == "mask" && doc.activeNode?.mask != null) EditTarget.MASK else EditTarget.LAYER
+        m.selection?.let {
+            readMaskTiles(doc.selection.mask, File(dir, SELECTION))
+            doc.selection.active = it.active
+        }
+        doc.guides = m.guides
         return doc
     }
 
@@ -258,6 +287,53 @@ object ProjectIO {
         }
     }
 
+    private fun writeMaskTiles(grid: MaskGrid, dir: File) {
+        val entries = grid.entries()
+            .filter { !it.value.isUniform(grid.defaultValue) }
+            .sortedWith(compareBy({ it.key.ty }, { it.key.tx }))
+        if (entries.isEmpty()) return
+        dir.mkdirs()
+        val index = ByteBuffer.allocate(entries.size * INDEX_ENTRY_BYTES).order(ByteOrder.LITTLE_ENDIAN)
+        var offset = 0L
+        BufferedOutputStream(FileOutputStream(File(dir, TILES_BIN)), 64 * 1024).use { bin ->
+            for ((key, tile) in entries) {
+                require(key.tx in 0..0xFFFF && key.ty in 0..0xFFFF) { "tile out of range: " + key }
+                val compressed = ByteArrayOutputStream(MASK_RAW_BYTES / 8)
+                LZ4FrameOutputStream(compressed).use { it.write(tile.data) }
+                val bytes = compressed.toByteArray()
+                bin.write(bytes)
+                index.putShort(key.tx.toShort())
+                index.putShort(key.ty.toShort())
+                index.putInt(offset.toInt())
+                index.putInt(bytes.size)
+                offset += bytes.size
+                require(offset <= 0xFFFFFFFFL) { "tiles.bin exceeds 4 GiB" }
+            }
+        }
+        File(dir, TILES_IDX).writeBytes(index.array())
+    }
+
+    private fun readMaskTiles(grid: MaskGrid, dir: File) {
+        val idxFile = File(dir, TILES_IDX)
+        val binFile = File(dir, TILES_BIN)
+        if (!idxFile.isFile || !binFile.isFile) return
+        val index = ByteBuffer.wrap(idxFile.readBytes()).order(ByteOrder.LITTLE_ENDIAN)
+        RandomAccessFile(binFile, "r").use { bin ->
+            while (index.remaining() >= INDEX_ENTRY_BYTES) {
+                val tx = index.short.toInt() and 0xFFFF
+                val ty = index.short.toInt() and 0xFFFF
+                val offset = index.int.toLong() and 0xFFFFFFFFL
+                val length = index.int.toLong() and 0xFFFFFFFFL
+                val compressed = ByteArray(length.toInt())
+                bin.seek(offset)
+                bin.readFully(compressed)
+                val raw = ByteArray(MASK_RAW_BYTES)
+                DataInputStream(LZ4FrameInputStream(ByteArrayInputStream(compressed))).use { it.readFully(raw) }
+                grid.put(TileKey(tx, ty), MaskTile(raw))
+            }
+        }
+    }
+
     private fun toDto(doc: Document) = ManifestDto(
         id = doc.id,
         name = doc.name,
@@ -276,13 +352,20 @@ object ProjectIO {
             texScale = doc.paper.textureScale,
         ),
         activeId = doc.activeId,
+        activeTarget = if (doc.activeTarget == EditTarget.MASK) "mask" else "layer",
         nodes = doc.root.children.map(::toDto),
+        selection = if (doc.selection.isEmpty) null else SelectionDto(doc.selection.active),
+        guides = doc.guides,
     )
 
     private fun toDto(n: Node): NodeDto = NodeDto(
         id = n.id,
         name = n.name,
-        kind = if (n is GroupNode) NodeKind.GROUP else NodeKind.RASTER,
+        kind = when (n) {
+            is GroupNode -> NodeKind.GROUP
+            is RasterLayer -> NodeKind.RASTER
+            is AdjustmentLayer -> NodeKind.ADJUSTMENT
+        },
         visible = n.visible,
         opacity = n.opacity,
         blendMode = n.blendMode.id,
@@ -291,20 +374,39 @@ object ProjectIO {
         locked = n.locked,
         alphaLock = (n as? RasterLayer)?.alphaLock ?: false,
         expanded = (n as? GroupNode)?.expanded ?: true,
+        colorTag = n.colorTag.name.lowercase(),
+        reference = n.reference,
+        mask = n.mask?.let { MaskDto(it.enabled, it.linked, it.density, it.tiles.defaultValue.toInt() and 0xFF) },
+        adjust = (n as? AdjustmentLayer)?.let { AdjustCodec.toJson(it.params) },
         children = (n as? GroupNode)?.children?.map(::toDto) ?: emptyList(),
     )
 
-    private fun fromDto(d: NodeDto, doc: Document, layersDir: File): Node {
-        val node: Node = if (d.kind == NodeKind.GROUP) {
-            GroupNode(d.id, d.name).also { g ->
+    private fun fromDto(d: NodeDto, doc: Document, layersDir: File, masksDir: File): Node? {
+        val node: Node = when (d.kind) {
+            NodeKind.GROUP -> GroupNode(d.id, d.name).also { g ->
                 g.expanded = d.expanded
-                for (c in d.children) g.add(fromDto(c, doc, layersDir))
+                for (c in d.children) fromDto(c, doc, layersDir, masksDir)?.let { g.add(it) }
             }
-        } else {
-            val grid = TileGrid(doc.width, doc.height)
-            readTiles(grid, File(layersDir, safeName(d.id)))
-            RasterLayer(d.id, d.name, grid).also { it.alphaLock = d.alphaLock }
+            NodeKind.RASTER -> {
+                val grid = TileGrid(doc.width, doc.height)
+                readTiles(grid, File(layersDir, safeName(d.id)))
+                RasterLayer(d.id, d.name, grid).also { it.alphaLock = d.alphaLock }
+            }
+            NodeKind.ADJUSTMENT -> AdjustmentLayer(
+                d.id, d.name, d.adjust?.let(AdjustCodec::fromJson) ?: UnknownAdjust(JsonObject(emptyMap())),
+            )
+            else -> {
+                warn("skipping node " + d.id + " of unknown kind '" + d.kind + "'")
+                return null
+            }
         }
+        d.mask?.let { md ->
+            val grid = MaskGrid(doc.width, doc.height, md.default.coerceIn(0, 255).toByte())
+            readMaskTiles(grid, File(masksDir, safeName(d.id)))
+            node.mask = LayerMask(grid).also { it.enabled = md.enabled; it.linked = md.linked; it.density = md.density }
+        }
+        node.colorTag = ColorTag.entries.firstOrNull { it.name.equals(d.colorTag, ignoreCase = true) } ?: ColorTag.NONE
+        node.reference = d.reference
         node.visible = d.visible
         node.opacity = d.opacity
         node.blendMode = BlendMode.fromId(d.blendMode)

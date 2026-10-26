@@ -15,6 +15,7 @@ fun snapshotDocument(doc: Document): Document {
     copy.activeId = doc.activeId
     copy.activeTarget = doc.activeTarget
     copy.selection.copyFrom(doc.selection)
+    copy.guides = doc.guides
     copy.paper.color = doc.paper.color
     copy.paper.visible = doc.paper.visible
     copy.paper.textureId = doc.paper.textureId
