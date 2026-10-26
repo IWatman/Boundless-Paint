@@ -1,0 +1,490 @@
+{
+ "schema": 1,
+ "assets": [
+  {
+   "ref": "asset:heads/arrow.png",
+   "mode": "L",
+   "size": 256
+  },
+  {
+   "ref": "asset:heads/bristle_dry.png",
+   "mode": "L",
+   "size": 512
+  },
+  {
+   "ref": "asset:heads/bristle_fan.png",
+   "mode": "L",
+   "size": 512
+  },
+  {
+   "ref": "asset:heads/bristle_fine.png",
+   "mode": "L",
+   "size": 512
+  },
+  {
+   "ref": "asset:heads/bristle_flat.png",
+   "mode": "L",
+   "size": 512
+  },
+  {
+   "ref": "asset:heads/bristle_flat_wide.png",
+   "mode": "L",
+   "size": 512
+  },
+  {
+   "ref": "asset:heads/bristle_rake.png",
+   "mode": "L",
+   "size": 512
+  },
+  {
+   "ref": "asset:heads/bristle_round.png",
+   "mode": "L",
+   "size": 512
+  },
+  {
+   "ref": "asset:heads/bristle_round_soft.png",
+   "mode": "L",
+   "size": 512
+  },
+  {
+   "ref": "asset:heads/chain_link.png",
+   "mode": "L",
+   "size": 256
+  },
+  {
+   "ref": "asset:heads/chalk_01.png",
+   "mode": "L",
+   "size": 256
+  },
+  {
+   "ref": "asset:heads/chalk_02.png",
+   "mode": "L",
+   "size": 256
+  },
+  {
+   "ref": "asset:heads/chalk_03.png",
+   "mode": "L",
+   "size": 256
+  },
+  {
+   "ref": "asset:heads/charcoal_disk_01.png",
+   "mode": "L",
+   "size": 256
+  },
+  {
+   "ref": "asset:heads/charcoal_disk_02.png",
+   "mode": "L",
+   "size": 256
+  },
+  {
+   "ref": "asset:heads/chevron.png",
+   "mode": "L",
+   "size": 256
+  },
+  {
+   "ref": "asset:heads/chisel.png",
+   "mode": "L",
+   "size": 256
+  },
+  {
+   "ref": "asset:heads/crayon.png",
+   "mode": "L",
+   "size": 256
+  },
+  {
+   "ref": "asset:heads/dash.png",
+   "mode": "L",
+   "size": 256
+  },
+  {
+   "ref": "asset:heads/dot.png",
+   "mode": "L",
+   "size": 256
+  },
+  {
+   "ref": "asset:heads/drips.png",
+   "mode": "L",
+   "size": 256
+  },
+  {
+   "ref": "asset:heads/grain_disk_01.png",
+   "mode": "L",
+   "size": 256
+  },
+  {
+   "ref": "asset:heads/grain_disk_02.png",
+   "mode": "L",
+   "size": 256
+  },
+  {
+   "ref": "asset:heads/grain_disk_03.png",
+   "mode": "L",
+   "size": 256
+  },
+  {
+   "ref": "asset:heads/grain_disk_04.png",
+   "mode": "L",
+   "size": 256
+  },
+  {
+   "ref": "asset:heads/knife.png",
+   "mode": "L",
+   "size": 256
+  },
+  {
+   "ref": "asset:heads/knife_loaded.png",
+   "mode": "L",
+   "size": 256
+  },
+  {
+   "ref": "asset:heads/lace.png",
+   "mode": "L",
+   "size": 256
+  },
+  {
+   "ref": "asset:heads/pastel_square.png",
+   "mode": "L",
+   "size": 256
+  },
+  {
+   "ref": "asset:heads/ribbon.png",
+   "mode": "L",
+   "size": 256
+  },
+  {
+   "ref": "asset:heads/ring_bokeh.png",
+   "mode": "L",
+   "size": 256
+  },
+  {
+   "ref": "asset:heads/roller.png",
+   "mode": "L",
+   "size": 256
+  },
+  {
+   "ref": "asset:heads/rounded_square.png",
+   "mode": "L",
+   "size": 256
+  },
+  {
+   "ref": "asset:heads/soft_disk.png",
+   "mode": "L",
+   "size": 256
+  },
+  {
+   "ref": "asset:heads/splatter_01.png",
+   "mode": "L",
+   "size": 256
+  },
+  {
+   "ref": "asset:heads/splatter_02.png",
+   "mode": "L",
+   "size": 256
+  },
+  {
+   "ref": "asset:heads/splatter_03.png",
+   "mode": "L",
+   "size": 256
+  },
+  {
+   "ref": "asset:heads/splatter_04.png",
+   "mode": "L",
+   "size": 256
+  },
+  {
+   "ref": "asset:heads/sponge_coarse.png",
+   "mode": "L",
+   "size": 256
+  },
+  {
+   "ref": "asset:heads/sponge_kitchen.png",
+   "mode": "L",
+   "size": 256
+  },
+  {
+   "ref": "asset:heads/sponge_natural.png",
+   "mode": "L",
+   "size": 256
+  },
+  {
+   "ref": "asset:heads/spray.png",
+   "mode": "L",
+   "size": 256
+  },
+  {
+   "ref": "asset:heads/square.png",
+   "mode": "L",
+   "size": 256
+  },
+  {
+   "ref": "asset:heads/stamp_berry.png",
+   "mode": "RGBA",
+   "size": 256
+  },
+  {
+   "ref": "asset:heads/stamp_bubble.png",
+   "mode": "RGBA",
+   "size": 256
+  },
+  {
+   "ref": "asset:heads/stamp_butterfly.png",
+   "mode": "RGBA",
+   "size": 256
+  },
+  {
+   "ref": "asset:heads/stamp_cloud.png",
+   "mode": "RGBA",
+   "size": 256
+  },
+  {
+   "ref": "asset:heads/stamp_diamond.png",
+   "mode": "RGBA",
+   "size": 256
+  },
+  {
+   "ref": "asset:heads/stamp_droplet.png",
+   "mode": "RGBA",
+   "size": 256
+  },
+  {
+   "ref": "asset:heads/stamp_flower.png",
+   "mode": "RGBA",
+   "size": 256
+  },
+  {
+   "ref": "asset:heads/stamp_grass.png",
+   "mode": "RGBA",
+   "size": 256
+  },
+  {
+   "ref": "asset:heads/stamp_heart.png",
+   "mode": "RGBA",
+   "size": 256
+  },
+  {
+   "ref": "asset:heads/stamp_leaf.png",
+   "mode": "RGBA",
+   "size": 256
+  },
+  {
+   "ref": "asset:heads/stamp_note.png",
+   "mode": "RGBA",
+   "size": 256
+  },
+  {
+   "ref": "asset:heads/stamp_rose.png",
+   "mode": "RGBA",
+   "size": 256
+  },
+  {
+   "ref": "asset:heads/stamp_snowflake.png",
+   "mode": "RGBA",
+   "size": 256
+  },
+  {
+   "ref": "asset:heads/stamp_star.png",
+   "mode": "RGBA",
+   "size": 256
+  },
+  {
+   "ref": "asset:heads/stitch.png",
+   "mode": "L",
+   "size": 256
+  },
+  {
+   "ref": "asset:heads/triangle.png",
+   "mode": "L",
+   "size": 256
+  },
+  {
+   "ref": "asset:heads/wc_circle_stain.png",
+   "mode": "L",
+   "size": 256
+  },
+  {
+   "ref": "asset:heads/wc_floral_stencil.png",
+   "mode": "L",
+   "size": 256
+  },
+  {
+   "ref": "asset:heads/wc_salt_blossom.png",
+   "mode": "L",
+   "size": 256
+  },
+  {
+   "ref": "asset:particles/p_droplet.png",
+   "mode": "L",
+   "size": 64
+  },
+  {
+   "ref": "asset:particles/p_hard.png",
+   "mode": "L",
+   "size": 64
+  },
+  {
+   "ref": "asset:particles/p_smoke.png",
+   "mode": "L",
+   "size": 64
+  },
+  {
+   "ref": "asset:particles/p_soft.png",
+   "mode": "L",
+   "size": 64
+  },
+  {
+   "ref": "asset:particles/p_spark.png",
+   "mode": "L",
+   "size": 64
+  },
+  {
+   "ref": "asset:textures/brick.png",
+   "mode": "L",
+   "size": 512
+  },
+  {
+   "ref": "asset:textures/checker.png",
+   "mode": "L",
+   "size": 512
+  },
+  {
+   "ref": "asset:textures/debris.png",
+   "mode": "L",
+   "size": 512
+  },
+  {
+   "ref": "asset:textures/fabric_canvas.png",
+   "mode": "L",
+   "size": 512
+  },
+  {
+   "ref": "asset:textures/fabric_corduroy.png",
+   "mode": "L",
+   "size": 512
+  },
+  {
+   "ref": "asset:textures/fabric_denim.png",
+   "mode": "L",
+   "size": 512
+  },
+  {
+   "ref": "asset:textures/fabric_fiber.png",
+   "mode": "L",
+   "size": 512
+  },
+  {
+   "ref": "asset:textures/fabric_linen.png",
+   "mode": "L",
+   "size": 512
+  },
+  {
+   "ref": "asset:textures/grain_chalk.png",
+   "mode": "L",
+   "size": 512
+  },
+  {
+   "ref": "asset:textures/grain_charcoal.png",
+   "mode": "L",
+   "size": 512
+  },
+  {
+   "ref": "asset:textures/grain_crayon.png",
+   "mode": "L",
+   "size": 512
+  },
+  {
+   "ref": "asset:textures/grain_graphite.png",
+   "mode": "L",
+   "size": 512
+  },
+  {
+   "ref": "asset:textures/grain_sand.png",
+   "mode": "L",
+   "size": 512
+  },
+  {
+   "ref": "asset:textures/grain_stucco.png",
+   "mode": "L",
+   "size": 512
+  },
+  {
+   "ref": "asset:textures/grid_iso.png",
+   "mode": "L",
+   "size": 512
+  },
+  {
+   "ref": "asset:textures/grid_square.png",
+   "mode": "L",
+   "size": 512
+  },
+  {
+   "ref": "asset:textures/grunge.png",
+   "mode": "L",
+   "size": 512
+  },
+  {
+   "ref": "asset:textures/hatch_cross.png",
+   "mode": "L",
+   "size": 512
+  },
+  {
+   "ref": "asset:textures/hatch_lines.png",
+   "mode": "L",
+   "size": 512
+  },
+  {
+   "ref": "asset:textures/hatch_scratch.png",
+   "mode": "L",
+   "size": 512
+  },
+  {
+   "ref": "asset:textures/newspaper.png",
+   "mode": "L",
+   "size": 512
+  },
+  {
+   "ref": "asset:textures/paper_cold_press.png",
+   "mode": "L",
+   "size": 512
+  },
+  {
+   "ref": "asset:textures/paper_kraft.png",
+   "mode": "L",
+   "size": 512
+  },
+  {
+   "ref": "asset:textures/paper_rice.png",
+   "mode": "L",
+   "size": 512
+  },
+  {
+   "ref": "asset:textures/paper_rough.png",
+   "mode": "L",
+   "size": 512
+  },
+  {
+   "ref": "asset:textures/paper_smooth.png",
+   "mode": "L",
+   "size": 512
+  },
+  {
+   "ref": "asset:textures/paper_watercolor.png",
+   "mode": "L",
+   "size": 512
+  },
+  {
+   "ref": "asset:textures/pebbles.png",
+   "mode": "L",
+   "size": 512
+  },
+  {
+   "ref": "asset:textures/velvet.png",
+   "mode": "L",
+   "size": 512
+  },
+  {
+   "ref": "asset:textures/wood.png",
+   "mode": "L",
+   "size": 512
+  }
+ ]
+}
