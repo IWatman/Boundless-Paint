@@ -38,8 +38,13 @@ internal class CanvasRenderer(
     private class GNode(
         val snap: SnapNode,
         val tex: IntArray?,
+        /** LUT texture of an adjustment node; 0 for every other kind. */
+        val lut: Int,
         val children: Array<GNode>,
     )
+
+    /** LUT of one adjustment node: the uploaded contents and their texture. */
+    private class LutRef(val lut: FloatArray, val tex: Int)
 
     // ---- cross-thread ----
     private val opsLock = Any()
@@ -65,6 +70,7 @@ internal class CanvasRenderer(
     private var uUseMask = 0; private var uMaskDefault = 0; private var uMaskDensity = 0
     private var uUseClipMask = 0; private var uClipMaskDefault = 0; private var uClipMaskDensity = 0
     private var displayProg = 0
+    private val adjustShader = AdjustShader(::link)
     private var uMvp = 0; private var uOrigin = 0; private var uSize = 0; private var uTex = 0
     private var vao = 0
     private var samplerNearest = 0
@@ -86,6 +92,8 @@ internal class CanvasRenderer(
     private var root: GNode? = null
     private val layerTex = HashMap<String, IntArray>()
     private val maskTex = HashMap<String, IntArray>()
+    private val adjustLut = HashMap<String, LutRef>()
+    private val lutSeen = HashSet<String>()
     private var composite: Array<Target?> = emptyArray()
     private var mipValid = BooleanArray(0)
     private var dirty = BooleanArray(0)
@@ -115,6 +123,7 @@ internal class CanvasRenderer(
         freeTargets.clear()
         layerTex.clear()
         maskTex.clear()
+        adjustLut.clear()
         composite = arrayOfNulls(composite.size)
         mipValid.fill(false)
         previewTex.fill(0)
@@ -230,6 +239,7 @@ internal class CanvasRenderer(
     fun resetDocument(w: Int, h: Int) {
         deleteAllLayerTextures()
         deleteAllMaskTextures()
+        deleteAllLuts()
         for (t in composite) if (t != null) deleteTarget(t)
         clearPreviewTextures()
         previewLayerId = null
@@ -265,7 +275,9 @@ internal class CanvasRenderer(
         }
         if (b.scene != null) {
             scene = b.scene
+            lutSeen.clear()
             root = resolve(b.scene.root)
+            pruneLuts()
         }
         if (b.dirtyAll) markAllDirty() else for (k in b.dirtyKeys) markDirty(k)
     }
@@ -339,9 +351,35 @@ internal class CanvasRenderer(
 
     private fun resolve(s: SnapNode): GNode = GNode(
         snap = s,
-        tex = if (s.isGroup) null else layerTex.getOrPut(s.id) { IntArray(tilesX * tilesY) },
+        tex = if (s.isGroup || s.adjust != null) null else layerTex.getOrPut(s.id) { IntArray(tilesX * tilesY) },
+        lut = s.adjust?.let { lutOf(s.id, it) } ?: 0,
         children = Array(s.children.size) { resolve(s.children[it]) },
     )
+
+    /** LUT texture of adjustment node [id], re-uploaded only when [a]'s table changed. */
+    private fun lutOf(id: String, a: SnapAdjust): Int {
+        val lut = a.lut ?: return 0
+        lutSeen.add(id)
+        val ref = adjustLut[id]
+        if (ref == null) return adjustShader.createLut(lut).also { adjustLut[id] = LutRef(lut, it) }
+        if (!ref.lut.contentEquals(lut)) {
+            adjustShader.uploadLut(ref.tex, lut)
+            adjustLut[id] = LutRef(lut, ref.tex)
+        }
+        return ref.tex
+    }
+
+    /** Frees the LUT textures of adjustment nodes that are gone from the resolved scene. */
+    private fun pruneLuts() {
+        val it = adjustLut.entries.iterator()
+        while (it.hasNext()) {
+            val e = it.next()
+            if (e.key in lutSeen) continue
+            adjustShader.deleteLut(e.value.tex)
+            it.remove()
+        }
+        lutSeen.clear()
+    }
 
     private fun markAllDirty() {
         dirty.fill(true)
@@ -404,6 +442,11 @@ internal class CanvasRenderer(
             val clipTex = if (s.clipped) baseTex else 0
             val clipMask = if (s.clipped) baseMask else null
             val mask = maskOf(s, i)
+            if (s.adjust != null) {
+                // Acts on the accumulator of its parent and is never a clip base (as on the CPU).
+                dst = adjustPass(dst, c, mask, clipTex, clipMask)
+                continue
+            }
             if (!s.isGroup) {
                 val tex = c.tex!![i]
                 if (!s.clipped) { baseTex = tex; baseMask = mask }
@@ -467,6 +510,36 @@ internal class CanvasRenderer(
     }
 
     private fun modeIndex(m: BlendMode): Int = if (m == BlendMode.PASSTHROUGH) 0 else m.shaderIndex
+
+    /** Runs adjustment node [c] over the accumulated tile [dst] (times its mask and clip base). */
+    private fun adjustPass(dst: Target, c: GNode, mask: MaskRef?, clip: Int, clipMask: MaskRef?): Target {
+        val s = c.snap
+        val a = s.adjust ?: return dst
+        val out = acquire()
+        GL.glBindFramebuffer(GL.GL_FRAMEBUFFER, out.fbo)
+        GL.glViewport(0, 0, Tile.SIZE, Tile.SIZE)
+        GL.glUseProgram(adjustShader.program)
+        GL.glBindVertexArray(vao)
+        adjustShader.draw(
+            kind = a.kindIndex,
+            uniforms = a.uniforms,
+            useLut = a.lut != null,
+            lutTex = if (c.lut != 0) c.lut else emptyTex,
+            // 0 = absent (flags off in the shader); emptyTex here would read as a zero mask/clip.
+            dst = dst.tex,
+            mode = modeIndex(s.mode),
+            opacity = s.opacity,
+            maskTex = mask?.tex ?: 0,
+            maskDefault = mask?.default ?: 1f,
+            maskDensity = mask?.density ?: 1f,
+            clipTex = clip,
+            clipMaskTex = clipMask?.tex ?: 0,
+            clipMaskDefault = clipMask?.default ?: 1f,
+            clipMaskDensity = clipMask?.density ?: 1f,
+        )
+        release(dst)
+        return out
+    }
 
     private fun blendPass(
         dst: Target,
@@ -583,6 +656,7 @@ internal class CanvasRenderer(
         uOrigin = GL.glGetUniformLocation(displayProg, "u_origin")
         uSize = GL.glGetUniformLocation(displayProg, "u_size")
         uTex = GL.glGetUniformLocation(displayProg, "u_tex")
+        adjustShader.create()
         GL.glUseProgram(0)
 
         GL.glGenVertexArrays(1, ints, 0)
@@ -688,6 +762,12 @@ internal class CanvasRenderer(
     private fun deleteAllMaskTextures() {
         for (arr in maskTex.values) deleteTextures(arr)
         maskTex.clear()
+    }
+
+    private fun deleteAllLuts() {
+        for (ref in adjustLut.values) adjustShader.deleteLut(ref.tex)
+        adjustLut.clear()
+        lutSeen.clear()
     }
 
     private fun clearPreviewTextures() = deleteTextures(previewTex)

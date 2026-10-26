@@ -14,29 +14,8 @@ layout(location = 0) in vec2 a_pos;
 void main() { gl_Position = vec4(a_pos * 2.0 - 1.0, 0.0, 1.0); }
 """
 
-    const val BLEND_FS = """#version 300 es
-precision highp float;
-precision highp int;
-uniform sampler2D u_dst;
-uniform sampler2D u_src;
-uniform sampler2D u_buf;
-uniform sampler2D u_clip;
-uniform sampler2D u_mask;
-uniform sampler2D u_clipMask;
-uniform int u_mode;
-uniform float u_opacity;
-uniform int u_preview;
-uniform float u_previewOpacity;
-uniform bool u_alphaLock;
-uniform bool u_useClip;
-uniform int u_useMask;
-uniform float u_maskDefault;
-uniform float u_maskDensity;
-uniform int u_useClipMask;
-uniform float u_clipMaskDefault;
-uniform float u_clipMaskDensity;
-out vec4 o;
-
+    /** GLSL shared by the layer and adjustment fragment shaders: mask falloff, W3C color helpers, [composite]. */
+    const val BLEND_FUNCS = """
 /** Effective mask factor: 1 - density * (1 - m). */
 float maskEff(float m, float density) { return 1.0 - density * (1.0 - m); }
 
@@ -138,7 +117,31 @@ vec4 composite(int m, vec4 d, vec4 s) {
     vec3 b = clamp(blendFn(m, clamp(cb, 0.0, 1.0), clamp(cs, 0.0, 1.0)), 0.0, 1.0);
     return vec4((1.0 - ab) * s.rgb + as * ab * b + (1.0 - as) * d.rgb, ao);
 }
+"""
 
+    const val BLEND_FS = """#version 300 es
+precision highp float;
+precision highp int;
+uniform sampler2D u_dst;
+uniform sampler2D u_src;
+uniform sampler2D u_buf;
+uniform sampler2D u_clip;
+uniform sampler2D u_mask;
+uniform sampler2D u_clipMask;
+uniform int u_mode;
+uniform float u_opacity;
+uniform int u_preview;
+uniform float u_previewOpacity;
+uniform bool u_alphaLock;
+uniform bool u_useClip;
+uniform int u_useMask;
+uniform float u_maskDefault;
+uniform float u_maskDensity;
+uniform int u_useClipMask;
+uniform float u_clipMaskDefault;
+uniform float u_clipMaskDensity;
+out vec4 o;
+""" + BLEND_FUNCS + """
 void main() {
     ivec2 p = ivec2(gl_FragCoord.xy);
     vec4 d = texelFetch(u_dst, p, 0);

@@ -1,6 +1,9 @@
 package app.painter.render
 
+import app.painter.core.adjust.AdjustMath
+import app.painter.core.adjust.AdjustParams
 import app.painter.core.blend.BlendMode
+import app.painter.core.doc.AdjustmentLayer
 import app.painter.core.doc.Document
 import app.painter.core.doc.GroupNode
 import app.painter.core.doc.Node
@@ -25,8 +28,26 @@ internal data class SnapNode(
     val maskDensity: Float,
     /** Raw coverage (0..255) of pixels whose mask tile is missing. */
     val maskDefault: Int,
+    /** Prepared correction of an adjustment layer; null for every other node kind. */
+    val adjust: SnapAdjust?,
     val children: List<SnapNode>,
 )
+
+/**
+ * Main-thread copy of one adjustment layer's correction: the GPU kind index, the packed uniforms and the
+ * LUT of [app.painter.core.adjust.AdjustMath.prepare]. Compared by content so that an unchanged layer keeps
+ * the scene snapshot (and its GPU LUT texture) intact.
+ */
+internal class SnapAdjust(val kindIndex: Int, val uniforms: FloatArray, val lut: FloatArray?) {
+    /** False when the correction cannot change a pixel (unknown kind). */
+    val isActive: Boolean get() = kindIndex >= 0
+
+    override fun equals(other: Any?): Boolean =
+        other is SnapAdjust && other.kindIndex == kindIndex && other.uniforms.contentEquals(uniforms) &&
+            (other.lut == null) == (lut == null) && (lut == null || other.lut!!.contentEquals(lut))
+
+    override fun hashCode(): Int = 31 * (31 * kindIndex + uniforms.contentHashCode()) + (lut?.contentHashCode() ?: 0)
+}
 
 /** Immutable copy of everything except pixels that affects the composite. */
 internal data class SceneSnapshot(
@@ -285,8 +306,13 @@ internal class DocumentSync(private val pool: StagingPool) {
                 maskEnabled = m?.enabled ?: false,
                 maskDensity = m?.density ?: 1f,
                 maskDefault = m?.tiles?.defaultValue?.toInt()?.and(0xFF) ?: 255,
+                adjust = (n as? AdjustmentLayer)?.let { prep(it.params) },
                 children = if (n is GroupNode) n.children.map(::snapshot) else emptyList(),
             )
         }
+
+        /** [AdjustMath.prepare] of [p], or null when the correction is a no-op. */
+        private fun prep(p: AdjustParams): SnapAdjust? =
+            AdjustMath.prepare(p).let { if (it.isNoOp) null else SnapAdjust(it.kindIndex, it.uniforms, it.lut) }
     }
 }
