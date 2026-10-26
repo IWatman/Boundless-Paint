@@ -2,6 +2,12 @@
 # Использование: . .\tools\env.ps1
 $root = Split-Path -Parent $PSScriptRoot
 $env:PAINTER_ROOT = $root
+# In a git worktree .tools/.venv are absent: use the main checkout's copies.
+if (-not (Test-Path "$root\.tools")) {
+    $common = (git -C $root rev-parse --path-format=absolute --git-common-dir) 2>$null
+    if ($common) { $root = Split-Path -Parent $common }
+}
+$env:ANDROID_HOME = "$env:LOCALAPPDATA\Android\Sdk"
 $env:JAVA_HOME = "C:\Program Files\Microsoft\jdk-21.0.9.10-hotspot"
 $env:GRADLE_USER_HOME = "$root\.tools\gradle"
 $env:ANDROID_AVD_HOME = "$root\.tools\avd"

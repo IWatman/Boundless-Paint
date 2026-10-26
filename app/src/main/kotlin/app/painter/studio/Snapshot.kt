@@ -13,6 +13,8 @@ fun snapshotDocument(doc: Document): Document {
     copy.created = doc.created
     copy.modified = doc.modified
     copy.activeId = doc.activeId
+    copy.activeTarget = doc.activeTarget
+    copy.selection.copyFrom(doc.selection)
     copy.paper.color = doc.paper.color
     copy.paper.visible = doc.paper.visible
     copy.paper.textureId = doc.paper.textureId
@@ -29,8 +31,9 @@ private fun copyKeepingIds(node: Node): Node = when (node) {
         g.visible = node.visible; g.opacity = node.opacity; g.blendMode = node.blendMode
         g.clipped = node.clipped; g.hideInRecording = node.hideInRecording; g.locked = node.locked
         g.expanded = node.expanded
+        g.mask = node.mask?.deepCopy(); g.colorTag = node.colorTag
         for (c in node.children) g.add(copyKeepingIds(c))
         g
     }
     else -> node.deepCopy(node.id)
-}
+}.also { it.reference = node.reference }

@@ -25,3 +25,6 @@
 - Сборка: `. .\tools\env.ps1` затем `.\gradlew.bat :core:test --tests "app.painter.core.<pkg>.*" --console=plain`. App-модуль: `.\gradlew.bat :app:compileDebugKotlin`. Gradle может ждать lock, это нормально.
 - Стиль: Kotlin official, KDoc на публичных API, без лишних комментариев.
 - M1-отступление от плана: штампы рисуются на CPU (`core/stroke`), на GPU только композит. GPU-штампы в M2.
+
+## M2
+Сводный контракт мазка, общие типы и владельцы пакетов по фазам: [PLAN-M2.md](PLAN-M2.md) §2–§4. Правила параллельной работы те же.

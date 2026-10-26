@@ -17,6 +17,11 @@ sealed class Node(
     var clipped: Boolean = false
     var hideInRecording: Boolean = false
     var locked: Boolean = false
+    /** Optional raster mask (layers and groups). */
+    var mask: LayerMask? = null
+    var colorTag: ColorTag = ColorTag.NONE
+    /** Reference node for fill / wand (at most one per document). */
+    var reference: Boolean = false
     /** Parent group; null only for the document root. */
     var parent: GroupNode? = null
         internal set
@@ -26,6 +31,7 @@ sealed class Node(
     protected fun copyBaseTo(n: Node) {
         n.visible = visible; n.opacity = opacity; n.blendMode = blendMode
         n.clipped = clipped; n.hideInRecording = hideInRecording; n.locked = locked
+        n.mask = mask?.deepCopy(); n.colorTag = colorTag
     }
 }
 

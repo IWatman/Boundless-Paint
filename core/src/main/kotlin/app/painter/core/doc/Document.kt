@@ -25,6 +25,14 @@ class Document(
     /** The layer that receives paint. */
     var activeId: String? = null
 
+    /** Whether painting edits the active node's pixels or its mask. Not part of history. */
+    var activeTarget: EditTarget = EditTarget.LAYER
+
+    val selection = Selection(width, height)
+
+    /** The node flagged as reference for fill / wand, if any. */
+    val referenceNode: Node? get() { var r: Node? = null; root.walk { if (it.reference) r = it }; return r }
+
     fun newRasterLayer(name: String): RasterLayer = RasterLayer(newNodeId(), name, TileGrid(width, height))
 
     fun findNode(id: String): Node? {

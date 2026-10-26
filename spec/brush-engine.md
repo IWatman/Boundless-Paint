@@ -7,9 +7,10 @@
 input events (x, y, pressure, tiltX, tiltY, azimuth, twist, time)
  → coalesced/predicted touches (Android MotionEvent history + predicted)
  → stabilizer (real-time: constant + speed-based; lazy-rope; after-stroke)
- → constraint (guide / ruler / symmetry / perspective snap / shape)
+ → constraint (lazy / guide / ruler / perspective snap / hatching / shape)
  → resampler (дискретизация по spacing вдоль кривой Catmull-Rom)
  → dab generator (на каждый штамп: позиция, размер, угол, flow, opacity, цвет, scatter, текстура)
+ → symmetry (копии штампов через аффинные преобразования)
  → dab renderer (GPU: head mask × texture × color → stroke buffer)
  → stroke compositor (stroke buffer → слой: blend mode, opacity cap, alpha lock, selection mask, clip)
 ```
@@ -84,7 +85,7 @@ input events (x, y, pressure, tiltX, tiltY, azimuth, twist, time)
 | tex_source | none / bitmap | — | none |
 | tex_mode | canvas-fixed / rotate-with-stroke / warp-along-stroke / moving(stamp-relative) | enum | canvas-fixed |
 | tex_depth | Сила [dyn] | 0–100 | 50 |
-| tex_lower_limit | Порог закраски (ibis) | 0–100 | 0 |
+| tex_lower_limit | Порог закраски (ibis), 100 = без порога | 0–100 | 100 |
 | tex_scale | 0.05–4 | — | 1 |
 | tex_stretch | 1–50 | — | 1 |
 | tex_angle | 0–360 | — | 0 |

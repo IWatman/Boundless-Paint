@@ -6,6 +6,7 @@ import app.painter.core.doc.Node
 import app.painter.core.doc.RasterLayer
 import app.painter.core.raster.Tile
 import app.painter.core.raster.TileGrid
+import app.painter.core.raster.TileKey
 
 /** Tile-level compositing and whole-document flattening on the CPU. */
 object Compositor {
@@ -62,17 +63,41 @@ object Compositor {
                 }
             }
         }
-        renderStack(doc.root.children, acc)
+        renderStack(doc.root.children, acc, null)
         return acc
     }
 
-    private fun renderStack(children: List<Node>, acc: TileGrid) {
+    /**
+     * Composites only the tile at [key] (same rules as [flatten]); null when the result is transparent there
+     * and there is no paper. Cheap enough for per-pixel sampling on large canvases.
+     */
+    fun flattenTile(doc: Document, key: TileKey, includePaper: Boolean): Tile? {
+        val acc = TileGrid(doc.width, doc.height)
+        if (includePaper && doc.paper.visible) {
+            val p = doc.paper.color
+            val d = acc.getOrCreate(key.tx, key.ty)
+            var i = 0
+            while (i < Tile.CHANNELS) { d.write(i, p.r, p.g, p.b, 1f); i += 4 }
+        }
+        renderStack(doc.root.children, acc, key)
+        return acc.get(key)
+    }
+
+    /** [grid] limited to the tile at [only] (sharing the tile), or [grid] itself when [only] is null. */
+    private fun view(grid: TileGrid, only: TileKey?): TileGrid {
+        if (only == null) return grid
+        val v = TileGrid(grid.width, grid.height, grid.precise)
+        grid.get(only)?.let { v.put(only, it) }
+        return v
+    }
+
+    private fun renderStack(children: List<Node>, acc: TileGrid, only: TileKey?) {
         var baseAlpha: TileGrid? = null
         for ((index, node) in children.withIndex()) {
             if (node.clipped) {
                 val base = baseAlpha ?: continue
                 if (!node.visible) continue
-                compositeInto(acc, contentOf(node, acc), node.blendMode, node.opacity, base)
+                compositeInto(acc, contentOf(node, acc, only), node.blendMode, node.opacity, base)
                 continue
             }
             baseAlpha = null
@@ -80,14 +105,15 @@ object Compositor {
             val hasClipped = children.getOrNull(index + 1)?.clipped == true
             when (node) {
                 is RasterLayer -> {
-                    compositeInto(acc, node.pixels, node.blendMode, node.opacity)
-                    baseAlpha = node.pixels
+                    val px = view(node.pixels, only)
+                    compositeInto(acc, px, node.blendMode, node.opacity)
+                    baseAlpha = px
                 }
                 is GroupNode -> if (node.blendMode == BlendMode.PASSTHROUGH) {
-                    if (hasClipped) baseAlpha = renderIsolated(node, acc)
-                    renderPassthrough(node, acc)
+                    if (hasClipped) baseAlpha = renderIsolated(node, acc, only)
+                    renderPassthrough(node, acc, only)
                 } else {
-                    val off = renderIsolated(node, acc)
+                    val off = renderIsolated(node, acc, only)
                     compositeInto(acc, off, node.blendMode, node.opacity)
                     baseAlpha = off
                 }
@@ -95,25 +121,25 @@ object Compositor {
         }
     }
 
-    private fun contentOf(node: Node, like: TileGrid): TileGrid = when (node) {
-        is RasterLayer -> node.pixels
-        is GroupNode -> renderIsolated(node, like)
+    private fun contentOf(node: Node, like: TileGrid, only: TileKey?): TileGrid = when (node) {
+        is RasterLayer -> view(node.pixels, only)
+        is GroupNode -> renderIsolated(node, like, only)
     }
 
-    private fun renderIsolated(group: GroupNode, like: TileGrid): TileGrid {
+    private fun renderIsolated(group: GroupNode, like: TileGrid, only: TileKey?): TileGrid {
         val off = TileGrid(like.width, like.height)
-        renderStack(group.children, off)
+        renderStack(group.children, off, only)
         return off
     }
 
-    private fun renderPassthrough(group: GroupNode, acc: TileGrid) {
+    private fun renderPassthrough(group: GroupNode, acc: TileGrid, only: TileKey?) {
         if (group.opacity >= 1f) {
-            renderStack(group.children, acc)
+            renderStack(group.children, acc, only)
             return
         }
         if (group.opacity <= 0f) return
         val result = acc.copy()
-        renderStack(group.children, result)
+        renderStack(group.children, result, only)
         val t = group.opacity
         val keys = HashSet(acc.keys()).apply { addAll(result.keys()) }
         for (key in keys) {

@@ -10,6 +10,5 @@ class TilePatch(
     val after: Map<TileKey, Tile?>,
 ) {
     val byteSize: Long
-        get() = (before.values.count { it != null } + after.values.count { it != null }).toLong() *
-            Tile.SIZE * Tile.SIZE * 4 * 4
+        get() = before.values.sumOf { it?.byteSize ?: 0L } + after.values.sumOf { it?.byteSize ?: 0L }
 }

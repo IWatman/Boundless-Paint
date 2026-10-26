@@ -2,7 +2,7 @@
 
 Каждая веха = рабочая сборка APK + зелёные JVM-тесты.
 
-> M0 и M1 завершены 2026-10-26, детали и долги в spec/STATUS.md.
+> M0 и M1 завершены 2026-10-26, детали и долги в spec/STATUS.md. План M2: spec/PLAN-M2.md (там же изменения объёма).
 
 ## M0: Каркас
 - [ ] Gradle-проект `app/` (Kotlin, Compose, minSdk 29, target 36), локальный GRADLE_USER_HOME.
@@ -20,14 +20,14 @@
 
 ## M2: Паритет с основой IP + полный стоковый набор кистей
 - **Полный движок кисти** (весь spec/brush-engine.md, включая watercolor, particles, harmony, double, color stamp, 3D, filter brushes, screentone snap). GPU-штампы.
-- **Стоковый каталог ≈236 кистей** (spec/brush-catalog.md), покрытие стока IP и ibis. Brush Editor UI, браузер кистей с папками, избранным и поиском.
+- **Стоковый каталог ≈236 кистей** (spec/brush-catalog.md), покрытие стока IP и ibis. Brush Editor UI, браузер кистей с папками, избранным и поиском. Clone-кисть. Настройки стилуса (кривая, калибровка, кнопки).
 - Пипетка (long-press), selection (lasso, rect, ellipse, wand, brush) + операции.
 - Transform (basic, anchor, distort, warp, мультислой), bucket (tolerance, gap, expand, reference layer), градиенты.
 - Группы, маски, все 33 blend mode, adjustment layers, коррекции, кривые.
-- Guides (lines, ellipse, lazy, pen), shapes + detection, symmetry, perspective grids.
+- Guides (lines, ellipse, lazy, pen, hatching), shapes (вкл. правильный многоугольник) + detection, symmetry, perspective grids (1/2/3 точки, изо, 2D).
 
 ## M3: Расширение
-- Фильтры (P1-набор), filter layers, liquify, clone, text, panels/frame divider, crop, resize, straighten.
+- Фильтры (P1-набор), filter layers, liquify, text, криволинейная перспектива, panels/frame divider, crop, resize, straighten.
 - PSD in/out, таймлапс, настройки, стилус (palm rejection, кнопки), шорткаты.
 
 ## M4: Добавки ibis

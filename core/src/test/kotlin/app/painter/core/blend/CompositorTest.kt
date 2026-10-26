@@ -144,4 +144,20 @@ class CompositorTest {
         assertPixel(flat, 5, 5, floatArrayOf(0.1f, 0.6f, 0.1f, 0.75f), "clipped to group")
         assertPixel(flat, 6, 6, clear, "outside group")
     }
+
+    @Test
+    fun flattenTileMatchesFlatten() {
+        for (mode in listOf(BlendMode.PASSTHROUGH, BlendMode.NORMAL)) for (op in listOf(1f, 0.5f)) {
+            val d = groupDoc(mode, op)
+            d.root.add(layer(d, (270 to 7) to cs, (5 to 5) to cb).apply { clipped = true; blendMode = BlendMode.SCREEN })
+            for (paper in listOf(false, true)) {
+                val full = Compositor.flatten(d, paper)
+                for (key in full.keys()) {
+                    val t = Compositor.flattenTile(d, key, paper)
+                    assertTrue(t != null && t.contentEquals(full.get(key)!!), "$mode $op $paper $key")
+                }
+                if (!paper) assertNull(Compositor.flattenTile(d, app.painter.core.raster.TileKey(0, 5), false))
+            }
+        }
+    }
 }

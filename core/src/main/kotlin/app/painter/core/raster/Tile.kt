@@ -130,12 +130,19 @@ class Tile private constructor(private val h: ShortArray?, private val f: FloatA
     }
 }
 
-/** Single-channel 8-bit tile used by masks and selections. */
+/** Single-channel 8-bit tile used by masks and selections (0 = hidden/unselected, 255 = full). */
 class MaskTile(val data: ByteArray = ByteArray(Tile.SIZE * Tile.SIZE)) {
+    init { require(data.size == Tile.SIZE * Tile.SIZE) }
     var version: Long = 0
         private set
     fun markDirty() { version++ }
     fun copy(): MaskTile = MaskTile(data.copyOf()).also { it.version = version }
+    /** Every pixel equals [v]. */
+    fun isUniform(v: Byte): Boolean { for (b in data) if (b != v) return false; return true }
+    fun isEmpty(): Boolean = isUniform(0)
+    fun isFull(): Boolean = isUniform(-1)
+    fun fill(v: Byte) { data.fill(v); markDirty() }
+    fun contentEquals(o: MaskTile): Boolean = data.contentEquals(o.data)
     fun get(x: Int, y: Int): Float = (data[y * Tile.SIZE + x].toInt() and 0xFF) / 255f
     fun set(x: Int, y: Int, v: Float) {
         data[y * Tile.SIZE + x] = (v.coerceIn(0f, 1f) * 255f + 0.5f).toInt().toByte()
