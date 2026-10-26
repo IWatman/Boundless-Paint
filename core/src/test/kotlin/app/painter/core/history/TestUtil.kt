@@ -28,7 +28,7 @@ private fun StringBuilder.dump(n: Node, depth: Int) {
 
 fun gridHash(g: TileGrid): String =
     g.entries().sortedBy { it.key.packed }
-        .joinToString(";") { "${it.key}:${it.value.data.contentHashCode()}" }
+        .joinToString(";") { "${it.key}:${it.value.contentHash()}" }
 
 fun fillRect(g: TileGrid, x0: Int, y0: Int, x1: Int, y1: Int, r: Float, gg: Float, b: Float, a: Float) {
     for (y in y0 until y1) for (x in x0 until x1) g.setPixel(x, y, r * a, gg * a, b * a, a)
@@ -39,9 +39,9 @@ val normalBlender: (TileGrid, TileGrid, BlendMode, Float) -> Unit = { dst, src, 
     for ((k, s) in src.entries()) {
         val d = dst.getOrCreate(k.tx, k.ty)
         var i = 0
-        while (i < s.data.size) {
-            val sa = s.data[i + 3] * opacity
-            for (c in 0 until 4) d.data[i + c] = s.data[i + c] * opacity + d.data[i + c] * (1f - sa)
+        while (i < Tile.CHANNELS) {
+            val sa = s[i + 3] * opacity
+            for (c in 0 until 4) d[i + c] = s[i + c] * opacity + d[i + c] * (1f - sa)
             i += 4
         }
         d.markDirty()

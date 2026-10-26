@@ -83,14 +83,16 @@ class ProjectStoreTest {
     }
 
     @Test
-    fun listCleansLeftoverTmp() {
+    fun recoverCleansLeftoverTmp() {
         val a = create("A", 100)
         val tmp = FsUtil.tmpOf(store.dirFor(a.id))
         File(tmp, "layers").mkdirs()
         File(tmp, "manifest.json").writeText("{\"id\":\"zzz\",\"name\":\"half-written\"}")
         val orphan = File(root, "orphan.tmp").also { it.mkdirs() }
-        val list = store.list()
-        assertEquals(listOf(a.id), list.map { it.id })
+        assertEquals(listOf(a.id), store.list().map { it.id })
+        assertTrue(tmp.exists(), "list() must not touch in-progress saves")
+        store.recoverInterrupted()
+        assertEquals(listOf(a.id), store.list().map { it.id })
         assertFalse(tmp.exists())
         assertFalse(orphan.exists())
     }

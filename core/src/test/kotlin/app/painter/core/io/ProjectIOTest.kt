@@ -39,7 +39,7 @@ class ProjectIOTest {
 
     private fun randomTile(rnd: Random): Tile {
         val t = Tile()
-        for (i in t.data.indices) t.data[i] = rnd.nextFloat()
+        for (i in 0 until Tile.CHANNELS) t[i] = rnd.nextFloat()
         return t
     }
 
@@ -82,7 +82,7 @@ class ProjectIOTest {
         return doc
     }
 
-    private fun quantized(t: Tile) = FloatArray(t.data.size) { Half.toFloat(Half.fromFloat(t.data[it])) }
+    private fun quantized(t: Tile) = FloatArray(Tile.CHANNELS) { Half.toFloat(Half.fromFloat(t[it])) }
 
     private fun assertSameNode(a: Node, b: Node) {
         assertEquals(a.id, b.id)
@@ -106,7 +106,7 @@ class ProjectIOTest {
                 assertEquals(a.alphaLock, b.alphaLock)
                 val nonEmpty = a.pixels.entries().filter { !it.value.isEmpty() }.map { it.key }.toSet()
                 assertEquals(nonEmpty, b.pixels.keys())
-                for (k in nonEmpty) assertContentEquals(quantized(a.pixels.get(k)!!), b.pixels.get(k)!!.data)
+                for (k in nonEmpty) assertContentEquals(quantized(a.pixels.get(k)!!), b.pixels.get(k)!!.toFloats())
             }
         }
     }

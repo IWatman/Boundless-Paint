@@ -291,8 +291,7 @@ class MergeDown(
         val grid = low.pixels
         if (lowerOpacity != 1f) {
             for ((_, t) in grid.entries()) {
-                val d = t.data
-                for (i in d.indices) d[i] *= lowerOpacity
+                t.scale(lowerOpacity)
                 t.markDirty()
             }
         }

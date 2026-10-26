@@ -32,7 +32,7 @@ internal data class SceneSnapshot(
 )
 
 /** One tile's pixels copied off the main thread; [data] == null deletes the GL tile. */
-internal class TileUpload(val layerId: String, val tx: Int, val ty: Int, val data: FloatArray?)
+internal class TileUpload(val layerId: String, val tx: Int, val ty: Int, val data: ShortArray?)
 
 /** Changes collected on the main thread and applied on the GL thread. */
 internal class RenderBatch(
@@ -43,13 +43,13 @@ internal class RenderBatch(
     val dirtyKeys: LongArray,
 )
 
-/** Thread-safe pool of tile-sized float arrays used as upload staging. */
+/** Thread-safe pool of tile-sized binary16 arrays used as upload staging. */
 internal class StagingPool(private val maxRetained: Int = 64) {
-    private val free = ArrayDeque<FloatArray>()
+    private val free = ArrayDeque<ShortArray>()
 
-    fun obtain(): FloatArray = synchronized(free) { free.removeLastOrNull() } ?: FloatArray(TILE_FLOATS)
+    fun obtain(): ShortArray = synchronized(free) { free.removeLastOrNull() } ?: ShortArray(TILE_FLOATS)
 
-    fun release(a: FloatArray) {
+    fun release(a: ShortArray) {
         synchronized(free) { if (free.size < maxRetained) free.addLast(a) }
     }
 
@@ -163,9 +163,9 @@ internal class DocumentSync(private val pool: StagingPool) {
     }
 
     /** Copies [t]'s pixels into a pooled staging array. */
-    fun copyTile(t: Tile): FloatArray {
+    fun copyTile(t: Tile): ShortArray {
         val a = pool.obtain()
-        t.data.copyInto(a)
+        t.copyHalvesTo(a)
         return a
     }
 

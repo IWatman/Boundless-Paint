@@ -29,7 +29,11 @@ object Half {
         return (sign or half).toShort()
     }
 
-    fun toFloat(h: Short): Float {
+    private val table = FloatArray(65536) { decode(it.toShort()) }
+
+    fun toFloat(h: Short): Float = table[h.toInt() and 0xFFFF]
+
+    private fun decode(h: Short): Float {
         val bits = h.toInt() and 0xFFFF
         val sign = (bits and 0x8000) shl 16
         val exp = (bits ushr 10) and 0x1F

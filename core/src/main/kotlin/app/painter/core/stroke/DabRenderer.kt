@@ -83,7 +83,7 @@ class DabRenderer {
                 val px1 = min(x1, baseX + Tile.MASK) - baseX
                 val py0 = max(y0, baseY) - baseY
                 val py1 = min(y1, baseY + Tile.MASK) - baseY
-                val data = tile.data
+                val data = tile
                 for (py in py0..py1) {
                     val dy = baseY + py + 0.5f - cy
                     val dy2 = dy * dy

@@ -79,14 +79,14 @@ class HistoryTest {
     fun applyPutsCopiesAndMarksDirty() {
         val doc = Document.create(256, 256)
         val t = Tile()
-        t.data[3] = 1f
+        t[3] = 1f
         val cmd = TilePatchCommand(TilePatch(doc.activeId!!, mapOf(TileKey(0, 0) to null), mapOf(TileKey(0, 0) to t)))
         cmd.apply(doc)
         val inGrid = doc.activeRaster!!.pixels.get(0, 0)!!
         assertTrue(inGrid !== t)
         assertTrue(inGrid.version > t.version)
-        inGrid.data[3] = 0f
-        assertEquals(1f, t.data[3])
+        inGrid[3] = 0f
+        assertEquals(1f, t[3])
         cmd.revert(doc)
         assertNull(doc.activeRaster!!.pixels.get(0, 0))
     }

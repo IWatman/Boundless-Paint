@@ -35,7 +35,7 @@ class StrokeEngine(
     }
 
     /** Premultiplied stroke buffer, alpha uncapped; the preview applies [previewOpacity]. */
-    val buffer: TileGrid = TileGrid(doc.width, doc.height)
+    val buffer: TileGrid = TileGrid(doc.width, doc.height, precise = true)
 
     /** Opacity cap the renderer must multiply [buffer] by when previewing. */
     val previewOpacity: Float = params.opacity.coerceIn(0f, 1f)
@@ -157,10 +157,10 @@ class StrokeEngine(
             if (src.isEmpty()) continue
             before[key] = existing?.copy()
             val dst = existing ?: layer.pixels.getOrCreate(key.tx, key.ty)
-            val s = src.data
-            val d = dst.data
+            val s = src
+            val d = dst
             var i = 0
-            while (i < s.size) {
+            while (i < Tile.CHANNELS) {
                 val sa = s[i + 3] * op
                 if (sa > 0f) {
                     val inv = 1f - sa

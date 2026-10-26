@@ -20,9 +20,12 @@ data class ProjectInfo(
 /** Manages the unpacked project directories under [rootDir] (one `<id>/` per project). */
 class ProjectStore(val rootDir: File) {
 
-    /** All valid projects, most recently modified first. Leftovers of interrupted saves are recovered. */
-    fun list(): List<ProjectInfo> {
-        val entries = rootDir.listFiles()?.filter { it.isDirectory } ?: return emptyList()
+    /**
+     * Recovers leftovers of interrupted saves (`.tmp` / `.old` directories). Call once at startup, before
+     * any save can be in flight: a concurrent save's `.tmp` would otherwise be treated as a leftover.
+     */
+    fun recoverInterrupted() {
+        val entries = rootDir.listFiles()?.filter { it.isDirectory } ?: return
         for (f in entries) {
             val base = when {
                 f.name.endsWith(FsUtil.TMP_SUFFIX) -> f.name.removeSuffix(FsUtil.TMP_SUFFIX)
@@ -31,6 +34,10 @@ class ProjectStore(val rootDir: File) {
             }
             if (base != null && base.isNotEmpty()) runCatching { ProjectIO.recover(File(rootDir, base)) }
         }
+    }
+
+    /** All valid projects, most recently modified first. Read-only: in-progress saves are skipped. */
+    fun list(): List<ProjectInfo> {
         return (rootDir.listFiles() ?: emptyArray())
             .filter { it.isDirectory && !it.name.endsWith(FsUtil.TMP_SUFFIX) && !it.name.endsWith(FsUtil.OLD_SUFFIX) }
             .mapNotNull(::readInfo)

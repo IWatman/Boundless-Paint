@@ -3,8 +3,9 @@ package app.painter.core.raster
 /**
  * Sparse grid of tiles covering a layer. Missing tiles are fully transparent.
  * Width/height are the canvas size in pixels; tiles may extend past the edge.
+ * New tiles use float32 storage when [precise], half floats otherwise (see [Tile]).
  */
-class TileGrid(val width: Int, val height: Int) {
+class TileGrid(val width: Int, val height: Int, val precise: Boolean = false) {
     private val tiles = HashMap<TileKey, Tile>()
 
     val tilesX: Int get() = (width + Tile.MASK) shr Tile.SHIFT
@@ -14,13 +15,16 @@ class TileGrid(val width: Int, val height: Int) {
     fun get(key: TileKey): Tile? = tiles[key]
 
     fun getOrCreate(tx: Int, ty: Int): Tile =
-        tiles.getOrPut(TileKey(tx, ty)) { Tile() }
+        tiles.getOrPut(TileKey(tx, ty)) { Tile(precise) }
 
     fun put(key: TileKey, tile: Tile?) {
         if (tile == null) tiles.remove(key) else tiles[key] = tile
     }
 
     fun keys(): Set<TileKey> = tiles.keys
+
+    /** Bytes of pixel storage held by this grid. */
+    val byteSize: Long get() = tiles.values.sumOf { it.byteSize }
 
     fun entries(): Set<Map.Entry<TileKey, Tile>> = tiles.entries
 
@@ -35,7 +39,7 @@ class TileGrid(val width: Int, val height: Int) {
     fun clear() = tiles.clear()
 
     fun copy(): TileGrid {
-        val g = TileGrid(width, height)
+        val g = TileGrid(width, height, precise)
         for ((k, t) in tiles) g.tiles[k] = t.copy()
         return g
     }
@@ -46,14 +50,14 @@ class TileGrid(val width: Int, val height: Int) {
         val t = get(x shr Tile.SHIFT, y shr Tile.SHIFT)
         if (t == null) { out.fill(0f, 0, 4); return }
         val i = t.index(x and Tile.MASK, y and Tile.MASK)
-        out[0] = t.data[i]; out[1] = t.data[i + 1]; out[2] = t.data[i + 2]; out[3] = t.data[i + 3]
+        t.read(i, out)
     }
 
     fun setPixel(x: Int, y: Int, r: Float, g: Float, b: Float, a: Float) {
         if (x < 0 || y < 0 || x >= width || y >= height) return
         val t = getOrCreate(x shr Tile.SHIFT, y shr Tile.SHIFT)
         val i = t.index(x and Tile.MASK, y and Tile.MASK)
-        t.data[i] = r; t.data[i + 1] = g; t.data[i + 2] = b; t.data[i + 3] = a
+        t.write(i, r, g, b, a)
         t.markDirty()
     }
 

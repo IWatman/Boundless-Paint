@@ -2,6 +2,7 @@ package app.painter.core.stroke
 
 import app.painter.core.color.Rgba
 import app.painter.core.doc.Document
+import app.painter.core.raster.Tile
 import app.painter.core.raster.TileGrid
 import java.awt.image.BufferedImage
 import java.io.File
@@ -94,7 +95,7 @@ class StrokeTest {
         var maxA = 0f
         for ((_, t) in doc.activeRaster!!.pixels.entries()) {
             var i = 3
-            while (i < t.data.size) { maxA = maxOf(maxA, t.data[i]); i += 4 }
+            while (i < Tile.CHANNELS) { maxA = maxOf(maxA, t[i]); i += 4 }
         }
         assertTrue(maxA <= 0.5f + 1e-4f, "max alpha $maxA")
         assertTrue(maxA > 0.49f, "max alpha $maxA")
@@ -159,12 +160,12 @@ class StrokeTest {
                 for (k in patch.after.keys) {
                     val a = patch.after[k]
                     val cur = px.get(k)
-                    if (a == null) assertNull(cur) else assertTrue(a.data.contentEquals(cur!!.data))
+                    if (a == null) assertNull(cur) else assertTrue(a.contentEquals(cur!!))
                 }
                 for ((k, t) in patch.before) px.put(k, t?.copy())
                 assertEquals(original.keys(), px.keys(), "mode=$mode buildup=$buildup")
                 for (k in original.keys()) {
-                    assertTrue(original.get(k)!!.data.contentEquals(px.get(k)!!.data), "$k $mode $buildup")
+                    assertTrue(original.get(k)!!.contentEquals(px.get(k)!!), "$k $mode $buildup")
                 }
             }
         }
@@ -183,7 +184,7 @@ class StrokeTest {
             assertTrue(e.takeDirty().isNotEmpty())
             e.cancel()
             assertEquals(original.keys(), px.keys())
-            for (k in original.keys()) assertTrue(original.get(k)!!.data.contentEquals(px.get(k)!!.data))
+            for (k in original.keys()) assertTrue(original.get(k)!!.contentEquals(px.get(k)!!))
             assertTrue(e.buffer.keys().isEmpty())
         }
     }

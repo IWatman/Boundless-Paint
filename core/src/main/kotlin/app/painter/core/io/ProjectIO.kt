@@ -7,7 +7,7 @@ import app.painter.core.doc.GroupNode
 import app.painter.core.doc.Node
 import app.painter.core.doc.ProjectType
 import app.painter.core.doc.RasterLayer
-import app.painter.core.raster.Half
+
 import app.painter.core.raster.Tile
 import app.painter.core.raster.TileGrid
 import app.painter.core.raster.TileKey
@@ -212,12 +212,14 @@ object ProjectIO {
             .sortedWith(compareBy({ it.key.ty }, { it.key.tx }))
         val index = ByteBuffer.allocate(entries.size * INDEX_ENTRY_BYTES).order(ByteOrder.LITTLE_ENDIAN)
         val raw = ByteBuffer.allocate(TILE_RAW_BYTES).order(ByteOrder.LITTLE_ENDIAN)
+        val halves = ShortArray(Tile.CHANNELS)
         var offset = 0L
         BufferedOutputStream(FileOutputStream(File(layerDir, TILES_BIN)), 256 * 1024).use { bin ->
             for ((key, tile) in entries) {
                 require(key.tx in 0..0xFFFF && key.ty in 0..0xFFFF) { "tile out of range: $key" }
                 raw.clear()
-                for (v in tile.data) raw.putShort(Half.fromFloat(v))
+                tile.copyHalvesTo(halves)
+                raw.asShortBuffer().put(halves)
                 val compressed = ByteArrayOutputStream(TILE_RAW_BYTES / 4)
                 LZ4FrameOutputStream(compressed).use { it.write(raw.array(), 0, TILE_RAW_BYTES) }
                 val bytes = compressed.toByteArray()
@@ -249,10 +251,9 @@ object ProjectIO {
                 bin.seek(offset)
                 bin.readFully(compressed)
                 DataInputStream(LZ4FrameInputStream(ByteArrayInputStream(compressed))).use { it.readFully(raw) }
-                val halves = ByteBuffer.wrap(raw).order(ByteOrder.LITTLE_ENDIAN)
-                val tile = Tile()
-                for (i in 0 until TILE_FLOATS) tile.data[i] = Half.toFloat(halves.short)
-                grid.put(TileKey(tx, ty), tile)
+                val halves = ShortArray(Tile.CHANNELS)
+                ByteBuffer.wrap(raw).order(ByteOrder.LITTLE_ENDIAN).asShortBuffer().get(halves)
+                grid.put(TileKey(tx, ty), Tile.ofHalves(halves))
             }
         }
     }

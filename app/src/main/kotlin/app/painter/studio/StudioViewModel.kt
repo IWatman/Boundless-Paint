@@ -80,6 +80,7 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
     init {
         history.onChanged = { dirtySinceSave = true; refreshLayers() }
         syncBrushState()
+        viewModelScope.launch(Dispatchers.IO) { ioLock.withLock { store.recoverInterrupted() } }
         refreshProjects()
     }
 

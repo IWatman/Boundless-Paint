@@ -8,6 +8,7 @@ import app.painter.core.raster.Tile
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.nio.FloatBuffer
+import java.nio.ShortBuffer
 import javax.microedition.khronos.egl.EGLConfig
 import javax.microedition.khronos.opengles.GL10
 import kotlin.math.ceil
@@ -67,7 +68,7 @@ internal class CanvasRenderer(
     private var targetInternal = GL.GL_RGBA16F
     private val freeTargets = ArrayList<Target>()
     private val ints = IntArray(1)
-    private var upload: FloatBuffer? = null
+    private var upload: ShortBuffer? = null
 
     // ---- document state ----
     private var docW = 0
@@ -291,14 +292,14 @@ internal class CanvasRenderer(
             return
         }
         if (arr[i] == 0) arr[i] = createSampledTexture()
-        val buf = upload ?: ByteBuffer.allocateDirect(StagingPool.TILE_FLOATS * 4)
-            .order(ByteOrder.nativeOrder()).asFloatBuffer().also { upload = it }
+        val buf = upload ?: ByteBuffer.allocateDirect(StagingPool.TILE_FLOATS * 2)
+            .order(ByteOrder.nativeOrder()).asShortBuffer().also { upload = it }
         buf.clear()
         buf.put(data)
         buf.flip()
         pool.release(data)
         GL.glBindTexture(GL.GL_TEXTURE_2D, arr[i])
-        GL.glTexSubImage2D(GL.GL_TEXTURE_2D, 0, 0, 0, Tile.SIZE, Tile.SIZE, GL.GL_RGBA, GL.GL_FLOAT, buf)
+        GL.glTexSubImage2D(GL.GL_TEXTURE_2D, 0, 0, 0, Tile.SIZE, Tile.SIZE, GL.GL_RGBA, GL.GL_HALF_FLOAT, buf)
     }
 
     private fun resolve(s: SnapNode): GNode = GNode(
@@ -555,7 +556,7 @@ internal class CanvasRenderer(
         GL.glTexParameteri(GL.GL_TEXTURE_2D, GL.GL_TEXTURE_WRAP_T, GL.GL_CLAMP_TO_EDGE)
     }
 
-    /** Layer/buffer tile texture: RGBA16F (always sampleable in ES 3.0), filled with GL_FLOAT data. */
+    /** Layer/buffer tile texture: RGBA16F (always sampleable in ES 3.0), filled with GL_HALF_FLOAT data. */
     private fun createSampledTexture(): Int {
         GL.glGenTextures(1, ints, 0)
         val t = ints[0]

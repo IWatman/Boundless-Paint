@@ -82,7 +82,7 @@ private inline fun fill(grid: TileGrid, px: (x: Float, y: Float, out: FloatArray
                 if (x >= grid.width) break
                 px(x.toFloat(), y.toFloat(), c)
                 val i = t.index(lx, ly)
-                t.data[i] = c[0]; t.data[i + 1] = c[1]; t.data[i + 2] = c[2]; t.data[i + 3] = c[3]
+                t.write(i, c)
             }
         }
         t.markDirty()

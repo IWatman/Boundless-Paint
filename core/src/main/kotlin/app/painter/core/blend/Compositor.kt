@@ -24,14 +24,18 @@ object Compositor {
             val clipTile = if (clipAlpha != null) clipAlpha.get(key) ?: continue else null
             if (sTile.isEmpty()) continue
             val dTile = if (needsDst) dst.get(key) ?: continue else dst.get(key) ?: Tile().also { dst.put(key, it) }
-            val s = sTile.data
-            val d = dTile.data
-            val c = clipTile?.data
+            val sp = FloatArray(4)
+            val dp = FloatArray(4)
             var i = 0
             for (p in 0 until PIXELS) {
-                if (s[i + 3] > 0f) {
-                    val op = if (c != null) opacity * c[i + 3] else opacity
-                    if (op > 0f) BlendMath.blendPixel(mode, d, i, s, i, op)
+                if (sTile[i + 3] > 0f) {
+                    val op = if (clipTile != null) opacity * clipTile[i + 3] else opacity
+                    if (op > 0f) {
+                        sTile.read(i, sp)
+                        dTile.read(i, dp)
+                        BlendMath.blendPixel(mode, dp, 0, sp, 0, op)
+                        dTile.write(i, dp)
+                    }
                 }
                 i += 4
             }
@@ -50,10 +54,10 @@ object Compositor {
         if (includePaper && doc.paper.visible) {
             val p = doc.paper.color
             for (ty in 0 until acc.tilesY) for (tx in 0 until acc.tilesX) {
-                val d = acc.getOrCreate(tx, ty).data
+                val d = acc.getOrCreate(tx, ty)
                 var i = 0
-                while (i < d.size) {
-                    d[i] = p.r; d[i + 1] = p.g; d[i + 2] = p.b; d[i + 3] = 1f
+                while (i < Tile.CHANNELS) {
+                    d.write(i, p.r, p.g, p.b, 1f)
                     i += 4
                 }
             }
@@ -113,15 +117,14 @@ object Compositor {
         val t = group.opacity
         val keys = HashSet(acc.keys()).apply { addAll(result.keys()) }
         for (key in keys) {
-            val r = result.get(key)?.data
+            val r = result.get(key)
             val a = acc.get(key)
             if (a == null && r == null) continue
-            val tile = a ?: Tile().also { acc.put(key, it) }
-            val d = tile.data
+            val tile = a ?: Tile(acc.precise).also { acc.put(key, it) }
             if (r == null) {
-                for (i in d.indices) d[i] *= 1f - t
+                tile.scale(1f - t)
             } else {
-                for (i in d.indices) d[i] += (r[i] - d[i]) * t
+                for (i in 0 until Tile.CHANNELS) tile[i] = tile[i] + (r[i] - tile[i]) * t
             }
             tile.markDirty()
         }
