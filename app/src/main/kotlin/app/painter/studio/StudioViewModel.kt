@@ -167,7 +167,7 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
         val engine = stroke ?: return
         stroke = null
         val layerId = doc.activeId ?: return
-        val patch = engine.end()
+        val patch = engine.endPatch()
         if (!engine.directToLayer) canvas?.setStrokePreview(layerId, null, false, 1f)
         if (patch != null) {
             history.push(TilePatchCommand(patch))

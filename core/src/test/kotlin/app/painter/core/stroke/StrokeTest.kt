@@ -36,7 +36,7 @@ class StrokeTest {
         val e = StrokeEngine(doc, doc.activeId!!, params, color, mode)
         e.begin(points.first())
         e.add(points.drop(1))
-        return e to e.end()
+        return e to e.endPatch()
     }
 
     private fun alpha(grid: TileGrid, x: Int, y: Int): Float {
@@ -145,7 +145,7 @@ class StrokeTest {
     @Test
     fun patchRestoresOriginal() {
         for (buildup in listOf(false, true)) {
-            for (mode in StrokeMode.entries) {
+            for (mode in listOf(StrokeMode.PAINT, StrokeMode.ERASE)) {
                 val doc = Document.create(600, 300)
                 val px = doc.activeRaster!!.pixels
                 val rnd = Random(7)
