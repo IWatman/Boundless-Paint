@@ -54,6 +54,7 @@
     <string name="hex">Hex</string>
     <string name="hsb">HSB</string>
     <string name="rgb">RGB</string>
+    <string name="layer_default_name">Layer %1$d</string>
     <string name="layer_menu">Layer options</string>
     <string name="layers">Layers</string>
     <string name="max_layers">Max layers for this size: %1$d</string>
@@ -95,6 +96,8 @@
     <string name="tab_palette">Palette</string>
     <string name="untitled">Untitled</string>
     <string name="visibility">Visibility</string>
+    <string name="update_signature_mismatch">The installed app is signed with a different key (a test build). Uninstall it and install Painter again from GitHub.</string>
+    <string name="update_done">Updated to version %1$s.</string>
     <string name="updates">Updates</string>
     <string name="update_check">Check for updates</string>
     <string name="update_checking">Checking for updates…</string>

@@ -7,6 +7,7 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import app.painter.R
 import app.painter.core.blend.BlendMode
 import app.painter.core.blend.Compositor
 import app.painter.core.color.Rgba
@@ -26,10 +27,18 @@ import app.painter.core.history.SetNodeProps
 import app.painter.core.history.TilePatchCommand
 import app.painter.core.io.ProjectIO
 import app.painter.core.io.ProjectStore
+import app.painter.core.pick.Eyedropper
+import app.painter.core.pick.PickSource
+import app.painter.core.stroke.Brush
 import app.painter.core.stroke.BrushParams
+import app.painter.core.stroke.BrushResources
+import app.painter.core.stroke.HashRng
 import app.painter.core.stroke.InputPoint
+import app.painter.core.stroke.StrokeCommit
+import app.painter.core.stroke.StrokeContext
 import app.painter.core.stroke.StrokeEngine
 import app.painter.core.stroke.StrokeMode
+import app.painter.core.stroke.StrokeTarget
 import app.painter.render.CanvasInputListener
 import app.painter.render.CanvasView
 import app.painter.ui.home.ProjectCardUi
@@ -62,11 +71,12 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
     private var stroke: StrokeEngine? = null
     private var dirtySinceSave = false
     private var autosaveJob: Job? = null
+    private var strokeCounter = 0L
 
     private var paintParams = BrushParams()
     private var eraseParams = BrushParams(size = 40f)
 
-    private val _state = MutableStateFlow(StudioUiState(palette = DefaultPalette.colors, layerPanelOpen = true))
+    private val _state = MutableStateFlow(StudioUiState(palette = DefaultPalette.colors, layerPanelOpen = false))
     val state: StateFlow<StudioUiState> = _state
 
     private val _projects = MutableStateFlow<List<ProjectCardUi>>(emptyList())
@@ -100,7 +110,10 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
     }
 
     fun newDocument(name: String, width: Int, height: Int) {
-        setDocument(Document.create(width, height, name.ifBlank { "Untitled" }))
+        val d = Document.create(width, height, name.ifBlank { "Untitled" })
+        d.root.children.firstOrNull()?.name = defaultLayerName(1)
+        setDocument(d)
+        _state.update { it.copy(layerPanelOpen = false) }
         dirtySinceSave = true
         save()
     }
@@ -151,7 +164,15 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
         if (!layer.visible || layer.locked) return
         val s = _state.value
         val mode = if (s.mode == BrushModeUi.ERASE) StrokeMode.ERASE else StrokeMode.PAINT
-        val engine = StrokeEngine(doc, layer.id, currentParams(), s.color, mode)
+        val brush = Brush.of(currentParams(), STUDIO_BRUSH_ID)
+        val vs = canvas?.viewState?.value
+        val ctx = StrokeContext(
+            zoom = vs?.zoom ?: 1f,
+            viewRotation = Math.toRadians((vs?.rotationDeg ?: 0f).toDouble()).toFloat(),
+            seed = HashRng.strokeSeed(strokeCounter++, STUDIO_BRUSH_ID),
+            threads = STROKE_THREADS,
+        )
+        val engine = StrokeEngine(doc, StrokeTarget.Layer(layer.id), brush, BrushResources.EMPTY, s.color, mode, ctx)
         stroke = engine
         engine.begin(p)
         if (engine.directToLayer) {
@@ -172,8 +193,9 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
         val engine = stroke ?: return
         stroke = null
         val layerId = doc.activeId ?: return
-        val patch = engine.endPatch()
+        val commit = engine.end()
         if (!engine.directToLayer) canvas?.setStrokePreview(layerId, null, false, 1f)
+        val patch = (commit as? StrokeCommit.Pixels)?.patch
         if (patch != null) {
             history.push(TilePatchCommand(patch))
             canvas?.invalidate(patch.layerId, patch.after.keys)
@@ -200,13 +222,10 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
     override fun onRedoGesture() = redo()
 
     override fun onLongPress(docX: Float, docY: Float) {
+        val layerId = doc.activeId
         viewModelScope.launch {
             val picked = withContext(Dispatchers.Default) {
-                val grid = Compositor.flatten(doc, includePaper = true)
-                val px = FloatArray(4)
-                grid.getPixel(docX.toInt(), docY.toInt(), px)
-                val a = px[3]
-                if (a > 0f) Rgba(px[0] / a, px[1] / a, px[2] / a, 1f) else null
+                Eyedropper(doc, PickSource.CANVAS, layerId, diameter = 1).sample(docX, docY)
             }
             picked?.let { setColor(it, commit = true) }
         }
@@ -278,7 +297,7 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
         val active = doc.activeNode
         val parent = active?.parent ?: doc.root
         val index = if (active != null) parent.indexOf(active) + 1 else parent.children.size
-        val layer = doc.newRasterLayer("Layer ${doc.layerCount() + 1}")
+        val layer = doc.newRasterLayer(defaultLayerName(doc.layerCount() + 1))
         exec(AddLayer(layer, parent.id, index))
     }
 
@@ -302,7 +321,7 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
         val parent = node.parent ?: return
         val below = parent.children.getOrNull(parent.indexOf(node) - 1)
         if (below !is RasterLayer) return
-        exec(MergeDown(id, { dst, src, mode, opacity -> Compositor.compositeInto(dst, src, mode, opacity) }))
+        exec(MergeDown(id, Compositor))
     }
 
     override fun selectLayer(id: String) {
@@ -540,3 +559,11 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
 
 /** Delay after the last change before the project is written. */
 private const val AUTOSAVE_DELAY_MS = 2_000L
+
+private fun StudioViewModel.defaultLayerName(n: Int): String =
+    getApplication<android.app.Application>().getString(R.string.layer_default_name, n)
+
+private const val STUDIO_BRUSH_ID = "studio.round"
+
+/** Stroke worker threads: leave cores for UI and GL. */
+private val STROKE_THREADS = (Runtime.getRuntime().availableProcessors() - 2).coerceIn(1, 4)

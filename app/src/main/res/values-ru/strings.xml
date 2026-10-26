@@ -53,6 +53,7 @@
     <string name="hex">Hex</string>
     <string name="hsb">HSB</string>
     <string name="rgb">RGB</string>
+    <string name="layer_default_name">Слой %1$d</string>
     <string name="layer_menu">Параметры слоя</string>
     <string name="layers">Слои</string>
     <string name="max_layers">Максимум слоёв для этого размера: %1$d</string>
@@ -108,5 +109,7 @@
     <string name="update_now">Обновить</string>
     <string name="update_retry">Повторить</string>
     <string name="update_up_to_date">У вас последняя версия.</string>
+    <string name="update_signature_mismatch">Установленная версия подписана другим ключом (тестовая сборка). Удалите приложение и установите Painter заново с GitHub.</string>
+    <string name="update_done">Обновлено до версии %1$s.</string>
     <string name="updates">Обновления</string>
 </resources>

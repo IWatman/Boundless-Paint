@@ -85,6 +85,10 @@ private fun UpdateStateBody(
             stringResource(R.string.update_up_to_date),
             style = MaterialTheme.typography.bodyMedium,
         )
+        is UpdateUiState.Updated -> Text(
+            stringResource(R.string.update_done, state.version),
+            style = MaterialTheme.typography.bodyMedium,
+        )
         is UpdateUiState.Available -> Column {
             Text(
                 stringResource(R.string.update_new_version, state.info.tagName),
@@ -156,7 +160,7 @@ private fun UpdateConfirmButton(
         UpdateUiState.NeedsPermission -> TextButton(onClick = onUpdate) {
             Text(stringResource(R.string.update_grant))
         }
-        UpdateUiState.UpToDate -> TextButton(onClick = onCheck) {
+        UpdateUiState.UpToDate, is UpdateUiState.Updated -> TextButton(onClick = onCheck) {
             Text(stringResource(R.string.update_check))
         }
         else -> Unit

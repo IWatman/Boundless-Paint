@@ -39,6 +39,10 @@ android {
     }
 
     buildTypes {
+        debug {
+            // Same key as releases, so a dev build on a device can still take updates from GitHub.
+            signingConfigs.findByName("release")?.let { signingConfig = it }
+        }
         release {
             isMinifyEnabled = false
             // Falls back to an unsigned build when .tools/signing/keystore.properties is absent.

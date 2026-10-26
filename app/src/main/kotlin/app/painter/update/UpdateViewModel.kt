@@ -1,5 +1,6 @@
 package app.painter.update
 
+import app.painter.R
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -21,6 +22,9 @@ sealed interface UpdateUiState {
 
     /** The running version is the newest release. */
     data object UpToDate : UpdateUiState
+
+    /** The update was installed; this process already runs [version]. */
+    data class Updated(val version: String) : UpdateUiState
 
     /** A newer release is available. */
     data class Available(val info: UpdateInfo) : UpdateUiState
@@ -59,8 +63,15 @@ class UpdateViewModel(app: Application) : AndroidViewModel(app) {
             UpdateInstallBus.status.collect { status ->
                 when (status) {
                     null -> Unit
-                    InstallStatus.Success -> _state.value = UpdateUiState.Installing
-                    is InstallStatus.Failure -> _state.value = UpdateUiState.Error(status.message)
+                    // Delivered to the freshly installed version, so the install is already done.
+                    InstallStatus.Success -> _state.value = UpdateUiState.Updated(currentVersion)
+                    is InstallStatus.Failure -> _state.value = UpdateUiState.Error(
+                        if ("UPDATE_INCOMPATIBLE" in status.message) {
+                            getApplication<Application>().getString(R.string.update_signature_mismatch)
+                        } else {
+                            status.message
+                        },
+                    )
                 }
                 if (status != null) UpdateInstallBus.consume()
             }
