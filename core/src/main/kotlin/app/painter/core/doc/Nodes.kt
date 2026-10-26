@@ -1,5 +1,6 @@
 package app.painter.core.doc
 
+import app.painter.core.adjust.AdjustParams
 import app.painter.core.blend.BlendMode
 import app.painter.core.color.Rgba
 import app.painter.core.raster.TileGrid
@@ -17,7 +18,7 @@ sealed class Node(
     var clipped: Boolean = false
     var hideInRecording: Boolean = false
     var locked: Boolean = false
-    /** Optional raster mask (layers and groups). */
+    /** Optional raster mask (layers, groups and adjustment layers). */
     var mask: LayerMask? = null
     var colorTag: ColorTag = ColorTag.NONE
     /** Reference node for fill / wand (at most one per document). */
@@ -44,6 +45,19 @@ class RasterLayer(
 
     override fun deepCopy(newId: String): RasterLayer =
         RasterLayer(newId, name, pixels.copy()).also { copyBaseTo(it); it.alphaLock = alphaLock }
+}
+
+/**
+ * Non-destructive correction applied to everything below it within its parent (spec/tools/m2-layers-adjust.md L5).
+ * Strength is the node opacity; the blend mode mixes `adj(below)` against `below`. Never a clip base.
+ */
+class AdjustmentLayer(
+    id: String,
+    name: String,
+    var params: AdjustParams,
+) : Node(id, name) {
+    override fun deepCopy(newId: String): AdjustmentLayer =
+        AdjustmentLayer(newId, name, params).also { copyBaseTo(it) }
 }
 
 class GroupNode(
@@ -96,3 +110,20 @@ data class Paper(
 )
 
 fun newNodeId(): String = UUID.randomUUID().toString()
+
+/** True when this node or any ancestor is locked (spec L7: lock of a group applies to all descendants). */
+val Node.effectivelyLocked: Boolean
+    get() {
+        var n: Node? = this
+        while (n != null) { if (n.locked) return true; n = n.parent }
+        return false
+    }
+
+/** True when this node, an ancestor or (for groups) a descendant is locked. */
+val Node.touchesLocked: Boolean
+    get() {
+        if (effectivelyLocked) return true
+        var found = false
+        if (this is GroupNode) walk { if (it.locked) found = true }
+        return found
+    }

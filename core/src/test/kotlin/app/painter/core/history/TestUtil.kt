@@ -1,6 +1,7 @@
 package app.painter.core.history
 
 import app.painter.core.blend.BlendMode
+import app.painter.core.doc.AdjustmentLayer
 import app.painter.core.doc.Document
 import app.painter.core.doc.GroupNode
 import app.painter.core.doc.Node
@@ -10,7 +11,7 @@ import app.painter.core.raster.TileGrid
 
 /** Structural + pixel fingerprint of a document, for exact state comparison. */
 fun fingerprint(doc: Document): String = buildString {
-    append("active=").append(doc.activeId).append('\n')
+    append("active=").append(doc.activeId).append(" target=").append(doc.activeTarget).append('\n')
     dump(doc.root, 0)
 }
 
@@ -18,9 +19,16 @@ private fun StringBuilder.dump(n: Node, depth: Int) {
     repeat(depth) { append("  ") }
     append(n.id).append('|').append(n.name).append('|').append(n.visible).append('|')
         .append(n.opacity).append('|').append(n.blendMode).append('|').append(n.clipped)
+        .append('|').append(n.colorTag).append('|').append(n.reference).append('|').append(n.locked)
+    n.mask?.let { m ->
+        append("|mask:").append(m.enabled).append(',').append(m.linked).append(',').append(m.density)
+            .append(',').append(m.tiles.defaultValue).append(',')
+            .append(m.tiles.entries().sortedBy { it.key.packed }.joinToString(";") { "${it.key}:${it.value.data.contentHashCode()}" })
+    }
     when (n) {
         is RasterLayer -> append('|').append(n.alphaLock).append('|').append(gridHash(n.pixels))
-        is GroupNode -> {}
+        is GroupNode -> append('|').append(n.expanded)
+        is AdjustmentLayer -> append('|').append(n.params)
     }
     append('\n')
     if (n is GroupNode) for (c in n.children) dump(c, depth + 1)

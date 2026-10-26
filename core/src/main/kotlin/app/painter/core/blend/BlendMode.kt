@@ -45,7 +45,11 @@ enum class BlendMode(val id: String, val shaderIndex: Int, val group: Group) {
         private val byId = entries.associateBy { it.id }
         fun fromId(id: String): BlendMode = byId[id] ?: NORMAL
 
+        /** Modes of [group] in shader-index order (the layer panel list). */
+        fun inGroup(group: Group): List<BlendMode> = entries.filter { it.group == group }
+
         /** Modes exposed in the M1 layer panel. */
+        @Deprecated("M2 lists every mode by group: use entries grouped by Group")
         val M1 = listOf(
             NORMAL, MULTIPLY, SCREEN, OVERLAY, DARKEN, LIGHTEN,
             COLOR_DODGE, COLOR_BURN, SOFT_LIGHT, HARD_LIGHT, ADD, DIFFERENCE,
