@@ -129,9 +129,15 @@ class ShapeDetectorTest {
         val tri = polyPoints(listOf(Vec2(100f, 300f), Vec2(400f, 280f), Vec2(230f, 60f), Vec2(100f, 300f)), false)
         val plain = ShapeDetector.detect(noisy(tri, Random(5)))
         assertEquals(ShapeKind.TRIANGLE, plain.first().kind)
-        val second = plain[1].kind
+        // Curve is the fallback and stays last whatever its priority (spec G3.4 step 5).
+        val second = plain.drop(1).firstOrNull { it.kind != ShapeKind.CURVE }?.kind ?: ShapeKind.CURVE
         val boosted = ShapeDetector.detect(noisy(tri, Random(5)), DetectOptions(priorities = mapOf(ShapeKind.TRIANGLE to 0.5f, second to 2f)))
-        assertEquals(second, boosted.first().kind)
+        if (second == ShapeKind.CURVE) {
+            assertEquals(ShapeKind.TRIANGLE, boosted.first().kind)
+            assertEquals(ShapeKind.CURVE, boosted.last().kind)
+        } else {
+            assertEquals(second, boosted.first().kind)
+        }
     }
 
     @Test

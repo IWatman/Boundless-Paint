@@ -32,7 +32,8 @@ data class Candidate(val kind: ShapeKind, val shape: Shape, val error: Float, va
  * Freehand stroke → shape candidates (spec G3.4): arc-length resampling, closure test, ShortStraw
  * corners (Wolin et al. 2008) with a sharp-turn significance filter (smooth bends are not corners), then per-kind fits (PCA line,
  * Kåsa arc, Fitzgibbon ellipse, polygons from side lines) ranked by `e / maxE / priority`. A Schneider
- * Bézier curve is always appended last as the fallback.
+ * Bézier curve is always appended last as the fallback; a corner polyline is dropped when the curve
+ * matches the stroke several times better.
  */
 object ShapeDetector {
     const val MIN_LENGTH_SCREEN_PX = 24f
@@ -42,6 +43,9 @@ object ShapeDetector {
     private const val STRAW_W = 3
     private const val CORNER_MIN_TURN_DEG = 30f
     private const val CORNER_SHARPNESS = 0.7f
+    private const val POLYLINE_MIN_TURN_DEG = 45f
+    private const val POLYLINE_CURVE_RATIO = 5.4f
+    private const val POLYLINE_MIN_ERROR = 0.0125f
 
     private val MAX_E = mapOf(
         ShapeKind.LINE to 0.025f, ShapeKind.ARC to 0.03f, ShapeKind.CIRCLE to 0.035f, ShapeKind.ELLIPSE to 0.035f,
@@ -63,23 +67,58 @@ object ShapeDetector {
 
         val found = ArrayList<Pair<ShapeKind, Shape>>()
         if (!closed) {
-            fitLine(s, points, length)?.let { found += ShapeKind.LINE to it }
-            if (corners.isEmpty()) fitArc(s, diag)?.let { found += ShapeKind.ARC to it }
-            if (corners.isNotEmpty()) {
-                found += ShapeKind.POLYLINE to Shape.Path(BezierPath.polyline(listOf(s.first()) + corners.map { s[it] } + s.last()))
+            // Straightness on the D/40 resampling: raw hand jitter would inflate the path length.
+            fitLine(s, points, pathLength(s, false))?.let { found += ShapeKind.LINE to it }
+            // ShortStraw splits any curved run, so a noisy arc gets spurious corners; the arc error bound
+            // (0.03·D) still rejects real polylines, whose sharp corners a circle cannot follow.
+            fitArc(s, diag)?.let { found += ShapeKind.ARC to it }
+            val verts = listOf(s.first()) + corners.map { s[it] } + s.last()
+            // A polyline needs real kinks: ShortStraw also splits smooth curves into short straight runs.
+            val idx = listOf(0) + corners + (s.size - 1)
+            val straightRuns = (1 until idx.size).all { k ->
+                // Trim samples next to corners: corner localisation is ±2 samples and the hand rounds kinks.
+                val a0 = if (k == 1) idx[0] else idx[k - 1] + 2
+                val a1 = if (k == idx.size - 1) idx[k] else idx[k] - 2
+                val run = if (a1 - a0 >= 2) s.subList(a0, a1 + 1) else emptyList()
+                run.size < 3 || run.last().dist(run.first()) / pathLength(run, false) >= 0.95f
+            }
+            if (corners.isNotEmpty() && straightRuns &&
+                (1 until verts.size - 1).all { turnDeg(verts[it - 1], verts[it], verts[it + 1]) >= POLYLINE_MIN_TURN_DEG }
+            ) {
+                found += ShapeKind.POLYLINE to Shape.Path(BezierPath.polyline(verts))
             }
         } else {
             fitEllipse(s)?.let { found += it }
             if (corners.size in 3..8) found += fitPolygons(s, corners)
         }
-        val accepted = found.mapNotNull { (kind, shape) ->
+        val curve = fitCurve(s, closed, diag)
+        val curveErr = rmsError(s, curve) / diag
+        val accepted = dropSpuriousPolylines(found, s, diag, curveErr).mapNotNull { (kind, shape) ->
             val e = rmsError(s, shape) / diag
             val maxE = MAX_E.getValue(kind)
             if (e <= maxE) Candidate(kind, shape, e, e / maxE / opts.priority(kind)) else null
+        }.let { c ->
+            // A qualifying Rect is the more specific reading of the same 4 corners: Quad always fits a bit
+            // better (more freedom), so it must not outrank it.
+            if (c.any { it.kind == ShapeKind.RECT }) c.filter { it.kind != ShapeKind.QUAD } else c
         }.sortedBy { it.score }.take(MAX_RESULTS - 1)
-        val curve = fitCurve(s, closed, diag)
-        val curveCand = Candidate(ShapeKind.CURVE, curve, rmsError(s, curve) / diag, Float.MAX_VALUE)
+        val curveCand = Candidate(ShapeKind.CURVE, curve, curveErr, Float.MAX_VALUE)
         return accepted + curveCand
+    }
+
+    /**
+     * Drops a polyline candidate the smooth fit explains far better: a drawn polyline is straight to within
+     * noise, so its corner polyline and the Schneider curve score alike, while a smooth stroke split into
+     * pseudo-corners by ShortStraw is matched several times worse by the polyline than by the curve.
+     */
+    private fun dropSpuriousPolylines(
+        found: List<Pair<ShapeKind, Shape>>,
+        s: List<Vec2>,
+        diag: Float,
+        curveErr: Float,
+    ): List<Pair<ShapeKind, Shape>> {
+        val limit = max(POLYLINE_CURVE_RATIO * curveErr, POLYLINE_MIN_ERROR) * diag
+        return found.filter { (kind, shape) -> kind != ShapeKind.POLYLINE || rmsError(s, shape) <= limit }
     }
 
     private fun fitLine(s: List<Vec2>, raw: List<Vec2>, length: Float): Shape? {
@@ -178,6 +217,9 @@ object ShapeDetector {
                 ?.takeIf { it.dist(s[corners[i]]) < bboxDiag(s) * 0.25f } ?: s[corners[i]]
         }
     }
+
+    /** Direction change at [b] between segments a→b and b→c, degrees 0..180. */
+    private fun turnDeg(a: Vec2, b: Vec2, c: Vec2): Float = 180f - interiorAngleDeg(a, b, c)
 
     private fun interiorAngleDeg(a: Vec2, b: Vec2, c: Vec2): Float {
         val u = (a - b).normalized(); val w = (c - b).normalized()
