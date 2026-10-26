@@ -25,6 +25,7 @@ android {
         versionCode = 102
         versionName = "0.1.2"
         buildConfigField("String", "UPDATE_REPO", "\"IWatman/Painter\"")
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     signingConfigs {
@@ -56,6 +57,9 @@ android {
     kotlinOptions {
         jvmTarget = "17"
     }
+    // GPU parity tests read the CPU-generated vectors (core/src/test/resources/vectors/*.json).
+    sourceSets["androidTest"].assets.srcDir("../core/src/test/resources")
+
     buildFeatures {
         compose = true
         buildConfig = true
@@ -63,6 +67,8 @@ android {
 }
 
 dependencies {
+    androidTestImplementation("androidx.test.ext:junit:1.2.1")
+    androidTestImplementation("androidx.test:runner:1.6.2")
     implementation(project(":core"))
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.activity.compose)

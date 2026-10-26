@@ -88,8 +88,8 @@ vec3 blendFn(int m, vec3 cb, vec3 cs) {
     if (m == 27) return setLum(setSat(cb, sat(cs)), lum(cb));
     if (m == 28) return setLum(cs, lum(cb));
     if (m == 29) return setLum(cb, lum(cs));
-    if (m == 6) return (cs.r + cs.g + cs.b) < (cb.r + cb.g + cb.b) ? cs : cb;
-    if (m == 12) return (cs.r + cs.g + cs.b) > (cb.r + cb.g + cb.b) ? cs : cb;
+    if (m == 6) return lum(cs) < lum(cb) ? cs : cb;
+    if (m == 12) return lum(cs) > lum(cb) ? cs : cb;
     return vec3(sep(m, cb.r, cs.r), sep(m, cb.g, cs.g), sep(m, cb.b, cs.b));
 }
 
@@ -99,6 +99,8 @@ vec4 composite(int m, vec4 d, vec4 s) {
     vec3 cb = ab > 0.0 ? d.rgb / ab : vec3(0.0);
     vec3 cs = as > 0.0 ? s.rgb / as : vec3(0.0);
     if (m == 30) return d * (1.0 - as);
+    // BlendMath.INVERT: backdrop alpha kept, colour inverted in proportion to source alpha.
+    if (m == 23) return vec4(ab * (clamp(cb, 0.0, 1.0) + (1.0 - 2.0 * clamp(cb, 0.0, 1.0)) * as), ab);
     if (m == 31) return d * (lum(cs) * as + (1.0 - as));
     if (m == 32) {
         float mk = lum(cs) * as + (1.0 - as);
