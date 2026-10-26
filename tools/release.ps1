@@ -10,6 +10,15 @@ param(
 
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
+
+# Runs a native command; judges it by exit code only. Under "Stop", PowerShell 5.1 turns any
+# stderr line (git CRLF warnings, gradle progress) into a terminating error.
+function Invoke-Native([string]$what, [scriptblock]$cmd) {
+    $old = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    try { & $cmd } finally { $ErrorActionPreference = $old }
+    if ($LASTEXITCODE -ne 0) { throw "$what failed with exit code $LASTEXITCODE" }
+}
 Set-Location $root
 
 if ($Version -notmatch '^\d+\.\d+\.\d+$') {
@@ -33,10 +42,7 @@ Write-Host "Version set to $Version ($versionCode)"
 
 # 2. Build the signed release APK.
 . (Join-Path $root "tools\env.ps1")
-& (Join-Path $root "gradlew.bat") ":app:assembleRelease" "--console=plain"
-if ($LASTEXITCODE -ne 0) {
-    throw "gradlew :app:assembleRelease failed with exit code $LASTEXITCODE"
-}
+Invoke-Native "gradlew :app:assembleRelease" { & (Join-Path $root "gradlew.bat") ":app:assembleRelease" "--console=plain" }
 
 $apk = Join-Path $root "app\build\outputs\apk\release\app-release.apk"
 if (-not (Test-Path $apk)) {
@@ -51,18 +57,9 @@ Copy-Item -Path $apk -Destination $artifact -Force
 Write-Host "APK copied to $artifact"
 
 # 4. Commit, tag and push.
-git commit -am "Release v$Version"
-if ($LASTEXITCODE -ne 0) {
-    throw "git commit failed with exit code $LASTEXITCODE"
-}
-git tag "v$Version"
-if ($LASTEXITCODE -ne 0) {
-    throw "git tag failed with exit code $LASTEXITCODE"
-}
-git push origin main --tags
-if ($LASTEXITCODE -ne 0) {
-    throw "git push failed with exit code $LASTEXITCODE"
-}
+Invoke-Native "git commit" { git commit -am "Release v$Version" }
+Invoke-Native "git tag" { git tag "v$Version" }
+Invoke-Native "git push" { git push origin main --tags }
 
 # 5. Publish the GitHub release.
 $ghArgs = @(
@@ -78,9 +75,6 @@ if ($Notes) {
 if ($Prerelease) {
     $ghArgs += "--prerelease"
 }
-gh @ghArgs
-if ($LASTEXITCODE -ne 0) {
-    throw "gh release create failed with exit code $LASTEXITCODE"
-}
+Invoke-Native "gh release create" { gh @ghArgs }
 
 Write-Host "Released v$Version"
