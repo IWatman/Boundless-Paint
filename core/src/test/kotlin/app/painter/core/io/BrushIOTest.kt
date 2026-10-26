@@ -18,9 +18,13 @@ import app.painter.core.stroke.TextureParams
 import app.painter.core.stroke.WatercolorParams
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
+import java.io.IOException
+import java.util.zip.ZipEntry
+import java.util.zip.ZipOutputStream
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
 class BrushIOTest {
@@ -36,6 +40,71 @@ class BrushIOTest {
           "resources": { "head": "asset:heads/grain_disk_01.png", "texture": "asset:textures/graphite_grain.png" },
           "futureField": {"x": 1} }
     """.trimIndent()
+
+    /** ZIP with [entries] chunks of 22 MiB: three of them exceed the 64 MiB archive cap. */
+    private fun bigZip(entries: Int): ByteArray {
+        val chunk = ByteArray(22 * 1024 * 1024)
+        val out = ByteArrayOutputStream()
+        ZipOutputStream(out).use { z ->
+            for (i in 0 until entries) {
+                z.putNextEntry(ZipEntry("part$i.bin"))
+                z.write(chunk)
+                z.closeEntry()
+            }
+        }
+        return out.toByteArray()
+    }
+
+    /** Renames the second entry to the first name; ZipOutputStream itself refuses duplicate names. */
+    private fun duplicateNameZip(): ByteArray {
+        val out = ByteArrayOutputStream()
+        ZipOutputStream(out).use { z ->
+            z.putNextEntry(ZipEntry("dup1.bin"))
+            z.write(byteArrayOf(1))
+            z.closeEntry()
+            z.putNextEntry(ZipEntry("dup2.bin"))
+            z.write(byteArrayOf(2))
+            z.closeEntry()
+        }
+        val text = String(out.toByteArray(), Charsets.ISO_8859_1)
+        return text.replace("dup2.bin", "dup1.bin").toByteArray(Charsets.ISO_8859_1)
+    }
+
+    @Test
+    fun rejectsArchiveAboveTotalDecompressedCap() {
+        val e = assertFailsWith<IOException> { BrushIO.readPbrush(ByteArrayInputStream(bigZip(3))) }
+        assertTrue(e.message!!.contains("too large"), e.message!!)
+    }
+
+    @Test
+    fun rejectsPackWhoseNestedBrushesExceedTotalCap() {
+        val chunk = ByteArray(22 * 1024 * 1024)
+        val brush = full().copy(resources = ResourceRefs(head = "brush:big.bin"))
+        val out = ByteArrayOutputStream()
+        BrushIO.writePack("Big", List(3) { BrushIO.PackEntry(brush, mapOf("big.bin" to chunk)) }, out)
+        val e = assertFailsWith<IOException> { BrushIO.readPack(ByteArrayInputStream(out.toByteArray())) }
+        assertTrue(e.message!!.contains("too large"), e.message!!)
+    }
+
+    @Test
+    fun rejectsArchiveWithTooManyEntries() {
+        val out = ByteArrayOutputStream()
+        ZipOutputStream(out).use { z ->
+            for (i in 0..512) {
+                z.putNextEntry(ZipEntry("e$i.bin"))
+                z.write(byteArrayOf(1))
+                z.closeEntry()
+            }
+        }
+        val e = assertFailsWith<IOException> { BrushIO.readPbrush(ByteArrayInputStream(out.toByteArray())) }
+        assertTrue(e.message!!.contains("more than 512 entries"), e.message!!)
+    }
+
+    @Test
+    fun rejectsDuplicateEntryNames() {
+        val e = assertFailsWith<IOException> { BrushIO.readPbrush(ByteArrayInputStream(duplicateNameZip())) }
+        assertTrue(e.message!!.contains("duplicate entry"), e.message!!)
+    }
 
     private fun full() = Brush(
         id = "u-1", parentId = "pencil.hb", name = BrushName.of("ru" to "Мой", "en" to "Mine"), category = "pencils",

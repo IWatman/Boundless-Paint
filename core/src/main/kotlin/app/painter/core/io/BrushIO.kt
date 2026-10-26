@@ -31,6 +31,8 @@ object BrushIO {
     const val ASSET_PREFIX = "asset:"
     const val BRUSH_PREFIX = "brush:"
     private const val MAX_ENTRY_BYTES = 64L * 1024 * 1024
+    private const val MAX_ARCHIVE_BYTES = 64L * 1024 * 1024
+    private const val MAX_ENTRIES = 512
 
     val json = Json {
         ignoreUnknownKeys = true
@@ -54,8 +56,10 @@ object BrushIO {
     }
 
     /** Reads a `.pbrush` archive: the brush and every other file by name. */
-    fun readPbrush(zip: InputStream): Pair<Brush, Map<String, ByteArray>> {
-        val files = readZip(zip)
+    fun readPbrush(zip: InputStream): Pair<Brush, Map<String, ByteArray>> = readPbrush(zip, Budget())
+
+    private fun readPbrush(zip: InputStream, budget: Budget): Pair<Brush, Map<String, ByteArray>> {
+        val files = readZip(zip, budget)
         val text = files.remove(BRUSH_JSON) ?: throw IOException("no $BRUSH_JSON in .pbrush")
         return decode(text.decodeToString()) to files
     }
@@ -91,12 +95,13 @@ object BrushIO {
 
     /** Reads a `.pbrushes` pack: its name and brushes in manifest order. */
     fun readPack(zip: InputStream): Pair<String, List<PackEntry>> {
-        val files = readZip(zip)
+        val budget = Budget()
+        val files = readZip(zip, budget)
         val mf = files[PACK_MANIFEST]?.let { json.decodeFromString(PackManifest.serializer(), it.decodeToString()) }
             ?: throw IOException("no $PACK_MANIFEST in .pbrushes")
         val list = mf.brushes.map { name ->
             val bytes = files[name] ?: throw IOException("missing $name in pack")
-            val (b, f) = readPbrush(ByteArrayInputStream(bytes))
+            val (b, f) = readPbrush(ByteArrayInputStream(bytes), budget)
             PackEntry(b, f)
         }
         return mf.name to list
@@ -157,14 +162,22 @@ object BrushIO {
         return brush.copy(resources = refs) to payload
     }
 
-    private fun readZip(input: InputStream): MutableMap<String, ByteArray> {
+    private class Budget {
+        var bytes = 0L
+        var entries = 0
+    }
+
+    private fun readZip(input: InputStream, budget: Budget): MutableMap<String, ByteArray> {
         val out = LinkedHashMap<String, ByteArray>()
         ZipInputStream(input).use { z ->
             while (true) {
                 val e = z.nextEntry ?: break
+                budget.entries++
+                if (budget.entries > MAX_ENTRIES) throw IOException("archive has more than $MAX_ENTRIES entries")
                 if (e.isDirectory) continue
                 val name = e.name
                 if (name.contains("..") || name.startsWith("/") || name.contains('\\')) throw IOException("bad entry $name")
+                if (out.containsKey(name)) throw IOException("duplicate entry $name")
                 val bo = ByteArrayOutputStream()
                 val buf = ByteArray(16 * 1024)
                 var total = 0L
@@ -173,6 +186,10 @@ object BrushIO {
                     if (n < 0) break
                     total += n
                     if (total > MAX_ENTRY_BYTES) throw IOException("entry $name too large")
+                    budget.bytes += n
+                    if (budget.bytes > MAX_ARCHIVE_BYTES) {
+                        throw IOException("archive too large: more than $MAX_ARCHIVE_BYTES bytes decompressed")
+                    }
                     bo.write(buf, 0, n)
                 }
                 out[name] = bo.toByteArray()

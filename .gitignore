@@ -11,3 +11,4 @@ captures/
 *.aab
 .claude/worktrees/
 Microsoft/
+liblz4-java-*.so
