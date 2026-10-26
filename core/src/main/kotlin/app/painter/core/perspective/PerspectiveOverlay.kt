@@ -85,7 +85,8 @@ object PerspectiveOverlay {
         }
         val n = RAYS_PER_VP
         for (i in 0 until n) {
-            val a = if (closedFan) start + span * i / n else start + span * i / (n - 1)
+            // Open fan: centre of each angular bin, so no ray grazes a view corner (zero-length segment).
+            val a = if (closedFan) start + span * i / n else start + span * (i + 0.5) / n
             val d = Vec2(kotlin.math.cos(a).toFloat(), kotlin.math.sin(a).toFloat())
             OverlayGeom.clip(vp, d, view, 0f)?.let { out.add(OverlayLine(it.first, it.second, role)) }
         }

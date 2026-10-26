@@ -67,10 +67,18 @@ sealed interface Shape {
         override val closed get() = false
         override fun outline(tolerance: Float): List<Vec2> {
             val g = geometry() ?: return listOf(start, end)
-            val n = segmentsFor(g.r, abs(g.sweep), tolerance)
-            return (0..n).map { i ->
-                if (i == 0) start else if (i == n) end else polar(g.c, g.r, (g.a0 + g.sweep * i / n).toFloat())
-            }
+            // Sample start→mid and mid→end separately so the user's mid handle lies exactly on the outline.
+            val m = norm2pi((mid - g.c).angle.toDouble() - g.a0)
+            val sm = if (g.sweep > 0) m else m - 2 * PI
+            val n1 = segmentsFor(g.r, abs(sm), tolerance)
+            val n2 = segmentsFor(g.r, abs(g.sweep - sm), tolerance)
+            val out = ArrayList<Vec2>(n1 + n2 + 1)
+            out.add(start)
+            for (i in 1 until n1) out.add(polar(g.c, g.r, (g.a0 + sm * i / n1).toFloat()))
+            out.add(mid)
+            for (i in 1 until n2) out.add(polar(g.c, g.r, (g.a0 + sm + (g.sweep - sm) * i / n2).toFloat()))
+            out.add(end)
+            return out
         }
 
         /** Circle centre, radius, start angle and signed sweep (radians), or null when collinear. */

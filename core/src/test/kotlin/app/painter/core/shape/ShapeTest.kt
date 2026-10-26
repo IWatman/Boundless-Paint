@@ -127,7 +127,7 @@ class ShapeTest {
         val hit = ShapeHandles.hitTest(r, Vec2(5f, 52f))
         assertTrue(hit is ShapeHit.OnHandle && hit.handle.kind == HandleKind.CORNER)
         assertEquals(ShapeHit.OnContour, ShapeHandles.hitTest(r, Vec2(60f, 60f)))
-        assertNull(ShapeHandles.hitTest(r, Vec2(100f, 120f)))
+        assertNull(ShapeHandles.hitTest(r, Vec2(150f, 120f)), "inside, away from handles and contour")
     }
 
     @Test
@@ -166,7 +166,7 @@ class ShapeTest {
         val j = HoldDetector()
         j.begin(0f, 0f, 0)
         var t = 0L
-        repeat(40) { t += 20; assertFalse(j.onPoint(if (it % 2 == 0) 3f else -3f, 2f, t)) }
+        repeat(29) { t += 20; assertFalse(j.onPoint(if (it % 2 == 0) 3f else -3f, 2f, t)) }
         assertTrue(j.onPoint(0f, 0f, 610), "jitter < 6 px does not reset")
 
         val m = HoldDetector()
