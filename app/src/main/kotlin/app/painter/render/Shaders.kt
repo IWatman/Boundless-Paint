@@ -21,13 +21,24 @@ uniform sampler2D u_dst;
 uniform sampler2D u_src;
 uniform sampler2D u_buf;
 uniform sampler2D u_clip;
+uniform sampler2D u_mask;
+uniform sampler2D u_clipMask;
 uniform int u_mode;
 uniform float u_opacity;
 uniform int u_preview;
 uniform float u_previewOpacity;
 uniform bool u_alphaLock;
 uniform bool u_useClip;
+uniform int u_useMask;
+uniform float u_maskDefault;
+uniform float u_maskDensity;
+uniform int u_useClipMask;
+uniform float u_clipMaskDefault;
+uniform float u_clipMaskDensity;
 out vec4 o;
+
+/** Effective mask factor: 1 - density * (1 - m). */
+float maskEff(float m, float density) { return 1.0 - density * (1.0 - m); }
 
 float lum(vec3 c) { return dot(c, vec3(0.3, 0.59, 0.11)); }
 vec3 clipColor(vec3 c) {
@@ -117,7 +128,12 @@ vec4 composite(int m, vec4 d, vec4 s) {
         return vec4(cb * (1.0 - k) * a, a);
     }
     float ao = as + ab * (1.0 - as);
-    if (m == 11) return vec4(min(vec3(ao), d.rgb + s.rgb), ao);
+    if (m == 11) {
+        // BlendMath.ADD: k·Cs + aB·min(1, Cb + Cs·aS)
+        float k = as * (1.0 - ab);
+        vec3 sc = clamp(cs, 0.0, 1.0);
+        return vec4(k * sc + ab * min(vec3(1.0), clamp(cb, 0.0, 1.0) + sc * as), ao);
+    }
     if (m <= 1) return vec4(s.rgb + d.rgb * (1.0 - as), ao);
     vec3 b = clamp(blendFn(m, clamp(cb, 0.0, 1.0), clamp(cs, 0.0, 1.0)), 0.0, 1.0);
     return vec4((1.0 - ab) * s.rgb + as * ab * b + (1.0 - as) * d.rgb, ao);
@@ -127,15 +143,19 @@ void main() {
     ivec2 p = ivec2(gl_FragCoord.xy);
     vec4 d = texelFetch(u_dst, p, 0);
     vec4 l = texelFetch(u_src, p, 0);
-    if (u_mode == 100) { o = mix(d, l, u_opacity); return; }
+    float m = u_useMask != 0 ? texelFetch(u_mask, p, 0).r : u_maskDefault;
+    float f = u_opacity * maskEff(m, u_maskDensity);
+    if (u_useClip) {
+        float cm = u_useClipMask != 0 ? texelFetch(u_clipMask, p, 0).r : u_clipMaskDefault;
+        f *= texelFetch(u_clip, p, 0).a * maskEff(cm, u_clipMaskDensity);
+    }
+    if (u_mode == 100) { o = mix(d, l, f); return; }
     if (u_preview != 0) {
         vec4 b = texelFetch(u_buf, p, 0) * u_previewOpacity;
         if (u_preview == 2) l *= 1.0 - b.a;
         else if (u_alphaLock) l = vec4(l.rgb * (1.0 - b.a) + b.rgb * l.a, l.a);
         else l = b + l * (1.0 - b.a);
     }
-    float f = u_opacity;
-    if (u_useClip) f *= texelFetch(u_clip, p, 0).a;
     o = composite(u_mode, d, l * f);
 }
 """

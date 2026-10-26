@@ -32,6 +32,9 @@ internal class CanvasRenderer(
 
     private class Target(val tex: Int, val fbo: Int)
 
+    /** Mask of one node for one tile: R8 texture (0 = use [default]), default value 0..1 and density. */
+    private class MaskRef(val tex: Int, val default: Float, val density: Float)
+
     private class GNode(
         val snap: SnapNode,
         val tex: IntArray?,
@@ -58,6 +61,9 @@ internal class CanvasRenderer(
     private var uDst = 0; private var uSrc = 0; private var uBuf = 0; private var uClip = 0
     private var uMode = 0; private var uOpacity = 0; private var uPreview = 0
     private var uPreviewOpacity = 0; private var uAlphaLock = 0; private var uUseClip = 0
+    private var uMask = 0; private var uClipMask = 0
+    private var uUseMask = 0; private var uMaskDefault = 0; private var uMaskDensity = 0
+    private var uUseClipMask = 0; private var uClipMaskDefault = 0; private var uClipMaskDensity = 0
     private var displayProg = 0
     private var uMvp = 0; private var uOrigin = 0; private var uSize = 0; private var uTex = 0
     private var vao = 0
@@ -69,6 +75,7 @@ internal class CanvasRenderer(
     private val freeTargets = ArrayList<Target>()
     private val ints = IntArray(1)
     private var upload: ShortBuffer? = null
+    private var maskUpload: ByteBuffer? = null
 
     // ---- document state ----
     private var docW = 0
@@ -78,6 +85,7 @@ internal class CanvasRenderer(
     private var scene: SceneSnapshot? = null
     private var root: GNode? = null
     private val layerTex = HashMap<String, IntArray>()
+    private val maskTex = HashMap<String, IntArray>()
     private var composite: Array<Target?> = emptyArray()
     private var mipValid = BooleanArray(0)
     private var dirty = BooleanArray(0)
@@ -106,6 +114,7 @@ internal class CanvasRenderer(
         contextCount++
         freeTargets.clear()
         layerTex.clear()
+        maskTex.clear()
         composite = arrayOfNulls(composite.size)
         mipValid.fill(false)
         previewTex.fill(0)
@@ -220,6 +229,7 @@ internal class CanvasRenderer(
     /** Re-initializes all document state for a [w]×[h] document (or none if 0). */
     fun resetDocument(w: Int, h: Int) {
         deleteAllLayerTextures()
+        deleteAllMaskTextures()
         for (t in composite) if (t != null) deleteTarget(t)
         clearPreviewTextures()
         previewLayerId = null
@@ -241,9 +251,17 @@ internal class CanvasRenderer(
         for (id in b.removedLayers) {
             layerTex.remove(id)?.let(::deleteTextures)
         }
+        for (id in b.removedMasks) {
+            maskTex.remove(id)?.let(::deleteTextures)
+        }
         for (u in b.uploads) {
             val arr = layerTex.getOrPut(u.layerId) { IntArray(tilesX * tilesY) }
             uploadTile(arr, u)
+        }
+        for (u in b.maskUploads) {
+            if (u.tx !in 0 until tilesX || u.ty !in 0 until tilesY) continue
+            val arr = maskTex.getOrPut(u.nodeId) { IntArray(tilesX * tilesY) }
+            uploadMaskTile(arr, u)
         }
         if (b.scene != null) {
             scene = b.scene
@@ -302,6 +320,23 @@ internal class CanvasRenderer(
         GL.glTexSubImage2D(GL.GL_TEXTURE_2D, 0, 0, 0, Tile.SIZE, Tile.SIZE, GL.GL_RGBA, GL.GL_HALF_FLOAT, buf)
     }
 
+    private fun uploadMaskTile(arr: IntArray, u: MaskUpload) {
+        val i = u.ty * tilesX + u.tx
+        val data = u.data
+        if (data == null) {
+            if (arr[i] != 0) { deleteTexture(arr[i]); arr[i] = 0 }
+            return
+        }
+        if (arr[i] == 0) arr[i] = createMaskTexture()
+        val buf = maskUpload ?: ByteBuffer.allocateDirect(MASK_BYTES)
+            .order(ByteOrder.nativeOrder()).also { maskUpload = it }
+        buf.clear()
+        buf.put(data)
+        buf.flip()
+        GL.glBindTexture(GL.GL_TEXTURE_2D, arr[i])
+        GL.glTexSubImage2D(GL.GL_TEXTURE_2D, 0, 0, 0, Tile.SIZE, Tile.SIZE, GL.GL_RED, GL.GL_UNSIGNED_BYTE, buf)
+    }
+
     private fun resolve(s: SnapNode): GNode = GNode(
         snap = s,
         tex = if (s.isGroup) null else layerTex.getOrPut(s.id) { IntArray(tilesX * tilesY) },
@@ -352,63 +387,83 @@ internal class CanvasRenderer(
     private fun renderChildren(g: GNode, backdrop: Target, i: Int): Target {
         var dst = backdrop
         var baseTex = 0
+        var baseMask: MaskRef? = null
         var baseVisible = true
         var baseOwned: Target? = null
-        var baseIsolated = true
-        for (c in g.children) {
+        for ((index, c) in g.children.withIndex()) {
             val s = c.snap
             if (!s.clipped) {
                 baseOwned?.let(::release)
                 baseOwned = null
                 baseTex = 0
+                baseMask = null
                 baseVisible = s.visible
-                baseIsolated = true
             }
             if (!s.visible) continue
-            val clip = s.clipped && baseIsolated
-            if (s.clipped && !baseVisible) continue
-            if (clip && baseTex == 0) continue
-            val clipTex = if (clip) baseTex else 0
+            if (s.clipped && (!baseVisible || baseTex == 0)) continue
+            val clipTex = if (s.clipped) baseTex else 0
+            val clipMask = if (s.clipped) baseMask else null
+            val mask = maskOf(s, i)
             if (!s.isGroup) {
                 val tex = c.tex!![i]
-                if (!s.clipped) baseTex = tex
+                if (!s.clipped) { baseTex = tex; baseMask = mask }
                 val preview = if (s.id == previewLayerId && previewTex[i] != 0) {
                     if (previewErase) Shaders.PREVIEW_ERASE else Shaders.PREVIEW_PAINT
                 } else {
                     Shaders.PREVIEW_NONE
                 }
                 if (tex == 0 && preview != Shaders.PREVIEW_PAINT) continue
-                dst = blendPass(dst, tex, previewTex[i], clipTex, modeIndex(s.mode), s.opacity, preview, s.alphaLock)
+                dst = blendPass(dst, tex, previewTex[i], clipTex, modeIndex(s.mode), s.opacity, preview, s.alphaLock, mask, clipMask)
                 continue
             }
             if (s.mode == BlendMode.PASSTHROUGH) {
-                if (!s.clipped) baseIsolated = false
-                if (s.opacity >= 1f) {
+                // As on the CPU: a passthrough group used as clip base clips by its isolated render.
+                val isBase = !s.clipped && g.children.getOrNull(index + 1)?.snap?.clipped == true
+                if (isBase) {
+                    val iso = renderIsolated(c, i)
+                    baseOwned = iso
+                    baseTex = iso.tex
+                    baseMask = mask
+                }
+                if (s.opacity >= 1f && mask == null && !s.clipped) {
                     dst = renderChildren(c, dst, i)
                 } else {
                     val copy = acquire()
                     blit(dst, copy)
                     val res = renderChildren(c, copy, i)
-                    dst = blendPass(dst, res.tex, 0, 0, Shaders.MODE_LERP, s.opacity, Shaders.PREVIEW_NONE, false)
+                    dst = blendPass(dst, res.tex, 0, clipTex, Shaders.MODE_LERP, s.opacity, Shaders.PREVIEW_NONE, false, mask, clipMask)
                     release(res)
                 }
                 continue
             }
-            var grp = acquire()
-            GL.glBindFramebuffer(GL.GL_FRAMEBUFFER, grp.fbo)
-            GL.glClearColor(0f, 0f, 0f, 0f)
-            GL.glClear(GL.GL_COLOR_BUFFER_BIT)
-            grp = renderChildren(c, grp, i)
-            dst = blendPass(dst, grp.tex, 0, clipTex, modeIndex(s.mode), s.opacity, Shaders.PREVIEW_NONE, false)
+            val grp = renderIsolated(c, i)
+            dst = blendPass(dst, grp.tex, 0, clipTex, modeIndex(s.mode), s.opacity, Shaders.PREVIEW_NONE, false, mask, clipMask)
             if (!s.clipped) {
                 baseOwned = grp
                 baseTex = grp.tex
+                baseMask = mask
             } else {
                 release(grp)
             }
         }
         baseOwned?.let(::release)
         return dst
+    }
+
+    /** [c]'s children rendered onto transparent for tile [i]. */
+    private fun renderIsolated(c: GNode, i: Int): Target {
+        val grp = acquire()
+        GL.glBindFramebuffer(GL.GL_FRAMEBUFFER, grp.fbo)
+        GL.glClearColor(0f, 0f, 0f, 0f)
+        GL.glClear(GL.GL_COLOR_BUFFER_BIT)
+        return renderChildren(c, grp, i)
+    }
+
+    /** Effective mask of [s] at tile [i], or null when it has no enabled mask. */
+    private fun maskOf(s: SnapNode, i: Int): MaskRef? {
+        if (!s.maskPresent || !s.maskEnabled) return null
+        val tex = maskTex[s.id]?.getOrNull(i) ?: 0
+        return MaskRef(tex, s.maskDefault / 255f, s.maskDensity)
     }
 
     private fun modeIndex(m: BlendMode): Int = if (m == BlendMode.PASSTHROUGH) 0 else m.shaderIndex
@@ -422,6 +477,8 @@ internal class CanvasRenderer(
         opacity: Float,
         preview: Int,
         alphaLock: Boolean,
+        mask: MaskRef? = null,
+        clipMask: MaskRef? = null,
     ): Target {
         val out = acquire()
         GL.glBindFramebuffer(GL.GL_FRAMEBUFFER, out.fbo)
@@ -432,6 +489,14 @@ internal class CanvasRenderer(
         bindUnit(1, if (src != 0) src else emptyTex)
         bindUnit(2, if (buf != 0 && preview != Shaders.PREVIEW_NONE) buf else emptyTex)
         bindUnit(3, if (clip != 0) clip else emptyTex)
+        bindUnit(4, mask?.tex?.takeIf { it != 0 } ?: emptyTex)
+        bindUnit(5, clipMask?.tex?.takeIf { it != 0 } ?: emptyTex)
+        GL.glUniform1i(uUseMask, if (mask != null && mask.tex != 0) 1 else 0)
+        GL.glUniform1f(uMaskDefault, mask?.default ?: 1f)
+        GL.glUniform1f(uMaskDensity, mask?.density ?: 1f)
+        GL.glUniform1i(uUseClipMask, if (clipMask != null && clipMask.tex != 0) 1 else 0)
+        GL.glUniform1f(uClipMaskDefault, clipMask?.default ?: 1f)
+        GL.glUniform1f(uClipMaskDensity, clipMask?.density ?: 1f)
         GL.glUniform1i(uMode, mode)
         GL.glUniform1f(uOpacity, opacity)
         GL.glUniform1i(uPreview, preview)
@@ -497,11 +562,21 @@ internal class CanvasRenderer(
         uPreviewOpacity = GL.glGetUniformLocation(blendProg, "u_previewOpacity")
         uAlphaLock = GL.glGetUniformLocation(blendProg, "u_alphaLock")
         uUseClip = GL.glGetUniformLocation(blendProg, "u_useClip")
+        uMask = GL.glGetUniformLocation(blendProg, "u_mask")
+        uClipMask = GL.glGetUniformLocation(blendProg, "u_clipMask")
+        uUseMask = GL.glGetUniformLocation(blendProg, "u_useMask")
+        uMaskDefault = GL.glGetUniformLocation(blendProg, "u_maskDefault")
+        uMaskDensity = GL.glGetUniformLocation(blendProg, "u_maskDensity")
+        uUseClipMask = GL.glGetUniformLocation(blendProg, "u_useClipMask")
+        uClipMaskDefault = GL.glGetUniformLocation(blendProg, "u_clipMaskDefault")
+        uClipMaskDensity = GL.glGetUniformLocation(blendProg, "u_clipMaskDensity")
         GL.glUseProgram(blendProg)
         GL.glUniform1i(uDst, 0)
         GL.glUniform1i(uSrc, 1)
         GL.glUniform1i(uBuf, 2)
         GL.glUniform1i(uClip, 3)
+        GL.glUniform1i(uMask, 4)
+        GL.glUniform1i(uClipMask, 5)
 
         displayProg = link(Shaders.DISPLAY_VS, Shaders.DISPLAY_FS)
         uMvp = GL.glGetUniformLocation(displayProg, "u_mvp")
@@ -557,6 +632,16 @@ internal class CanvasRenderer(
     }
 
     /** Layer/buffer tile texture: RGBA16F (always sampleable in ES 3.0), filled with GL_HALF_FLOAT data. */
+    /** Mask tile texture: R8, nearest, filled with GL_UNSIGNED_BYTE coverage. */
+    private fun createMaskTexture(): Int {
+        GL.glGenTextures(1, ints, 0)
+        val t = ints[0]
+        GL.glBindTexture(GL.GL_TEXTURE_2D, t)
+        GL.glTexStorage2D(GL.GL_TEXTURE_2D, 1, GL.GL_R8, Tile.SIZE, Tile.SIZE)
+        setNearest()
+        return t
+    }
+
     private fun createSampledTexture(): Int {
         GL.glGenTextures(1, ints, 0)
         val t = ints[0]
@@ -600,6 +685,11 @@ internal class CanvasRenderer(
         layerTex.clear()
     }
 
+    private fun deleteAllMaskTextures() {
+        for (arr in maskTex.values) deleteTextures(arr)
+        maskTex.clear()
+    }
+
     private fun clearPreviewTextures() = deleteTextures(previewTex)
 
     private fun link(vs: String, fs: String): Int {
@@ -637,6 +727,7 @@ internal class CanvasRenderer(
         private const val TAG = "CanvasRenderer"
         private const val BG = 0x2B / 255f
         private const val COMPOSITE_LEVELS = 9
+        private const val MASK_BYTES = Tile.SIZE * Tile.SIZE
         private const val OFFSCREEN_TILES_PER_FRAME = 4
     }
 }
