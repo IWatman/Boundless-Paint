@@ -1,7 +1,17 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
+}
+
+// Release signing lives outside the repository sources: .tools/signing/keystore.properties.
+val keystorePropertiesFile = rootProject.file(".tools/signing/keystore.properties")
+val keystoreProperties: Properties? = if (keystorePropertiesFile.isFile) {
+    Properties().apply { keystorePropertiesFile.inputStream().use { load(it) } }
+} else {
+    null
 }
 
 android {
@@ -14,11 +24,25 @@ android {
         targetSdk = 34
         versionCode = 1
         versionName = "0.1.0"
+        buildConfigField("String", "UPDATE_REPO", "\"IWatman/Painter\"")
+    }
+
+    signingConfigs {
+        if (keystoreProperties != null) {
+            create("release") {
+                storeFile = keystorePropertiesFile.parentFile.resolve(keystoreProperties.getProperty("storeFile"))
+                storePassword = keystoreProperties.getProperty("storePassword")
+                keyAlias = keystoreProperties.getProperty("keyAlias")
+                keyPassword = keystoreProperties.getProperty("keyPassword")
+            }
+        }
     }
 
     buildTypes {
         release {
             isMinifyEnabled = false
+            // Falls back to an unsigned build when .tools/signing/keystore.properties is absent.
+            signingConfig = signingConfigs.findByName("release")
         }
     }
     compileOptions {
@@ -30,6 +54,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }
 

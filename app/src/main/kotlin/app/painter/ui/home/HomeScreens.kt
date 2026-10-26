@@ -27,6 +27,7 @@ import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.PhotoLibrary
+import androidx.compose.material.icons.outlined.SystemUpdate
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -81,12 +82,23 @@ private fun formatDate(millis: Long): String =
 fun HomeScreen(
     onNewCanvas: () -> Unit,
     onOpenGallery: () -> Unit,
+    onOpenUpdates: () -> Unit,
     recent: List<ProjectCardUi>,
     onOpenProject: (id: String) -> Unit,
 ) {
     Scaffold(
         topBar = {
-            TopAppBar(title = { Text(stringResource(R.string.app_name), fontWeight = FontWeight.SemiBold) })
+            TopAppBar(
+                title = { Text(stringResource(R.string.app_name), fontWeight = FontWeight.SemiBold) },
+                actions = {
+                    IconButton(onClick = onOpenUpdates) {
+                        Icon(
+                            Icons.Outlined.SystemUpdate,
+                            contentDescription = stringResource(R.string.updates),
+                        )
+                    }
+                },
+            )
         },
     ) { padding ->
         Column(

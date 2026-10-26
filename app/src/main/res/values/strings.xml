@@ -95,4 +95,19 @@
     <string name="tab_palette">Palette</string>
     <string name="untitled">Untitled</string>
     <string name="visibility">Visibility</string>
+    <string name="updates">Updates</string>
+    <string name="update_check">Check for updates</string>
+    <string name="update_checking">Checking for updates…</string>
+    <string name="update_close">Close</string>
+    <string name="update_current_version">Installed version: %1$s</string>
+    <string name="update_downloading">Downloading… %1$d%%</string>
+    <string name="update_error">Update failed: %1$s</string>
+    <string name="update_grant">Allow</string>
+    <string name="update_installing">Installing…</string>
+    <string name="update_needs_permission">Allow Painter to install apps in the system settings, then tap “Allow” again.</string>
+    <string name="update_new_version">New version %1$s</string>
+    <string name="update_notes_title">What\'s new</string>
+    <string name="update_now">Update</string>
+    <string name="update_retry">Retry</string>
+    <string name="update_up_to_date">You have the latest version.</string>
 </resources>

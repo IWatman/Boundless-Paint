@@ -94,4 +94,19 @@
     <string name="tab_palette">Палитра</string>
     <string name="untitled">Без названия</string>
     <string name="visibility">Видимость</string>
+    <string name="update_check">Проверить обновления</string>
+    <string name="update_checking">Проверка обновлений…</string>
+    <string name="update_close">Закрыть</string>
+    <string name="update_current_version">Установленная версия: %1$s</string>
+    <string name="update_downloading">Загрузка… %1$d%%</string>
+    <string name="update_error">Не удалось обновить: %1$s</string>
+    <string name="update_grant">Разрешить</string>
+    <string name="update_installing">Установка…</string>
+    <string name="update_needs_permission">Разрешите Painter устанавливать приложения в настройках системы, затем нажмите «Разрешить» ещё раз.</string>
+    <string name="update_new_version">Доступна версия %1$s</string>
+    <string name="update_notes_title">Что нового</string>
+    <string name="update_now">Обновить</string>
+    <string name="update_retry">Повторить</string>
+    <string name="update_up_to_date">У вас последняя версия.</string>
+    <string name="updates">Обновления</string>
 </resources>

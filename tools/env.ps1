@@ -7,6 +7,8 @@ if (-not (Test-Path "$root\.tools")) {
     $common = (git -C $root rev-parse --path-format=absolute --git-common-dir) 2>$null
     if ($common) { $root = Split-Path -Parent $common }
 }
+# Build SDK for worktrees without local.properties. The emulator needs its own SDK: set
+# ANDROID_HOME = ANDROID_SDK_ROOT = $env:PAINTER_EMU_SDK before starting it.
 $env:ANDROID_HOME = "$env:LOCALAPPDATA\Android\Sdk"
 $env:JAVA_HOME = "C:\Program Files\Microsoft\jdk-21.0.9.10-hotspot"
 $env:GRADLE_USER_HOME = "$root\.tools\gradle"

@@ -25,17 +25,20 @@ import app.painter.studio.StudioViewModel
 import app.painter.ui.home.GalleryScreen
 import app.painter.ui.home.HomeScreen
 import app.painter.ui.home.NewCanvasScreen
+import app.painter.ui.home.UpdateDialog
 import app.painter.ui.studio.StudioScreen
 import app.painter.ui.theme.PainterTheme
+import app.painter.update.UpdateViewModel
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
 
     private val vm: StudioViewModel by viewModels()
+    private val updateVm: UpdateViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContent { PainterTheme { App(vm) } }
+        setContent { PainterTheme { App(vm, updateVm) } }
     }
 
     override fun onStop() {
@@ -47,11 +50,13 @@ class MainActivity : ComponentActivity() {
 private enum class Screen { HOME, GALLERY, NEW, STUDIO }
 
 @Composable
-private fun App(vm: StudioViewModel) {
+private fun App(vm: StudioViewModel, updateVm: UpdateViewModel) {
     var screen by rememberSaveable { mutableStateOf(Screen.HOME) }
+    var showUpdates by rememberSaveable { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val projects by vm.projects.collectAsState()
     val homeRequest by vm.homeRequest.collectAsState()
+    val updateState by updateVm.state.collectAsState()
     val context = androidx.compose.ui.platform.LocalContext.current
 
     LaunchedEffect(homeRequest) {
@@ -77,6 +82,7 @@ private fun App(vm: StudioViewModel) {
         Screen.HOME -> HomeScreen(
             onNewCanvas = { screen = Screen.NEW },
             onOpenGallery = { vm.refreshProjects(); screen = Screen.GALLERY },
+            onOpenUpdates = { showUpdates = true },
             recent = projects.take(8),
             onOpenProject = open,
         )
@@ -104,6 +110,19 @@ private fun App(vm: StudioViewModel) {
             )
         }
         Screen.STUDIO -> Studio(vm)
+    }
+
+    if (showUpdates) {
+        UpdateDialog(
+            state = updateState,
+            currentVersion = updateVm.currentVersion,
+            onCheck = updateVm::check,
+            onUpdate = updateVm::update,
+            onDismiss = {
+                showUpdates = false
+                updateVm.dismiss()
+            },
+        )
     }
 }
 
