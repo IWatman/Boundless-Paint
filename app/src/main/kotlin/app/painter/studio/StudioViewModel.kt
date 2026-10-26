@@ -61,6 +61,7 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
     private var canvas: CanvasView? = null
     private var stroke: StrokeEngine? = null
     private var dirtySinceSave = false
+    private var autosaveJob: Job? = null
 
     private var paintParams = BrushParams()
     private var eraseParams = BrushParams(size = 40f)
@@ -78,7 +79,7 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
     val homeRequest = MutableStateFlow(false)
 
     init {
-        history.onChanged = { dirtySinceSave = true; refreshLayers() }
+        history.onChanged = { markDirty(); refreshLayers() }
         syncBrushState()
         viewModelScope.launch(Dispatchers.IO) { ioLock.withLock { store.recoverInterrupted() } }
         refreshProjects()
@@ -110,8 +111,12 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
     }
 
     private fun setDocument(d: Document) {
+        save(refreshList = false) // flush pending changes of the previous document
         doc = d
         history.clear()
+        autosaveJob?.cancel()
+        autosaveJob = null
+        dirtySinceSave = false
         stroke = null
         canvas?.setDocument(doc)
         _state.update { it.copy(paperColor = d.paper.color, paperVisible = d.paper.visible) }
@@ -353,14 +358,14 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
 
     override fun setPaperColor(color: Rgba) {
         doc.paper.color = color
-        dirtySinceSave = true
+        markDirty()
         _state.update { it.copy(paperColor = color) }
         canvas?.invalidate(null, null)
     }
 
     override fun setPaperVisible(visible: Boolean) {
         doc.paper.visible = visible
-        dirtySinceSave = true
+        markDirty()
         _state.update { it.copy(paperVisible = visible) }
         canvas?.invalidate(null, null)
     }
@@ -372,7 +377,15 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
         homeRequest.value = true
     }
 
-    override fun save() {
+    override fun save() = save(refreshList = true)
+
+    /**
+     * Writes the document in the background if it changed. [refreshList] also reloads the project list
+     * (thumbnails), which autosave skips: the list is only visible on Home.
+     */
+    private fun save(refreshList: Boolean) {
+        autosaveJob?.cancel()
+        autosaveJob = null
         commitPendingOpacity()
         if (!dirtySinceSave) return
         dirtySinceSave = false
@@ -380,7 +393,23 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
         viewModelScope.launch(Dispatchers.IO) {
             val thumb = renderThumbnailPng(snapshot)
             ioLock.withLock { ProjectIO.save(snapshot, store.dirFor(snapshot.id), thumb) }
-            refreshProjects()
+            if (refreshList) refreshProjects()
+        }
+    }
+
+    /**
+     * Marks the document changed and (re)starts the autosave timer: the project is written
+     * [AUTOSAVE_DELAY_MS] after the last change, so a killed process loses at most that much work.
+     */
+    private fun markDirty() {
+        dirtySinceSave = true
+        autosaveJob?.cancel()
+        autosaveJob = viewModelScope.launch {
+            delay(AUTOSAVE_DELAY_MS)
+            // A stroke in progress may already have touched layer tiles; save after it ends.
+            while (stroke != null) delay(AUTOSAVE_DELAY_MS)
+            autosaveJob = null
+            save(refreshList = false)
         }
     }
 
@@ -508,3 +537,6 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
         return ByteArrayOutputStream().use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it); it.toByteArray() }
     }
 }
+
+/** Delay after the last change before the project is written. */
+private const val AUTOSAVE_DELAY_MS = 2_000L
