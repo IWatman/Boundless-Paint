@@ -73,6 +73,7 @@ import kotlin.math.roundToInt
 
 private val ExpandedRowHeight = 60.dp
 private val CollapsedRowHeight = 64.dp
+private val GroupArrowSize = 18.dp
 
 private val PaperPresets = listOf(
     Rgba.WHITE,

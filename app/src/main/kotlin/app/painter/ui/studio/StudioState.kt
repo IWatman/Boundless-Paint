@@ -4,6 +4,9 @@ import androidx.compose.runtime.Immutable
 import androidx.compose.ui.graphics.ImageBitmap
 import app.painter.core.blend.BlendMode
 import app.painter.core.color.Rgba
+import app.painter.core.doc.ColorTag
+import app.painter.core.doc.EditTarget
+import app.painter.core.history.MaskInit
 
 /** Brush mode of the main toolbar. */
 enum class BrushModeUi { PAINT, BLEND, ERASE }
@@ -32,6 +35,17 @@ data class LayerUi(
     val alphaLock: Boolean,
     val thumbnail: ImageBitmap?,
     val depth: Int = 0,
+    val isGroup: Boolean = false,
+    val expanded: Boolean = false,
+    val hasMask: Boolean = false,
+    val maskEnabled: Boolean = true,
+    /** Mask thumbnail; null while masks have no preview renderer. */
+    val maskThumb: ImageBitmap? = null,
+    val colorTag: ColorTag = ColorTag.NONE,
+    val locked: Boolean = false,
+    val reference: Boolean = false,
+    /** The active node is this row and painting edits its mask. */
+    val isActiveTargetMask: Boolean = false,
 )
 
 /**
@@ -93,6 +107,34 @@ interface StudioActions {
     fun setLayerClipped(id: String, clipped: Boolean)
     fun setLayerAlphaLock(id: String, locked: Boolean)
     fun renameLayer(id: String, name: String)
+
+    /** Colour tag of the row ([ColorTag.NONE] clears it). */
+    fun setLayerColorTag(id: String, tag: ColorTag)
+
+    /** Layer lock: a locked layer (or group) cannot be painted or restructured. */
+    fun setLayerLocked(id: String, locked: Boolean)
+
+    /** Flags the node as the document reference ([app.painter.core.doc.Document.referenceNode]). */
+    fun setLayerReference(id: String, reference: Boolean)
+
+    /** Shows or hides the children of a group row. */
+    fun toggleGroupExpanded(id: String)
+
+    /** Wraps the layer into a new group. */
+    fun groupLayer(id: String)
+
+    /** Replaces the group by its children. */
+    fun ungroupLayer(id: String)
+
+    fun addMask(id: String, init: MaskInit)
+    fun deleteMask(id: String)
+    fun applyMask(id: String)
+    fun setMaskEnabled(id: String, enabled: Boolean)
+    fun invertMask(id: String)
+
+    /** Makes [id] active and picks what painting edits: its pixels or its mask. */
+    fun selectEditTarget(id: String, target: EditTarget)
+
     fun setPaperColor(color: Rgba) {}
     fun setPaperVisible(visible: Boolean) {}
     fun openHome()
@@ -131,6 +173,18 @@ open class NoOpStudioActions : StudioActions {
     override fun setLayerClipped(id: String, clipped: Boolean) {}
     override fun setLayerAlphaLock(id: String, locked: Boolean) {}
     override fun renameLayer(id: String, name: String) {}
+    override fun setLayerColorTag(id: String, tag: ColorTag) {}
+    override fun setLayerLocked(id: String, locked: Boolean) {}
+    override fun setLayerReference(id: String, reference: Boolean) {}
+    override fun toggleGroupExpanded(id: String) {}
+    override fun groupLayer(id: String) {}
+    override fun ungroupLayer(id: String) {}
+    override fun addMask(id: String, init: MaskInit) {}
+    override fun deleteMask(id: String) {}
+    override fun applyMask(id: String) {}
+    override fun setMaskEnabled(id: String, enabled: Boolean) {}
+    override fun invertMask(id: String) {}
+    override fun selectEditTarget(id: String, target: EditTarget) {}
     override fun openHome() {}
     override fun save() {}
     override fun exportImage() {}
