@@ -14,9 +14,10 @@ import app.painter.core.history.MaskInit
  * Active canvas tool. [BRUSH] paints with the current brush mode; [SELECT_RECT], [SELECT_ELLIPSE] and
  * [SELECT_LASSO] drag a selection (rectangle, ellipse or freehand outline); [SELECT_WAND] taps a region
  * of the layer and adds it to the selection. [TRANSFORM] moves, uniformly scales and rotates the active
- * layer pixels (or the selected pixels when a selection exists) with the cage overlay.
+ * layer pixels (or the selected pixels when a selection exists) with the cage overlay. [FILL] taps a region
+ * of the canvas and fills it on the active layer with the current color.
  */
-enum class ToolUi { BRUSH, SELECT_RECT, SELECT_ELLIPSE, SELECT_LASSO, SELECT_WAND, TRANSFORM }
+enum class ToolUi { BRUSH, SELECT_RECT, SELECT_ELLIPSE, SELECT_LASSO, SELECT_WAND, TRANSFORM, FILL }
 
 /** True for the tools that build a selection instead of painting. */
 val ToolUi.isSelectionTool: Boolean

@@ -208,6 +208,13 @@ private fun StudioTopBar(state: StudioUiState, actions: StudioActions, modifier:
                                 actions.selectTool(ToolUi.TRANSFORM)
                             },
                         )
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.tool_fill)) },
+                            onClick = {
+                                toolsMenu = false
+                                actions.selectTool(ToolUi.FILL)
+                            },
+                        )
                         if (state.hasSelection) {
                             DropdownMenuItem(
                                 text = { Text(stringResource(R.string.deselect)) },

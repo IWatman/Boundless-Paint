@@ -22,7 +22,10 @@ import app.painter.core.doc.GroupNode
 import app.painter.core.doc.Node
 import app.painter.core.doc.RasterLayer
 import app.painter.core.doc.effectivelyLocked
+import app.painter.core.fill.BucketFill
+import app.painter.core.fill.FillCommand
 import app.painter.core.fill.RefSource
+import app.painter.core.fill.Region
 import app.painter.core.fill.RegionParams
 import app.painter.core.history.AddAdjustmentLayer
 import app.painter.core.history.AddLayer
@@ -144,7 +147,7 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
     val homeRequest = MutableStateFlow(false)
 
     init {
-        history.onChanged = { markDirty(); refreshLayers() }
+        history.onChanged = { lastFill = null; markDirty(); refreshLayers() }
         syncBrushState()
         viewModelScope.launch(Dispatchers.IO) { ioLock.withLock { store.recoverInterrupted() } }
         refreshProjects()
@@ -327,7 +330,7 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
     private val lassoPoints = ArrayList<PointUi>()
 
     override val toolActive: Boolean
-        get() = _state.value.tool == ToolUi.TRANSFORM || _state.value.tool.isSelectionTool
+        get() = _state.value.tool == ToolUi.TRANSFORM || _state.value.tool == ToolUi.FILL || _state.value.tool.isSelectionTool
 
     override fun selectTool(tool: ToolUi) {
         if (tool != ToolUi.TRANSFORM) finishTransform(apply = true)
@@ -355,6 +358,7 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
             transformDown(x, y)
             return
         }
+        if (_state.value.tool == ToolUi.FILL) return
         toolStartX = clampX(x)
         toolStartY = clampY(y)
         lassoPoints.clear()
@@ -379,6 +383,7 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
             transformMoveTo(x, y)
             return
         }
+        if (_state.value.tool == ToolUi.FILL) return
         val cx = clampX(x)
         val cy = clampY(y)
         if (_state.value.tool == ToolUi.SELECT_WAND) return
@@ -408,6 +413,10 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
         if (_state.value.tool == ToolUi.TRANSFORM) {
             transformMoveTo(x, y)
             transformUp()
+            return
+        }
+        if (_state.value.tool == ToolUi.FILL) {
+            bucketAt(clampX(x), clampY(y))
             return
         }
         val tool = _state.value.tool
@@ -713,6 +722,30 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
         return out
     }
 
+    /** Bucket settings (spec §4.3): 15 % tolerance over the canvas, gap closing 4 px, expansion 1.5 px. */
+    private val bucketParams = RegionParams(tolerance = 0.15f, contiguous = true, gapPx = 4, expandPx = 1.5f)
+
+    /** The latest fill while it is the top history entry; color changes recolor it in place (spec §4.3). */
+    private var lastFill: FillCommand? = null
+
+    /** Fills the region at ([x], [y]) of the canvas on the active layer; the region is computed off the main thread. */
+    private fun bucketAt(x: Float, y: Float) {
+        val d = doc
+        val layerId = (d.activeId?.let { d.findNode(it) } as? RasterLayer)?.takeIf { !it.locked }?.id ?: return
+        val px = x.toInt().coerceIn(0, d.width - 1)
+        val py = y.toInt().coerceIn(0, d.height - 1)
+        val color = _state.value.color
+        viewModelScope.launch {
+            val cov = withContext(Dispatchers.Default) { Region.compute(d, RefSource.Canvas, px, py, bucketParams) }
+            if (d !== doc || cov == null || stroke != null) return@launch
+            val cmd = BucketFill.command(d, layerId, cov, color, 1f, erase = false) ?: return@launch
+            commitPendingOpacity()
+            history.push(cmd)
+            lastFill = cmd
+            canvas?.invalidate(layerId, null)
+        }
+    }
+
     /** Magic wand settings (spec §2.2): 15 % tolerance, contiguous, over the active layer. */
     private val wandParams = RegionParams(tolerance = 0.15f, contiguous = true)
 
@@ -773,6 +806,12 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
 
     override fun setColor(color: Rgba, commit: Boolean) {
         _state.update { it.copy(color = color) }
+        val fill = lastFill
+        if (fill != null && _state.value.tool == ToolUi.FILL) {
+            fill.recolor(doc, color)
+            canvas?.invalidate(fill.layerId, null)
+            markDirty()
+        }
     }
 
     override fun addColorToPalette(color: Rgba) = _state.update {

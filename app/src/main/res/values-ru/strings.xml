@@ -126,6 +126,7 @@
     <string name="tool_lasso_select">Лассо</string>
     <string name="tool_magic_wand">Волшебная палочка</string>
     <string name="tool_transform">Трансформация</string>
+    <string name="tool_fill">Заливка</string>
     <string name="action_apply">Применить</string>
     <string name="deselect">Снять выделение</string>
     <string name="select_all">Выделить всё</string>
