@@ -137,6 +137,16 @@
     <string name="gradient_spread_repeat">Repeat</string>
     <string name="gradient_spread_reflect">Reflect</string>
     <string name="gradient_reverse">Reverse</string>
+    <!-- Shape tool -->
+    <string name="shape_title">Shape</string>
+    <string name="shape_line">Line</string>
+    <string name="shape_rect">Rectangle</string>
+    <string name="shape_ellipse">Ellipse (shape)</string>
+    <string name="shape_polygon">Polygon</string>
+    <string name="shape_arc">Arc</string>
+    <string name="shape_outline">Outline</string>
+    <string name="shape_fill">Fill</string>
+    <string name="shape_stamp">Stamp</string>
     <string name="symmetry_title">Symmetry</string>
     <string name="symmetry_off">Symmetry off</string>
     <string name="symmetry_mirror_v">Mirror vertical</string>

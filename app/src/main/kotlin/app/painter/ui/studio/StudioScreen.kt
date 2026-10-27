@@ -46,6 +46,7 @@ import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
 import app.painter.R
 import app.painter.core.perspective.PerspectiveType
+import app.painter.core.shape.ShapeTool
 import app.painter.core.symmetry.MirrorAxes
 import app.painter.core.symmetry.SymmetryType
 import app.painter.ui.components.Hud
@@ -73,6 +74,7 @@ fun StudioScreen(
         SelectionOverlay(state = state, modifier = Modifier.fillMaxSize())
         TransformOverlay(state = state, modifier = Modifier.fillMaxSize())
         GradientOverlay(state = state, modifier = Modifier.fillMaxSize())
+        ShapeOverlay(state = state, modifier = Modifier.fillMaxSize())
         SymmetryOverlay(state = state, actions = actions, modifier = Modifier.fillMaxSize())
         GuidesOverlay(state = state, actions = actions, modifier = Modifier.fillMaxSize())
 
@@ -136,6 +138,16 @@ fun StudioScreen(
             if (gradient != null) {
                 GradientBar(
                     gradient = gradient,
+                    actions = actions,
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .padding(top = 64.dp),
+                )
+            }
+            val shapeUi = state.shape
+            if (shapeUi != null) {
+                ShapeBar(
+                    shape = shapeUi,
                     actions = actions,
                     modifier = Modifier
                         .align(Alignment.TopCenter)
@@ -210,6 +222,15 @@ private fun menuCheck(on: Boolean): (@Composable () -> Unit)? =
 /** [type] to pass to [StudioActions.setPerspective]: null when it is already the active grid (turns it off). */
 private fun perspectiveToggle(current: PerspectiveUi?, type: PerspectiveType): PerspectiveType? =
     if (current?.type == type) null else type
+
+/** Items of the shape section of the creative tools menu: the shape a drag creates and its label. */
+private val SHAPE_MENU = listOf(
+    ShapeTool.LINE to R.string.shape_line,
+    ShapeTool.RECT to R.string.shape_rect,
+    ShapeTool.ELLIPSE to R.string.shape_ellipse,
+    ShapeTool.POLYGON to R.string.shape_polygon,
+    ShapeTool.ARC to R.string.shape_arc,
+)
 
 /** Checkable creative-tools item of perspective [type]; [active] draws the check mark. */
 @Composable
@@ -350,6 +371,16 @@ private fun StudioTopBar(state: StudioUiState, actions: StudioActions, modifier:
                         ) {
                             creativeMenu = false
                             actions.setPerspective(perspectiveToggle(state.perspective, PerspectiveType.GRID_2D))
+                        }
+                        HorizontalDivider()
+                        for ((shapeTool, label) in SHAPE_MENU) {
+                            DropdownMenuItem(
+                                text = { Text(stringResource(label)) },
+                                onClick = {
+                                    creativeMenu = false
+                                    actions.selectShapeTool(shapeTool)
+                                },
+                            )
                         }
                     }
                 }

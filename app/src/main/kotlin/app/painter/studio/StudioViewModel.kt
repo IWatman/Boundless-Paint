@@ -68,12 +68,20 @@ import app.painter.core.perspective.PerspectiveOverlay
 import app.painter.core.perspective.PerspectiveType
 import app.painter.core.pick.Eyedropper
 import app.painter.core.pick.PickSource
+import app.painter.core.shape.Handle as ShapeHandle
+import app.painter.core.shape.Shape
+import app.painter.core.shape.ShapeFactory
+import app.painter.core.shape.ShapeHandles
+import app.painter.core.shape.ShapeHit
+import app.painter.core.shape.ShapeStroke
+import app.painter.core.shape.ShapeTool
 import app.painter.core.symmetry.MirrorAxes
 import app.painter.core.symmetry.SymmetryConfig
 import app.painter.core.symmetry.SymmetryType
 import app.painter.core.stroke.Brush
 import app.painter.core.stroke.BrushParams
 import app.painter.core.stroke.BrushResources
+import app.painter.core.stroke.FillSpec
 import app.painter.core.stroke.HashRng
 import app.painter.core.stroke.InputPoint
 import app.painter.core.stroke.StrokeCommit
@@ -124,6 +132,7 @@ import app.painter.ui.studio.OverlayLineUi
 import app.painter.ui.studio.PerspectiveUi
 import app.painter.ui.studio.StudioActions
 import app.painter.ui.studio.StudioUiState
+import app.painter.ui.studio.ShapeUi
 import app.painter.ui.studio.SymmetryUi
 import app.painter.ui.studio.TransformUi
 import kotlinx.coroutines.Dispatchers
@@ -214,6 +223,7 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
     }
 
     private fun setDocument(d: Document) {
+        finishShape(commit = false)
         finishTransform(apply = false)
         finishGradient(apply = false)
         save(refreshList = false) // flush pending changes of the previous document
@@ -374,6 +384,7 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
     override fun setMode(mode: BrushModeUi) {
         finishTransform(apply = true)
         finishGradient(apply = true)
+        finishShape(commit = true)
         _state.update { it.copy(mode = mode, tool = ToolUi.BRUSH, selectionDraft = null, selectionDraftPath = null) }
         syncBrushState()
     }
@@ -389,11 +400,13 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
 
     override val toolActive: Boolean
         get() = _state.value.tool == ToolUi.TRANSFORM || _state.value.tool == ToolUi.FILL ||
-            _state.value.tool == ToolUi.GRADIENT || _state.value.tool.isSelectionTool
+            _state.value.tool == ToolUi.GRADIENT || _state.value.tool == ToolUi.SHAPE ||
+            _state.value.tool.isSelectionTool
 
     override fun selectTool(tool: ToolUi) {
         if (tool != ToolUi.TRANSFORM) finishTransform(apply = true)
         if (tool != ToolUi.GRADIENT) finishGradient(apply = true)
+        if (tool != ToolUi.SHAPE) finishShape(commit = true)
         _state.update { it.copy(tool = tool, selectionDraft = null, selectionDraftPath = null) }
         if (tool == ToolUi.TRANSFORM) startTransform()
     }
@@ -413,6 +426,10 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
     }
 
     override fun onToolDown(x: Float, y: Float) {
+        if (_state.value.tool == ToolUi.SHAPE) {
+            shapeDown(x, y)
+            return
+        }
         if (!toolActive) return
         if (_state.value.tool == ToolUi.TRANSFORM) {
             transformDown(x, y)
@@ -442,6 +459,10 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
     }
 
     override fun onToolMove(x: Float, y: Float) {
+        if (_state.value.tool == ToolUi.SHAPE) {
+            shapeMove(x, y, force = false)
+            return
+        }
         if (!toolActive) return
         if (_state.value.tool == ToolUi.TRANSFORM) {
             transformMoveTo(x, y)
@@ -477,6 +498,10 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
     }
 
     override fun onToolUp(x: Float, y: Float) {
+        if (_state.value.tool == ToolUi.SHAPE) {
+            shapeUp(x, y)
+            return
+        }
         if (!toolActive) return
         if (_state.value.tool == ToolUi.TRANSFORM) {
             transformMoveTo(x, y)
@@ -522,6 +547,12 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
     }
 
     override fun onToolCancel() {
+        // A cancelled shape gesture only stops the drag: the draft stays open.
+        if (_state.value.tool == ToolUi.SHAPE) {
+            shapeDrag = ShapeDrag.NONE
+            shapeHandle = null
+            return
+        }
         if (_state.value.tool == ToolUi.TRANSFORM) {
             transformDrag = TransformDrag.NONE
             return
@@ -1116,6 +1147,257 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
 
     override fun gradientCancel() = finishGradient(apply = false)
 
+    // ---- shape tool ----
+
+    /** Type of shape a new draft creates; kept for the next draft of the tool. */
+    private var shapeTool = ShapeTool.LINE
+
+    /** Draws the brush outline of a draft; turned off, only the fill of a closed shape is painted. */
+    private var shapeOutlineOn = true
+
+    /** Fills closed drafts with the current color. */
+    private var shapeFillOn = false
+
+    /** Vertices of a new polygon draft (spec G3.1). */
+    private val shapeSides = 5
+
+    /** Draft the shape tool edits, null while the tool is idle. */
+    private var shapeDraft: Shape? = null
+
+    /** Layer the draft is painted on. */
+    private var shapeLayerId: String? = null
+
+    /** What the shape gesture in progress does. */
+    private enum class ShapeDrag { NONE, CREATE, HANDLE, CONTOUR }
+
+    private var shapeDrag = ShapeDrag.NONE
+
+    /** Origin of the drag that creates a draft, document pixels. */
+    private var shapeFrom = Vec2(0f, 0f)
+
+    /** Handle grabbed by [ShapeDrag.HANDLE]; its position is re-read from the draft on every move. */
+    private var shapeHandle: ShapeHandle? = null
+
+    /** Finger position of the previous move, document pixels: a contour drag moves by its delta. */
+    private var shapeLast = Vec2(0f, 0f)
+
+    /** Time of the last preview of the draft; drags are throttled like the other live previews. */
+    private var shapeLastPreviewMs = 0L
+
+    /** Active, unlocked raster layer the shape tool paints on. */
+    private fun shapeTarget(): RasterLayer? =
+        (doc.activeId?.let { doc.findNode(it) } as? RasterLayer)?.takeIf { !it.locked }
+
+    /** Document pixels per screen pixel at the current zoom. */
+    private fun shapeScreenToDoc(): Float = 1f / _state.value.canvasTransform.zoom.coerceAtLeast(0.01f)
+
+    /** The fill of [d] is on: the toggle is set and the shape is closed. */
+    private fun shapeFilled(d: Shape): Boolean = shapeFillOn && d.closed
+
+    /** The brush outline of [d] is drawn; the fill alone never hides it. */
+    private fun shapeOutlined(d: Shape): Boolean = shapeOutlineOn || !shapeFilled(d)
+
+    /** Publishes the draft (outline, handles and flags) to the overlay; null when the tool is idle. */
+    private fun publishShape() {
+        val d = shapeDraft
+        val ui = if (d == null) null else ShapeUi(
+            outline = d.outline().map { PointUi(it.x, it.y) },
+            handles = ShapeHandles.handles(d, shapeScreenToDoc()).map { PointUi(it.pos.x, it.pos.y) },
+            closed = d.closed,
+            outlineOn = shapeOutlined(d),
+            fillOn = shapeFilled(d),
+        )
+        _state.update { it.copy(shape = ui) }
+    }
+
+    /** Cancels the preview engine of the draft and takes its pixels off the canvas. */
+    private fun cancelShapePreview() {
+        val engine = stroke ?: return
+        stroke = null
+        engine.cancel()
+        val layerId = shapeLayerId ?: return
+        if (engine.directToLayer) canvas?.invalidate(layerId, null)
+        else canvas?.setStrokePreview(layerId, null, false, 1f)
+    }
+
+    /**
+     * Live preview of the draft: the engine of the previous frame is cancelled and the shape is painted again
+     * with a fresh [StrokeEngine] (a buffered stroke shows its buffer over the layer, a build-up brush paints the
+     * layer directly and is restored by cancel). Throttled to about 30 fps while dragging and always redrawn on
+     * finger lift. The brush only outlines the shape — the fill is rasterised from the stroke path in `end()` —
+     * so a draft with the outline turned off is painted with a zero-flow brush, whose dabs never reach the target.
+     */
+    private fun renderShape(force: Boolean) {
+        val d = shapeDraft ?: return
+        val layerId = shapeLayerId
+        if (layerId == null) {
+            publishShape()
+            return
+        }
+        val now = SystemClock.uptimeMillis()
+        if (!force && now - shapeLastPreviewMs < PREVIEW_FRAME_MS) return
+        shapeLastPreviewMs = now
+        publishShape()
+        cancelShapePreview()
+        val points = ShapeStroke.points(d)
+        if (points.isEmpty()) return
+        val s = _state.value
+        val mode = if (s.mode == BrushModeUi.ERASE) StrokeMode.ERASE else StrokeMode.PAINT
+        val params = if (shapeOutlined(d)) currentParams() else currentParams().copy(flow = 0f)
+        val brush = Brush.of(params, STUDIO_BRUSH_ID)
+        val vs = canvas?.viewState?.value
+        val ctx = StrokeContext(
+            zoom = vs?.zoom ?: 1f,
+            viewRotation = Math.toRadians((vs?.rotationDeg ?: 0f).toDouble()).toFloat(),
+            seed = HashRng.strokeSeed(strokeCounter++, STUDIO_BRUSH_ID),
+            threads = STROKE_THREADS,
+        )
+        // Symmetry copies are fixed when the draft is drawn, like at the start of a stroke (spec G4).
+        val first = points.first()
+        val copies = if (guides.symmetry.on) guides.copies(Vec2(first.x, first.y)) else SymmetryCopies.NONE
+        val fill = if (shapeFilled(d)) FillSpec(1f) else null
+        val engine = StrokeEngine(
+            doc, StrokeTarget.Layer(layerId), brush, BrushResources.EMPTY, s.color, mode, ctx,
+            ShapeStroke.options(d, fill = fill, copies = copies),
+        )
+        stroke = engine
+        engine.begin(points.first())
+        engine.add(points.drop(1))
+        if (engine.directToLayer) {
+            canvas?.invalidate(layerId, engine.takeDirty())
+        } else {
+            canvas?.setStrokePreview(layerId, engine.buffer, mode == StrokeMode.ERASE, engine.previewOpacity)
+            canvas?.invalidateStroke(engine.takeDirty())
+        }
+    }
+
+    /**
+     * Ends the preview engine and records its patch as one undoable "Shape" step (the pixels already are in the
+     * layer); returns false when nothing was drawn.
+     */
+    private fun endShapePreview(): Boolean {
+        val engine = stroke ?: return false
+        stroke = null
+        val layerId = shapeLayerId
+        val commit = engine.end()
+        if (layerId != null && !engine.directToLayer) canvas?.setStrokePreview(layerId, null, false, 1f)
+        val patch = (commit as? StrokeCommit.Pixels)?.patch
+        if (patch == null) {
+            if (engine.directToLayer) canvas?.invalidate(layerId, null)
+            return false
+        }
+        history.push(TilePatchCommand(patch, "Shape"))
+        canvas?.invalidate(patch.layerId, patch.after.keys)
+        return true
+    }
+
+    /**
+     * Closes the shape session: [commit] keeps the pixels of the draft as one undoable step, otherwise the
+     * preview is rolled back without a history entry. The draft itself is always dropped.
+     */
+    private fun finishShape(commit: Boolean) {
+        if (shapeDraft == null && shapeLayerId == null) return
+        if (commit) endShapePreview() else cancelShapePreview()
+        shapeDraft = null
+        shapeLayerId = null
+        shapeDrag = ShapeDrag.NONE
+        shapeHandle = null
+        shapeFrom = Vec2(0f, 0f)
+        shapeLast = Vec2(0f, 0f)
+        shapeLastPreviewMs = 0L
+        publishShape()
+    }
+
+    /**
+     * Touch down of the shape tool: a handle of the open draft is grabbed, a touch on its contour moves the whole
+     * shape, and any other touch commits the draft and starts a new one from the touch point.
+     */
+    private fun shapeDown(x: Float, y: Float) {
+        val layer = shapeTarget() ?: return
+        val p = Vec2(clampX(x), clampY(y))
+        shapeHandle = null
+        shapeLast = p
+        shapeDrag = ShapeDrag.NONE
+        val d = shapeDraft
+        if (d != null && layer.id == shapeLayerId) {
+            when (val hit = ShapeHandles.hitTest(d, p, shapeScreenToDoc())) {
+                is ShapeHit.OnHandle -> {
+                    shapeHandle = hit.handle
+                    shapeDrag = ShapeDrag.HANDLE
+                    return
+                }
+                ShapeHit.OnContour -> {
+                    shapeDrag = ShapeDrag.CONTOUR
+                    return
+                }
+                null -> Unit
+            }
+        }
+        // The touch starts a new draft; an open one is applied first, as one undo step of its own.
+        if (shapeDraft != null) finishShape(commit = true)
+        shapeLayerId = layer.id
+        shapeFrom = p
+        shapeDraft = ShapeFactory.fromDrag(shapeTool, p, p, sides = shapeSides)
+        shapeDrag = ShapeDrag.CREATE
+        renderShape(force = true)
+    }
+
+    /** Drags the grabbed handle, moves the draft over the canvas or rebuilds it from the origin of the drag. */
+    private fun shapeMove(x: Float, y: Float, force: Boolean) {
+        val d = shapeDraft ?: return
+        val p = Vec2(clampX(x), clampY(y))
+        val next = when (shapeDrag) {
+            ShapeDrag.CREATE -> ShapeFactory.fromDrag(shapeTool, shapeFrom, p, sides = shapeSides)
+            ShapeDrag.HANDLE -> {
+                // The handle rides along with the shape, so its position comes from the draft of the last frame.
+                val kind = shapeHandle?.kind ?: return
+                val index = shapeHandle?.index ?: 0
+                val all = ShapeHandles.handles(d, shapeScreenToDoc())
+                val h = all.firstOrNull { it.kind == kind && it.index == index }
+                if (h == null) d else ShapeHandles.drag(d, h, p)
+            }
+            ShapeDrag.CONTOUR -> ShapeHandles.move(d, Vec2(p.x - shapeLast.x, p.y - shapeLast.y))
+            ShapeDrag.NONE -> return
+        }
+        shapeLast = p
+        shapeDraft = next
+        renderShape(force)
+    }
+
+    /** Finger lift: the draft stays open and is redrawn without the frame throttle. */
+    private fun shapeUp(x: Float, y: Float) {
+        if (shapeDraft == null) return
+        shapeMove(x, y, force = true)
+        shapeDrag = ShapeDrag.NONE
+        shapeHandle = null
+    }
+
+    override fun selectShapeTool(tool: ShapeTool) {
+        shapeTool = tool
+        selectTool(ToolUi.SHAPE)
+    }
+
+    override fun shapeCommit() = finishShape(commit = true)
+
+    override fun shapeCancel() = finishShape(commit = false)
+
+    /** Stamps a copy of the draft and keeps the draft open for the next copy. */
+    override fun shapeStamp() {
+        if (shapeDraft == null) return
+        endShapePreview()
+        renderShape(force = true)
+    }
+
+    override fun setShapeOutline(on: Boolean) {
+        shapeOutlineOn = on
+        if (shapeDraft != null) renderShape(force = true) else publishShape()
+    }
+
+    override fun setShapeFill(on: Boolean) {
+        shapeFillOn = on
+        if (shapeDraft != null) renderShape(force = true) else publishShape()
+    }
+
     /** Bucket settings (spec §4.3): 15 % tolerance over the canvas, gap closing 4 px, expansion 1.5 px. */
     private val bucketParams = RegionParams(tolerance = 0.15f, contiguous = true, gapPx = 4, expandPx = 1.5f)
 
@@ -1215,12 +1497,18 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
     // ---- history ----
 
     override fun undo() {
+        // An open shape draft has pixels only in its preview: undo drops it instead of a history step.
+        if (shapeDraft != null) {
+            finishShape(commit = false)
+            return
+        }
         if (transformSession != null || gradientLayerId != null) return
         commitPendingOpacity()
         if (history.undo(doc)) canvas?.invalidate(null, null)
     }
 
     override fun redo() {
+        if (shapeDraft != null) return
         if (transformSession != null || gradientLayerId != null) return
         commitPendingOpacity()
         if (history.redo(doc)) canvas?.invalidate(null, null)
@@ -1344,6 +1632,7 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
     }
 
     override fun selectLayer(id: String) {
+        finishShape(commit = true)
         finishTransform(apply = true)
         finishGradient(apply = true)
         commitPendingOpacity()
@@ -1674,6 +1963,7 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
     }
 
     override fun save() {
+        finishShape(commit = true)
         finishTransform(apply = true)
         finishGradient(apply = true)
         save(refreshList = true)
@@ -1738,6 +2028,7 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
     // ---- helpers ----
 
     private fun exec(cmd: Command) {
+        finishShape(commit = true)
         finishTransform(apply = true)
         finishGradient(apply = true)
         commitPendingOpacity()

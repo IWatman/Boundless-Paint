@@ -12,6 +12,7 @@ import app.painter.core.fill.Spread
 import app.painter.core.guide.OverlayRole
 import app.painter.core.history.MaskInit
 import app.painter.core.perspective.PerspectiveType
+import app.painter.core.shape.ShapeTool
 import app.painter.core.symmetry.MirrorAxes
 import app.painter.core.symmetry.SymmetryType
 
@@ -22,9 +23,10 @@ import app.painter.core.symmetry.SymmetryType
  * of the layer and adds it to the selection. [TRANSFORM] moves, uniformly scales and rotates the active
  * layer pixels (or the selected pixels when a selection exists) with the cage overlay. [FILL] taps a region
  * of the canvas and fills it on the active layer with the current color. [GRADIENT] drags the axis of a
- * two-stop gradient and applies it to the active layer.
+ * two-stop gradient and applies it to the active layer. [SHAPE] drags, edits and stamps geometric shapes
+ * of the selected [app.painter.core.shape.ShapeTool] on the active layer.
  */
-enum class ToolUi { BRUSH, SELECT_RECT, SELECT_ELLIPSE, SELECT_LASSO, SELECT_WAND, TRANSFORM, FILL, GRADIENT }
+enum class ToolUi { BRUSH, SELECT_RECT, SELECT_ELLIPSE, SELECT_LASSO, SELECT_WAND, TRANSFORM, FILL, GRADIENT, SHAPE }
 
 /** True for the tools that build a selection instead of painting. */
 val ToolUi.isSelectionTool: Boolean
@@ -152,6 +154,8 @@ data class StudioUiState(
     val transform: TransformUi? = null,
     /** Gradient ends and type while a gradient is open, null otherwise. */
     val gradient: GradientUi? = null,
+    /** Draft of the shape tool (outline and handles), null while the tool is idle. */
+    val shape: ShapeUi? = null,
     /** Ruler guide of the open document, null while the ruler is off. */
     val ruler: RulerUi? = null,
     /** Ellipse guide of the open document, null while the ellipse is off. */
@@ -191,6 +195,20 @@ data class GradientUi(
     val reverse: Boolean = false,
     val opacity: Float = 1f,
     val repetitions: Int = 1,
+)
+
+/**
+ * Shape tool draft in document pixels: [outline] is the polyline of the shape (a [closed] one does not repeat
+ * its first point), [handles] are the positions of its draggable handles, [outlineOn] draws the brush outline
+ * and [fillOn] fills the shape (closed shapes only).
+ */
+@Immutable
+data class ShapeUi(
+    val outline: List<PointUi>,
+    val handles: List<PointUi>,
+    val closed: Boolean,
+    val outlineOn: Boolean,
+    val fillOn: Boolean,
 )
 
 /** Symmetry of the open document: [planes] is N of Radial/Kaleido, [centerX]/[centerY] are document pixels. */
@@ -285,6 +303,24 @@ interface StudioActions {
 
     /** Repetitions of an [app.painter.core.fill.GradientType.ANGULAR] gradient, clamped to 1..100. */
     fun setGradientRepetitions(n: Int) {}
+
+    /** Picks the shape [tool] and switches to [ToolUi.SHAPE]. */
+    fun selectShapeTool(tool: ShapeTool) {}
+
+    /** Ends the open draft and records its pixels as one undoable step. */
+    fun shapeCommit() {}
+
+    /** Drops the open draft without touching the layer. */
+    fun shapeCancel() {}
+
+    /** Records a copy of the open draft as one undoable step and keeps the draft for further copies. */
+    fun shapeStamp() {}
+
+    /** Draws the brush outline of the draft ([on] false renders the fill alone). */
+    fun setShapeOutline(on: Boolean) {}
+
+    /** Fills closed drafts with the current color; kept for the next draft when it is open-shaped. */
+    fun setShapeFill(on: Boolean) {}
 
     /** Clears the selection. */
     fun deselect()
