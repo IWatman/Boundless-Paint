@@ -137,6 +137,15 @@
     <string name="gradient_spread_repeat">Repeat</string>
     <string name="gradient_spread_reflect">Reflect</string>
     <string name="gradient_reverse">Reverse</string>
+    <string name="symmetry_title">Symmetry</string>
+    <string name="symmetry_off">Symmetry off</string>
+    <string name="symmetry_mirror_v">Mirror vertical</string>
+    <string name="symmetry_mirror_h">Mirror horizontal</string>
+    <string name="symmetry_mirror_vh">Mirror both</string>
+    <string name="symmetry_radial">Radial</string>
+    <string name="symmetry_kaleido">Kaleidoscope</string>
+    <string name="symmetry_lock">Lock</string>
+    <string name="symmetry_crop">Crop at axis</string>
     <string name="action_apply">Apply</string>
     <string name="deselect">Deselect</string>
     <string name="select_all">Select all</string>

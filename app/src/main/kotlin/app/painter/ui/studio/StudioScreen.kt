@@ -43,6 +43,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
 import app.painter.R
+import app.painter.core.symmetry.MirrorAxes
+import app.painter.core.symmetry.SymmetryType
 import app.painter.ui.components.Hud
 import app.painter.ui.components.IconToggle
 import app.painter.ui.components.PainterIconButton
@@ -68,6 +70,7 @@ fun StudioScreen(
         SelectionOverlay(state = state, modifier = Modifier.fillMaxSize())
         TransformOverlay(state = state, modifier = Modifier.fillMaxSize())
         GradientOverlay(state = state, modifier = Modifier.fillMaxSize())
+        SymmetryOverlay(state = state, actions = actions, modifier = Modifier.fillMaxSize())
 
         Box(
             Modifier
@@ -135,6 +138,16 @@ fun StudioScreen(
                         .padding(top = 64.dp),
                 )
             }
+            val symmetry = state.symmetry
+            if (symmetry != null) {
+                SymmetryBar(
+                    symmetry = symmetry,
+                    actions = actions,
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(top = 64.dp, end = 16.dp),
+                )
+            }
             if (state.transform != null) {
                 TransformBar(
                     actions = actions,
@@ -174,7 +187,59 @@ private fun StudioTopBar(state: StudioUiState, actions: StudioActions, modifier:
         PanelSurface {
             Row(Modifier.padding(2.dp)) {
                 PainterIconButton(Icons.Outlined.Home, stringResource(R.string.cd_home), actions::openHome)
-                PainterIconButton(Icons.Outlined.AutoAwesome, stringResource(R.string.creative_tools), actions::openCreativeTools)
+                var creativeMenu by remember { mutableStateOf(false) }
+                Box {
+                    PainterIconButton(
+                        Icons.Outlined.AutoAwesome,
+                        stringResource(R.string.creative_tools),
+                        { creativeMenu = true },
+                        tint = if (state.symmetry == null) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.primary,
+                    )
+                    DropdownMenu(expanded = creativeMenu, onDismissRequest = { creativeMenu = false }) {
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.symmetry_off)) },
+                            onClick = {
+                                creativeMenu = false
+                                actions.setSymmetry(null)
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.symmetry_mirror_v)) },
+                            onClick = {
+                                creativeMenu = false
+                                actions.setSymmetry(SymmetryType.MIRROR, MirrorAxes.V)
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.symmetry_mirror_h)) },
+                            onClick = {
+                                creativeMenu = false
+                                actions.setSymmetry(SymmetryType.MIRROR, MirrorAxes.H)
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.symmetry_mirror_vh)) },
+                            onClick = {
+                                creativeMenu = false
+                                actions.setSymmetry(SymmetryType.MIRROR, MirrorAxes.VH)
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.symmetry_radial)) },
+                            onClick = {
+                                creativeMenu = false
+                                actions.setSymmetry(SymmetryType.RADIAL)
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.symmetry_kaleido)) },
+                            onClick = {
+                                creativeMenu = false
+                                actions.setSymmetry(SymmetryType.KALEIDO)
+                            },
+                        )
+                    }
+                }
                 var toolsMenu by remember { mutableStateOf(false) }
                 Box {
                     PainterIconButton(

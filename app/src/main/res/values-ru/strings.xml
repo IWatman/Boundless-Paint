@@ -136,6 +136,15 @@
     <string name="gradient_spread_repeat">Повтор</string>
     <string name="gradient_spread_reflect">Отражение</string>
     <string name="gradient_reverse">Обратить</string>
+    <string name="symmetry_title">Симметрия</string>
+    <string name="symmetry_off">Без симметрии</string>
+    <string name="symmetry_mirror_v">Зеркало по вертикали</string>
+    <string name="symmetry_mirror_h">Зеркало по горизонтали</string>
+    <string name="symmetry_mirror_vh">Зеркало по обеим осям</string>
+    <string name="symmetry_radial">Радиальная</string>
+    <string name="symmetry_kaleido">Калейдоскоп</string>
+    <string name="symmetry_lock">Закрепить</string>
+    <string name="symmetry_crop">Обрезать по оси</string>
     <string name="action_apply">Применить</string>
     <string name="deselect">Снять выделение</string>
     <string name="select_all">Выделить всё</string>

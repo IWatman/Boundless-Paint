@@ -10,6 +10,8 @@ import app.painter.core.doc.EditTarget
 import app.painter.core.fill.GradientType
 import app.painter.core.fill.Spread
 import app.painter.core.history.MaskInit
+import app.painter.core.symmetry.MirrorAxes
+import app.painter.core.symmetry.SymmetryType
 
 /** Brush mode of the main toolbar. */
 /**
@@ -148,6 +150,8 @@ data class StudioUiState(
     val transform: TransformUi? = null,
     /** Gradient ends and type while a gradient is open, null otherwise. */
     val gradient: GradientUi? = null,
+    /** Symmetry settings of the open document, null while symmetry is off. */
+    val symmetry: SymmetryUi? = null,
 )
 
 /**
@@ -177,6 +181,19 @@ data class GradientUi(
     val reverse: Boolean = false,
     val opacity: Float = 1f,
     val repetitions: Int = 1,
+)
+
+/** Symmetry of the open document: [planes] is N of Radial/Kaleido, [centerX]/[centerY] are document pixels. */
+@Immutable
+data class SymmetryUi(
+    val type: SymmetryType,
+    val axes: MirrorAxes,
+    val centerX: Float,
+    val centerY: Float,
+    val angleDeg: Float,
+    val planes: Int,
+    val crop: Boolean,
+    val locked: Boolean,
 )
 
 /** All user intents raised by [StudioScreen]. Display indices refer to [StudioUiState.layers]. */
@@ -298,12 +315,29 @@ interface StudioActions {
     /** Makes [id] active and picks what painting edits: its pixels or its mask. */
     fun selectEditTarget(id: String, target: EditTarget)
 
+    /** Turns symmetry off ([type] null) or on with [type]; turning it on keeps the previous centre and angle. */
+    fun setSymmetry(type: SymmetryType?, axes: MirrorAxes = MirrorAxes.V) {}
+
+    /** Planes N of Radial/Kaleido symmetry, clamped to the range of its type. */
+    fun setSymmetryPlanes(n: Int) {}
+
+    /** Locks the overlay: a locked symmetry cannot be moved or rotated by its handles. */
+    fun setSymmetryLocked(locked: Boolean) {}
+
+    /** Crops the copies at the axis (Mirror and Kaleido only). */
+    fun setSymmetryCrop(crop: Boolean) {}
+
+    /** Moves the symmetry centre to ([x], [y]) document pixels, clamped to the canvas. */
+    fun moveSymmetryCenter(x: Float, y: Float) {}
+
+    /** Sets the main axis angle in degrees, snapped to multiples of 45° within ±3°. */
+    fun setSymmetryAngle(deg: Float) {}
+
     fun setPaperColor(color: Rgba) {}
     fun setPaperVisible(visible: Boolean) {}
     fun openHome()
     fun save()
     fun exportImage()
-    fun openCreativeTools()
     fun openEditingTools()
     fun openOptions()
     fun openSettings() {}
@@ -369,7 +403,6 @@ open class NoOpStudioActions : StudioActions {
     override fun openHome() {}
     override fun save() {}
     override fun exportImage() {}
-    override fun openCreativeTools() {}
     override fun openEditingTools() {}
     override fun openOptions() {}
     override fun addColorToPalette(color: Rgba) {}

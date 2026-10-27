@@ -32,6 +32,8 @@ import app.painter.core.fill.RefSource
 import app.painter.core.fill.Region
 import app.painter.core.fill.RegionParams
 import app.painter.core.fill.Spread
+import app.painter.core.guide.GuideJson
+import app.painter.core.guide.GuideState
 import app.painter.core.history.AddAdjustmentLayer
 import app.painter.core.history.AddLayer
 import app.painter.core.history.AddMask
@@ -58,6 +60,9 @@ import app.painter.core.io.ProjectIO
 import app.painter.core.io.ProjectStore
 import app.painter.core.pick.Eyedropper
 import app.painter.core.pick.PickSource
+import app.painter.core.symmetry.MirrorAxes
+import app.painter.core.symmetry.SymmetryConfig
+import app.painter.core.symmetry.SymmetryType
 import app.painter.core.stroke.Brush
 import app.painter.core.stroke.BrushParams
 import app.painter.core.stroke.BrushResources
@@ -68,6 +73,7 @@ import app.painter.core.stroke.StrokeContext
 import app.painter.core.stroke.StrokeEngine
 import app.painter.core.stroke.StrokeMode
 import app.painter.core.stroke.StrokeOptions
+import app.painter.core.stroke.SymmetryCopies
 import app.painter.core.raster.MaskGrid
 import app.painter.core.stroke.StrokeTarget
 import app.painter.core.geom.Vec2
@@ -105,6 +111,7 @@ import app.painter.ui.studio.adjustTitleRes
 import app.painter.ui.studio.LayerUi
 import app.painter.ui.studio.StudioActions
 import app.painter.ui.studio.StudioUiState
+import app.painter.ui.studio.SymmetryUi
 import app.painter.ui.studio.TransformUi
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -117,6 +124,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.JsonObject
 import java.io.ByteArrayOutputStream
 
 /** Owns the open document and wires UI actions, the canvas view and the core engines. */
@@ -126,6 +134,8 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
     private val ioLock = Mutex()
 
     private var doc: Document = Document.create(1, 1)
+    /** Guides, symmetry and grid settings of [doc]; symmetry is view state, so it is never undone. */
+    private var guides: GuideState = GuideState()
     private val history = History()
     private var canvas: CanvasView? = null
     private var stroke: StrokeEngine? = null
@@ -195,6 +205,13 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
         finishGradient(apply = false)
         save(refreshList = false) // flush pending changes of the previous document
         doc = d
+        guides = GuideJson.fromElement(d.guides)
+        // A manifest without a centre (a new document) gets the symmetry centre of the canvas.
+        if (guides.symmetry.center.x == 0f && guides.symmetry.center.y == 0f) {
+            guides = guides.copy(
+                symmetry = guides.symmetry.copy(center = SymmetryConfig.centred(d.width, d.height).center),
+            )
+        }
         history.clear()
         autosaveJob?.cancel()
         autosaveJob = null
@@ -202,7 +219,12 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
         stroke = null
         canvas?.setDocument(doc)
         _state.update {
-            it.copy(paperColor = d.paper.color, paperVisible = d.paper.visible, adjustmentEditor = null)
+            it.copy(
+                paperColor = d.paper.color,
+                paperVisible = d.paper.visible,
+                adjustmentEditor = null,
+                symmetry = symmetryUi(),
+            )
         }
         adjustSession = null
         refreshLayers()
@@ -255,7 +277,12 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
             threads = STROKE_THREADS,
         )
         val target = if (layer == null) StrokeTarget.Mask(node.id) else StrokeTarget.Layer(layer.id)
-        val engine = StrokeEngine(doc, target, brush, BrushResources.EMPTY, s.color, mode, ctx, StrokeOptions(clip = doc.selection.coverageOrNull()))
+        // Symmetry copies are fixed at stroke start (spec G4); symmetry itself is view state.
+        val copies = if (guides.symmetry.on) guides.copies(Vec2(p.x, p.y)) else SymmetryCopies.NONE
+        val engine = StrokeEngine(
+            doc, target, brush, BrushResources.EMPTY, s.color, mode, ctx,
+            StrokeOptions(copies = copies, clip = doc.selection.coverageOrNull()),
+        )
         stroke = engine
         strokeOnMask = layer == null
         engine.begin(p)
@@ -1418,6 +1445,59 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
         canvas?.invalidate(null, null)
     }
 
+    // ---- symmetry ----
+
+    /** Symmetry published to the overlay, null while it is off. */
+    private fun symmetryUi(): SymmetryUi? = guides.symmetry.toUi()
+
+    /** View state of a symmetry config; null when the symmetry is off. */
+    private fun SymmetryConfig.toUi(): SymmetryUi? =
+        if (!on) null else SymmetryUi(type, axes, center.x, center.y, angleDeg, effectivePlanes, crop, locked)
+
+    /**
+     * Applies [symmetry] as view state: symmetry is not undoable, so it goes straight into [guides], the
+     * manifest block of [doc] and the published state.
+     */
+    private fun applySymmetry(symmetry: SymmetryConfig) {
+        guides = guides.copy(symmetry = symmetry)
+        doc.guides = GuideJson.toElement(guides) as JsonObject
+        markDirty()
+        _state.update { it.copy(symmetry = symmetryUi()) }
+    }
+
+    override fun setSymmetry(type: SymmetryType?, axes: MirrorAxes) {
+        val current = guides.symmetry
+        applySymmetry(current.copy(on = type != null, type = type ?: current.type, axes = axes))
+    }
+
+    override fun setSymmetryPlanes(n: Int) {
+        val current = guides.symmetry
+        if (current.type == SymmetryType.MIRROR) return
+        val clamped = current.copy(planes = n.coerceIn(2, SymmetryConfig.MAX_COPIES))
+        applySymmetry(clamped.copy(planes = clamped.effectivePlanes))
+    }
+
+    override fun setSymmetryLocked(locked: Boolean) = applySymmetry(guides.symmetry.copy(locked = locked))
+
+    override fun setSymmetryCrop(crop: Boolean) = applySymmetry(guides.symmetry.copy(crop = crop))
+
+    override fun moveSymmetryCenter(x: Float, y: Float) {
+        if (!guides.symmetry.on) return
+        applySymmetry(guides.symmetry.copy(center = Vec2(clampX(x), clampY(y))))
+    }
+
+    override fun setSymmetryAngle(deg: Float) {
+        if (!guides.symmetry.on) return
+        applySymmetry(guides.symmetry.copy(angleDeg = snapAngle(deg)))
+    }
+
+    /** Normalizes [deg] to 0–360 and snaps it to a multiple of 45° when it is within 3° of one. */
+    private fun snapAngle(deg: Float): Float {
+        val norm = ((deg % 360f) + 360f) % 360f
+        val snapped = (Math.round(norm / 45f) * 45f).toFloat()
+        return if (kotlin.math.abs(snapped - norm) <= 3f) snapped % 360f else norm
+    }
+
     // ---- options ----
 
     override fun openHome() {
@@ -1484,7 +1564,6 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
 
     val documentName: String get() = doc.name
 
-    override fun openCreativeTools() {}
     override fun openEditingTools() {}
     override fun openOptions() {}
 
