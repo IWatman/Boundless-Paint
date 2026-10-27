@@ -1,8 +1,6 @@
 package app.painter.ui.studio
 
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.Arrangement
@@ -12,6 +10,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -48,27 +47,23 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import app.painter.R
-import app.painter.core.blend.BlendMode
 import app.painter.core.color.Rgba
+import app.painter.core.doc.EditTarget
 import app.painter.ui.components.ColorSwatch
 import app.painter.ui.components.IconToggle
 import app.painter.ui.components.LinearSlider
 import app.painter.ui.components.PainterIconButton
 import app.painter.ui.components.PanelSurface
 import app.painter.ui.components.RenameDialog
-import app.painter.ui.components.checkerboard
 import app.painter.ui.theme.AccentFill
-import app.painter.ui.theme.PainterTheme
 import kotlin.math.roundToInt
 
 private val ExpandedRowHeight = 60.dp
@@ -83,24 +78,6 @@ private val PaperPresets = listOf(
     Rgba(0.17f, 0.17f, 0.17f),
     Rgba.BLACK,
 )
-
-/** Localized name of a blend mode. */
-@Composable
-fun blendModeLabel(mode: BlendMode): String = when (mode) {
-    BlendMode.NORMAL -> stringResource(R.string.blend_normal)
-    BlendMode.MULTIPLY -> stringResource(R.string.blend_multiply)
-    BlendMode.SCREEN -> stringResource(R.string.blend_screen)
-    BlendMode.OVERLAY -> stringResource(R.string.blend_overlay)
-    BlendMode.DARKEN -> stringResource(R.string.blend_darken)
-    BlendMode.LIGHTEN -> stringResource(R.string.blend_lighten)
-    BlendMode.COLOR_DODGE -> stringResource(R.string.blend_color_dodge)
-    BlendMode.COLOR_BURN -> stringResource(R.string.blend_color_burn)
-    BlendMode.SOFT_LIGHT -> stringResource(R.string.blend_soft_light)
-    BlendMode.HARD_LIGHT -> stringResource(R.string.blend_hard_light)
-    BlendMode.ADD -> stringResource(R.string.blend_add)
-    BlendMode.DIFFERENCE -> stringResource(R.string.blend_difference)
-    else -> mode.id.replace('_', ' ').replaceFirstChar { it.uppercase() }
-}
 
 @Composable
 internal fun LayerPanel(state: StudioUiState, actions: StudioActions, modifier: Modifier = Modifier) {
@@ -184,21 +161,14 @@ private fun LayerProperties(layer: LayerUi, actions: StudioActions) {
                     )
                     Icon(Icons.Outlined.ArrowDropDown, stringResource(R.string.blend_mode))
                 }
-                DropdownMenu(expanded = blendMenu, onDismissRequest = { blendMenu = false }) {
-                    BlendMode.M1.forEach { mode ->
-                        DropdownMenuItem(
-                            text = {
-                                Text(
-                                    blendModeLabel(mode),
-                                    fontWeight = if (mode == layer.blendMode) FontWeight.Bold else FontWeight.Normal,
-                                    color = if (mode == layer.blendMode) MaterialTheme.colorScheme.primary else Color.Unspecified,
-                                )
-                            },
-                            onClick = {
-                                blendMenu = false
-                                actions.setLayerBlend(layer.id, mode)
-                            },
-                        )
+                DropdownMenu(
+                    expanded = blendMenu,
+                    onDismissRequest = { blendMenu = false },
+                    modifier = Modifier.heightIn(max = 480.dp),
+                ) {
+                    BlendModeMenuContent(layer.blendMode, includePassthrough = layer.isGroup) { mode ->
+                        blendMenu = false
+                        actions.setLayerBlend(layer.id, mode)
                     }
                 }
             }
@@ -298,47 +268,18 @@ private fun LayerList(
 }
 
 @Composable
-private fun LayerThumbnail(layer: LayerUi, size: Dp, active: Boolean) {
-    val shape = MaterialTheme.shapes.small
-    Box(
-        Modifier
-            .size(size)
-            .clip(shape)
-            .checkerboard(PainterTheme.colors.checkerLight, PainterTheme.colors.checkerDark, 5.dp)
-            .border(
-                if (active) 2.dp else 1.dp,
-                if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,
-                shape,
-            ),
-    ) {
-        val thumb = layer.thumbnail
-        if (thumb != null) {
-            Image(
-                bitmap = thumb,
-                contentDescription = null,
-                contentScale = ContentScale.Fit,
-                modifier = Modifier.size(size).padding(1.dp),
-            )
-        }
-        if (!layer.visible) {
-            Box(Modifier.size(size).background(Color.Black.copy(alpha = 0.45f)), contentAlignment = Alignment.Center) {
-                Icon(Icons.Outlined.VisibilityOff, null, tint = Color.White, modifier = Modifier.size(18.dp))
-            }
-        }
-    }
-}
-
-@Composable
 private fun CollapsedLayerRow(layer: LayerUi, active: Boolean, lifted: Boolean, actions: StudioActions, height: Dp) {
     Box(
         Modifier
             .fillMaxWidth()
             .height(height)
             .background(if (lifted) MaterialTheme.colorScheme.surfaceContainerHighest else Color.Transparent)
-            .clickable { actions.selectLayer(layer.id) },
+            .clickable { actions.selectLayer(layer.id) }
+            .padding(start = layer.depth.dp * 16),
         contentAlignment = Alignment.Center,
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
+            ColorTagStripe(layer.colorTag, height)
             if (layer.clipped) {
                 Icon(
                     Icons.Outlined.SubdirectoryArrowRight, null,
@@ -346,7 +287,29 @@ private fun CollapsedLayerRow(layer: LayerUi, active: Boolean, lifted: Boolean, 
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            LayerThumbnail(layer, 52.dp, active)
+            if (layer.isGroup) {
+                GroupExpandArrow(layer, 40.dp, actions)
+            } else {
+                LayerThumbnail(layer, if (layer.hasMask) 38.dp else 48.dp, active && !layer.isActiveTargetMask)
+            }
+            if (layer.hasMask) {
+                Spacer(Modifier.width(2.dp))
+                MaskThumbnail(layer, 18.dp) { actions.selectEditTarget(layer.id, EditTarget.MASK) }
+            }
+        }
+        Row(
+            Modifier.align(Alignment.TopEnd).padding(2.dp),
+            horizontalArrangement = Arrangement.spacedBy(2.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (layer.locked) {
+                Icon(
+                    Icons.Outlined.Lock, stringResource(R.string.layer_locked),
+                    modifier = Modifier.size(12.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            if (layer.reference) ReferenceBadge()
         }
     }
 }
@@ -375,9 +338,11 @@ private fun ExpandedLayerRow(
             .height(height)
             .background(bg)
             .clickable { actions.selectLayer(layer.id) }
-            .padding(start = 8.dp + (layer.depth * 12).dp, end = 2.dp),
+            .padding(start = layer.depth.dp * 16, end = 2.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        ColorTagStripe(layer.colorTag, height)
+        Spacer(Modifier.width(4.dp))
         if (layer.clipped) {
             Icon(
                 Icons.Outlined.SubdirectoryArrowRight, stringResource(R.string.clip_to_below),
@@ -386,8 +351,21 @@ private fun ExpandedLayerRow(
             )
             Spacer(Modifier.width(2.dp))
         }
-        LayerThumbnail(layer, 46.dp, active)
-        Spacer(Modifier.width(8.dp))
+        if (layer.isGroup) {
+            GroupExpandArrow(layer, 34.dp, actions)
+            Spacer(Modifier.width(4.dp))
+        } else {
+            Box(
+                Modifier.clickable { actions.selectEditTarget(layer.id, EditTarget.LAYER) },
+            ) {
+                LayerThumbnail(layer, 46.dp, active && !layer.isActiveTargetMask)
+            }
+            Spacer(Modifier.width(6.dp))
+        }
+        if (layer.hasMask) {
+            MaskThumbnail(layer, 26.dp) { actions.selectEditTarget(layer.id, EditTarget.MASK) }
+            Spacer(Modifier.width(6.dp))
+        }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.Center) {
             Text(
                 layer.name,
@@ -412,6 +390,14 @@ private fun ExpandedLayerRow(
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
+                if (layer.locked) {
+                    Icon(
+                        Icons.Outlined.Lock, stringResource(R.string.layer_locked),
+                        modifier = Modifier.padding(start = 4.dp).size(12.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                if (layer.reference) ReferenceBadge(Modifier.padding(start = 4.dp))
             }
         }
         PainterIconButton(
@@ -427,29 +413,15 @@ private fun ExpandedLayerRow(
                 onClick = { menuOpen = true },
                 modifier = Modifier.size(width = 32.dp, height = 40.dp),
             )
-            DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                DropdownMenuItem(
-                    text = { Text(stringResource(R.string.rename)) },
-                    onClick = { menuOpen = false; renameOpen = true },
-                )
-                DropdownMenuItem(
-                    text = { Text(stringResource(R.string.duplicate)) },
-                    enabled = canDuplicate,
-                    onClick = { menuOpen = false; actions.duplicateLayer(layer.id) },
-                )
-                DropdownMenuItem(
-                    text = { Text(stringResource(R.string.clear)) },
-                    onClick = { menuOpen = false; actions.clearLayer(layer.id) },
-                )
-                DropdownMenuItem(
-                    text = { Text(stringResource(R.string.merge_down)) },
-                    enabled = canMergeDown,
-                    onClick = { menuOpen = false; actions.mergeDown(layer.id) },
-                )
-                DropdownMenuItem(
-                    text = { Text(stringResource(R.string.delete)) },
-                    enabled = canDelete,
-                    onClick = { menuOpen = false; actions.deleteLayer(layer.id) },
+            if (menuOpen) {
+                LayerRowMenu(
+                    layer = layer,
+                    canMergeDown = canMergeDown,
+                    canDelete = canDelete,
+                    canDuplicate = canDuplicate,
+                    onDismiss = { menuOpen = false },
+                    onRename = { renameOpen = true },
+                    actions = actions,
                 )
             }
         }
