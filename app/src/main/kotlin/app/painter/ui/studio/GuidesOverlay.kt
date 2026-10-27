@@ -21,6 +21,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import app.painter.core.guide.OverlayRole
 import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.roundToInt
@@ -33,6 +34,9 @@ private val HandleTouch = 48.dp
 /** Alpha of the infinite ruler axis drawn over the canvas. */
 private const val AXIS_ALPHA = 0.6f
 
+/** Alpha of the perspective grid lines (the horizon is drawn opaque). */
+private const val PERSPECTIVE_ALPHA = 0.5f
+
 /** Points sampled along the ellipse outline before it is mapped to the screen. */
 private const val ELLIPSE_SEGMENTS = 72
 
@@ -40,14 +44,17 @@ private const val ELLIPSE_SEGMENTS = 72
  * Compose layer above the GL canvas: draws the ruler of [StudioUiState.ruler] as the infinite line through its
  * ends plus the segment itself and, unless the ruler is locked, three round handles — the ends (each moves one
  * end) and the midpoint (which moves the whole segment). The ellipse of [StudioUiState.ellipse] is drawn the
- * same way, with a centre handle and one handle per semi-axis. Only the 48 dp touch boxes take input, so
- * touches anywhere else still reach the canvas.
+ * same way, with a centre handle and one handle per semi-axis. The perspective grid of
+ * [StudioUiState.perspective] is drawn as its precomputed overlay lines, with one handle per vanishing point
+ * unless the grid is locked. Only the 48 dp touch boxes take input, so touches anywhere else still reach the
+ * canvas.
  */
 @Composable
 fun GuidesOverlay(state: StudioUiState, actions: StudioActions, modifier: Modifier = Modifier) {
     val ruler = state.ruler
     val ellipse = state.ellipse
-    if (ruler == null && ellipse == null) return
+    val perspective = state.perspective
+    if (ruler == null && ellipse == null && perspective == null) return
     val t = state.canvasTransform
     val accent = MaterialTheme.colorScheme.primary
     Box(modifier) {
@@ -123,7 +130,77 @@ fun GuidesOverlay(state: StudioUiState, actions: StudioActions, modifier: Modifi
                 }
             }
         }
+        if (perspective != null) {
+            val colors = perspectiveColors()
+            Canvas(Modifier.fillMaxSize()) {
+                drawPerspective(t, perspective, colors, showHandles = !perspective.locked)
+            }
+            if (!perspective.locked) {
+                // Each handle drags its own vanishing point, which may leave the canvas freely.
+                perspective.vp.forEachIndexed { index, vp ->
+                    DragHandle(docToScreen(t, vp.x, vp.y)) { p ->
+                        val d = screenToDoc(t, p.x, p.y)
+                        actions.moveVanishingPoint(index, d.x, d.y)
+                    }
+                }
+            }
+        }
     }
+}
+
+/** Theme colours of the perspective overlay: VP1 primary, VP2 tertiary, VP3 secondary, the rest neutral. */
+@Composable
+private fun perspectiveColors(): PerspectiveColors {
+    val scheme = MaterialTheme.colorScheme
+    return PerspectiveColors(scheme.primary, scheme.tertiary, scheme.secondary, scheme.primary, scheme.onSurfaceVariant)
+}
+
+/** Colours of the perspective overlay lines and handles, picked by [OverlayRole]. */
+private data class PerspectiveColors(
+    val vp1: Color,
+    val vp2: Color,
+    val vp3: Color,
+    val horizon: Color,
+    val other: Color,
+) {
+    fun of(role: OverlayRole): Color = when (role) {
+        OverlayRole.VP1 -> vp1
+        OverlayRole.VP2 -> vp2
+        OverlayRole.VP3 -> vp3
+        OverlayRole.HORIZON -> horizon
+        else -> other
+    }
+}
+
+/**
+ * Perspective grid of [p]: every precomputed overlay line mapped through [t], 1 dp at [PERSPECTIVE_ALPHA] —
+ * except the horizon, which is 1.5 dp and opaque. When [showHandles], a round handle marks each vanishing point.
+ */
+private fun DrawScope.drawPerspective(
+    t: CanvasTransformUi,
+    p: PerspectiveUi,
+    colors: PerspectiveColors,
+    showHandles: Boolean,
+) {
+    for (line in p.lines) {
+        val a = docToScreen(t, line.ax, line.ay)
+        val b = docToScreen(t, line.bx, line.by)
+        if (line.role == OverlayRole.HORIZON) {
+            drawLine(colors.of(line.role), a, b, strokeWidth = 1.5.dp.toPx())
+        } else {
+            drawLine(colors.of(line.role).copy(alpha = PERSPECTIVE_ALPHA), a, b, strokeWidth = 1.dp.toPx())
+        }
+    }
+    if (showHandles) {
+        for ((index, vp) in p.vp.withIndex()) drawHandle(docToScreen(t, vp.x, vp.y), colors.of(vpRole(index)))
+    }
+}
+
+/** [OverlayRole] of vanishing point [index], which colours its handle. */
+private fun vpRole(index: Int): OverlayRole = when (index) {
+    0 -> OverlayRole.VP1
+    1 -> OverlayRole.VP2
+    else -> OverlayRole.VP3
 }
 
 /** Ruler axis past the screen edges, the segment [a]–[b] and, when [showHandles], the three handles. */

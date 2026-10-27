@@ -9,7 +9,9 @@ import app.painter.core.doc.ColorTag
 import app.painter.core.doc.EditTarget
 import app.painter.core.fill.GradientType
 import app.painter.core.fill.Spread
+import app.painter.core.guide.OverlayRole
 import app.painter.core.history.MaskInit
+import app.painter.core.perspective.PerspectiveType
 import app.painter.core.symmetry.MirrorAxes
 import app.painter.core.symmetry.SymmetryType
 
@@ -156,6 +158,8 @@ data class StudioUiState(
     val ellipse: EllipseUi? = null,
     /** Lazy rope stabilizer of the open document, null while it is off. */
     val lazy: LazyUi? = null,
+    /** Perspective grid of the open document, null while it is off. */
+    val perspective: PerspectiveUi? = null,
     /** Symmetry settings of the open document, null while symmetry is off. */
     val symmetry: SymmetryUi? = null,
 )
@@ -228,6 +232,21 @@ data class EllipseUi(
     val magnet: Boolean,
     val locked: Boolean,
 )
+
+/** Perspective grid: [type] with its vanishing points in document pixels and the flags of the guide. */
+@Immutable
+data class PerspectiveUi(
+    val type: PerspectiveType,
+    val vp: List<PointUi>,
+    val snap: Boolean,
+    val visible: Boolean,
+    val locked: Boolean,
+    val lines: List<OverlayLineUi>,
+)
+
+/** One perspective overlay segment in document pixels; [role] picks its colour. */
+@Immutable
+data class OverlayLineUi(val ax: Float, val ay: Float, val bx: Float, val by: Float, val role: OverlayRole)
 
 /** Lazy rope stabilizer: [radius] in screen pixels. */
 @Immutable
@@ -408,6 +427,24 @@ interface StudioActions {
 
     /** Locks the ellipse: a locked ellipse cannot be moved or resized by its handles. */
     fun setEllipseLocked(on: Boolean) {}
+
+    /** Turns the perspective grid on with [type] (null turns it off); turning it on uses the canvas defaults. */
+    fun setPerspective(type: PerspectiveType?) {}
+
+    /**
+     * Moves vanishing point [index] to ([x], [y]) document pixels. Not clamped: a vanishing point may be
+     * dragged outside the canvas.
+     */
+    fun moveVanishingPoint(index: Int, x: Float, y: Float) {}
+
+    /** Keeps strokes on the direction families of the perspective grid. */
+    fun setPerspectiveSnap(on: Boolean) {}
+
+    /** Shows or hides the perspective overlay lines (the grid keeps snapping while hidden). */
+    fun setPerspectiveVisible(on: Boolean) {}
+
+    /** Locks the perspective grid: a locked grid cannot be moved by its vanishing-point handles. */
+    fun setPerspectiveLocked(on: Boolean) {}
 
     /** Sets the main axis angle in degrees, snapped to multiples of 45° within ±3°. */
     fun setSymmetryAngle(deg: Float) {}

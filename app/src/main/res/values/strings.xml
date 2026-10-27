@@ -154,6 +154,14 @@
     <string name="guide_magnet">Magnet</string>
     <string name="guide_lock">Lock</string>
     <string name="guide_lazy_radius">Radius</string>
+    <string name="persp_title">Perspective</string>
+    <string name="persp_1pt">1-point perspective</string>
+    <string name="persp_2pt">2-point perspective</string>
+    <string name="persp_3pt">3-point perspective</string>
+    <string name="persp_iso">Isometric grid</string>
+    <string name="persp_grid">2D grid</string>
+    <string name="persp_snap">Snap</string>
+    <string name="persp_visible">Show</string>
     <string name="action_apply">Apply</string>
     <string name="deselect">Deselect</string>
     <string name="select_all">Select all</string>

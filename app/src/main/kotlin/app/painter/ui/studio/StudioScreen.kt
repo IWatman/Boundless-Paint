@@ -45,6 +45,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
 import app.painter.R
+import app.painter.core.perspective.PerspectiveType
 import app.painter.core.symmetry.MirrorAxes
 import app.painter.core.symmetry.SymmetryType
 import app.painter.ui.components.Hud
@@ -144,11 +145,13 @@ fun StudioScreen(
             val ruler = state.ruler
             val ellipse = state.ellipse
             val lazy = state.lazy
-            if (ruler != null || ellipse != null || lazy != null) {
+            val perspective = state.perspective
+            if (ruler != null || ellipse != null || lazy != null || perspective != null) {
                 GuidesBar(
                     ruler = ruler,
                     ellipse = ellipse,
                     lazy = lazy,
+                    perspective = perspective,
                     actions = actions,
                     modifier = Modifier
                         .align(Alignment.TopEnd)
@@ -204,6 +207,20 @@ private fun menuCheck(on: Boolean): (@Composable () -> Unit)? =
         { Icon(Icons.Outlined.Check, contentDescription = null) }
     } else null
 
+/** [type] to pass to [StudioActions.setPerspective]: null when it is already the active grid (turns it off). */
+private fun perspectiveToggle(current: PerspectiveUi?, type: PerspectiveType): PerspectiveType? =
+    if (current?.type == type) null else type
+
+/** Checkable creative-tools item of perspective [type]; [active] draws the check mark. */
+@Composable
+private fun PerspectiveMenuItem(type: PerspectiveType, label: String, active: Boolean, onPick: () -> Unit) {
+    DropdownMenuItem(
+        text = { Text(label) },
+        leadingIcon = menuCheck(active),
+        onClick = onPick,
+    )
+}
+
 @Composable
 private fun StudioTopBar(state: StudioUiState, actions: StudioActions, modifier: Modifier = Modifier) {
     Row(modifier, verticalAlignment = Alignment.CenterVertically) {
@@ -216,7 +233,10 @@ private fun StudioTopBar(state: StudioUiState, actions: StudioActions, modifier:
                         Icons.Outlined.AutoAwesome,
                         stringResource(R.string.creative_tools),
                         { creativeMenu = true },
-                        tint = if (state.symmetry == null && state.ruler == null && state.ellipse == null && state.lazy == null) {
+                        tint = if (
+                            state.symmetry == null && state.ruler == null && state.ellipse == null &&
+                            state.lazy == null && state.perspective == null
+                        ) {
                             MaterialTheme.colorScheme.onSurface
                         } else {
                             MaterialTheme.colorScheme.primary
@@ -290,6 +310,47 @@ private fun StudioTopBar(state: StudioUiState, actions: StudioActions, modifier:
                                 actions.setLazy(state.lazy == null)
                             },
                         )
+                        HorizontalDivider()
+                        PerspectiveMenuItem(
+                            PerspectiveType.ONE_POINT,
+                            stringResource(R.string.persp_1pt),
+                            state.perspective?.type == PerspectiveType.ONE_POINT,
+                        ) {
+                            creativeMenu = false
+                            actions.setPerspective(perspectiveToggle(state.perspective, PerspectiveType.ONE_POINT))
+                        }
+                        PerspectiveMenuItem(
+                            PerspectiveType.TWO_POINT,
+                            stringResource(R.string.persp_2pt),
+                            state.perspective?.type == PerspectiveType.TWO_POINT,
+                        ) {
+                            creativeMenu = false
+                            actions.setPerspective(perspectiveToggle(state.perspective, PerspectiveType.TWO_POINT))
+                        }
+                        PerspectiveMenuItem(
+                            PerspectiveType.THREE_POINT,
+                            stringResource(R.string.persp_3pt),
+                            state.perspective?.type == PerspectiveType.THREE_POINT,
+                        ) {
+                            creativeMenu = false
+                            actions.setPerspective(perspectiveToggle(state.perspective, PerspectiveType.THREE_POINT))
+                        }
+                        PerspectiveMenuItem(
+                            PerspectiveType.ISO,
+                            stringResource(R.string.persp_iso),
+                            state.perspective?.type == PerspectiveType.ISO,
+                        ) {
+                            creativeMenu = false
+                            actions.setPerspective(perspectiveToggle(state.perspective, PerspectiveType.ISO))
+                        }
+                        PerspectiveMenuItem(
+                            PerspectiveType.GRID_2D,
+                            stringResource(R.string.persp_grid),
+                            state.perspective?.type == PerspectiveType.GRID_2D,
+                        ) {
+                            creativeMenu = false
+                            actions.setPerspective(perspectiveToggle(state.perspective, PerspectiveType.GRID_2D))
+                        }
                     }
                 }
                 var toolsMenu by remember { mutableStateOf(false) }

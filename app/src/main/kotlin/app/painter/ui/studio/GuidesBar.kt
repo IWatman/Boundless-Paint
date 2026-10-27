@@ -23,15 +23,17 @@ private const val MAX_LAZY_RADIUS = 200f
 
 /**
  * Contextual bar of the guide overlays, shown at the top end while [StudioUiState.ruler],
- * [StudioUiState.ellipse] or [StudioUiState.lazy] is on: one row per active guide. The ruler row toggles
- * Perpendicular, Magnet and Lock and turns the ruler off; the ellipse row toggles Magnet and Lock and turns
- * the ellipse off; the lazy row sets the rope radius and turns the lazy rope off.
+ * [StudioUiState.ellipse], [StudioUiState.lazy] or [StudioUiState.perspective] is on: one row per active guide.
+ * The ruler row toggles Perpendicular, Magnet and Lock and turns the ruler off; the ellipse row toggles Magnet
+ * and Lock and turns the ellipse off; the lazy row sets the rope radius and turns the lazy rope off; the
+ * perspective row toggles Snap, Show and Lock and turns the grid off.
  */
 @Composable
 fun GuidesBar(
     ruler: RulerUi?,
     ellipse: EllipseUi?,
     lazy: LazyUi?,
+    perspective: PerspectiveUi?,
     actions: StudioActions,
     modifier: Modifier = Modifier,
 ) {
@@ -112,6 +114,31 @@ fun GuidesBar(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     TextButton(onClick = { actions.setLazy(false) }) { Text("×") }
+                }
+            }
+        }
+        if (perspective != null) {
+            PanelSurface {
+                Row(
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    Text(
+                        stringResource(R.string.persp_title),
+                        style = MaterialTheme.typography.titleSmall,
+                        modifier = Modifier.padding(start = 4.dp, end = 4.dp),
+                    )
+                    GuideToggle(stringResource(R.string.persp_snap), perspective.snap) {
+                        actions.setPerspectiveSnap(!perspective.snap)
+                    }
+                    GuideToggle(stringResource(R.string.persp_visible), perspective.visible) {
+                        actions.setPerspectiveVisible(!perspective.visible)
+                    }
+                    GuideToggle(stringResource(R.string.guide_lock), perspective.locked) {
+                        actions.setPerspectiveLocked(!perspective.locked)
+                    }
+                    TextButton(onClick = { actions.setPerspective(null) }) { Text("×") }
                 }
             }
         }

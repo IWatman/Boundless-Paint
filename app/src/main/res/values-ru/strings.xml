@@ -153,6 +153,14 @@
     <string name="guide_magnet">Магнит</string>
     <string name="guide_lock">Закрепить</string>
     <string name="guide_lazy_radius">Радиус</string>
+    <string name="persp_title">Перспектива</string>
+    <string name="persp_1pt">Перспектива 1 точка</string>
+    <string name="persp_2pt">Перспектива 2 точки</string>
+    <string name="persp_3pt">Перспектива 3 точки</string>
+    <string name="persp_iso">Изометрическая сетка</string>
+    <string name="persp_grid">Сетка 2D</string>
+    <string name="persp_snap">Привязка</string>
+    <string name="persp_visible">Показать</string>
     <string name="action_apply">Применить</string>
     <string name="deselect">Снять выделение</string>
     <string name="select_all">Выделить всё</string>

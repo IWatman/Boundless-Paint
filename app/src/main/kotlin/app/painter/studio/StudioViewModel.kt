@@ -63,6 +63,9 @@ import app.painter.core.history.TilePatchCommand
 import app.painter.core.history.Ungroup
 import app.painter.core.io.ProjectIO
 import app.painter.core.io.ProjectStore
+import app.painter.core.perspective.PerspectiveConfig
+import app.painter.core.perspective.PerspectiveOverlay
+import app.painter.core.perspective.PerspectiveType
 import app.painter.core.pick.Eyedropper
 import app.painter.core.pick.PickSource
 import app.painter.core.symmetry.MirrorAxes
@@ -117,6 +120,8 @@ import app.painter.ui.studio.isSelectionTool
 import app.painter.ui.studio.adjustTitleRes
 import app.painter.ui.studio.LayerUi
 import app.painter.ui.studio.LazyUi
+import app.painter.ui.studio.OverlayLineUi
+import app.painter.ui.studio.PerspectiveUi
 import app.painter.ui.studio.StudioActions
 import app.painter.ui.studio.StudioUiState
 import app.painter.ui.studio.SymmetryUi
@@ -235,6 +240,7 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
                 ruler = rulerUi(),
                 ellipse = ellipseUi(),
                 lazy = lazyUi(),
+                perspective = perspectiveUi(),
             )
         }
         adjustSession = null
@@ -1488,6 +1494,26 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
     /** View state of a lazy rope config; null when the lazy rope is off. */
     private fun LazyConfig.toUi(): LazyUi? = if (!on) null else LazyUi(radius)
 
+    /** Perspective grid published to the overlay, null while it is off. */
+    private fun perspectiveUi(): PerspectiveUi? = guides.perspective.toUi()
+
+    /**
+     * View state of a perspective config; null when the grid is off. The overlay [PerspectiveUi.lines] are
+     * generated for the canvas at the current zoom, so long line families are thinned like on screen.
+     */
+    private fun PerspectiveConfig.toUi(): PerspectiveUi? = if (!on) null else PerspectiveUi(
+        type = type,
+        vp = vp.map { PointUi(it.x, it.y) },
+        snap = snap,
+        visible = visible,
+        locked = locked,
+        lines = PerspectiveOverlay.lines(
+            cfg = this,
+            view = DocRect(0f, 0f, doc.width.toFloat(), doc.height.toFloat()),
+            screenToDoc = 1f / _state.value.canvasTransform.zoom,
+        ).map { OverlayLineUi(it.a.x, it.a.y, it.b.x, it.b.y, it.role) },
+    )
+
     /**
      * Applies [newGuides] as view state: guides are not undoable, so they go straight into [guides], the
      * manifest block of [doc] and the published state.
@@ -1496,7 +1522,15 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
         guides = newGuides
         doc.guides = GuideJson.toElement(guides) as JsonObject
         markDirty()
-        _state.update { it.copy(symmetry = symmetryUi(), ruler = rulerUi(), ellipse = ellipseUi(), lazy = lazyUi()) }
+        _state.update {
+            it.copy(
+                symmetry = symmetryUi(),
+                ruler = rulerUi(),
+                ellipse = ellipseUi(),
+                lazy = lazyUi(),
+                perspective = perspectiveUi(),
+            )
+        }
     }
 
     override fun setSymmetry(type: SymmetryType?, axes: MirrorAxes) {
@@ -1602,6 +1636,35 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
     override fun setEllipseMagnet(on: Boolean) = applyGuides(guides.copy(ellipse = guides.ellipse.copy(magnet = on)))
 
     override fun setEllipseLocked(on: Boolean) = applyGuides(guides.copy(ellipse = guides.ellipse.copy(locked = on)))
+
+    // ---- perspective ----
+
+    override fun setPerspective(type: PerspectiveType?) {
+        if (type == null) {
+            applyGuides(guides.copy(perspective = guides.perspective.copy(on = false)))
+            return
+        }
+        // A grid is always placed from the defaults of the canvas (spec G5): the previous points are dropped.
+        applyGuides(guides.copy(perspective = PerspectiveConfig.defaults(type, doc.width, doc.height)))
+    }
+
+    override fun moveVanishingPoint(index: Int, x: Float, y: Float) {
+        val cfg = guides.perspective
+        if (!cfg.on || index !in cfg.vp.indices) return
+        // Vanishing points are not clamped: they may be dragged outside the canvas.
+        val vp = cfg.vp.toMutableList()
+        vp[index] = Vec2(x, y)
+        applyGuides(guides.copy(perspective = cfg.copy(vp = vp)))
+    }
+
+    override fun setPerspectiveSnap(on: Boolean) =
+        applyGuides(guides.copy(perspective = guides.perspective.copy(snap = on)))
+
+    override fun setPerspectiveVisible(on: Boolean) =
+        applyGuides(guides.copy(perspective = guides.perspective.copy(visible = on)))
+
+    override fun setPerspectiveLocked(on: Boolean) =
+        applyGuides(guides.copy(perspective = guides.perspective.copy(locked = on)))
 
     // ---- options ----
 
