@@ -89,12 +89,8 @@ fun GradientBar(gradient: GradientUi, actions: StudioActions, modifier: Modifier
                     }
                 }
             }
-            TextButton(onClick = { actions.setGradientReverse(!gradient.reverse) }) {
-                Text(
-                    stringResource(R.string.gradient_reverse),
-                    color = if (gradient.reverse) MaterialTheme.colorScheme.primary
-                    else MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+            ToggleChip(stringResource(R.string.gradient_reverse), gradient.reverse) {
+                actions.setGradientReverse(!gradient.reverse)
             }
             Slider(
                 value = gradient.opacity,

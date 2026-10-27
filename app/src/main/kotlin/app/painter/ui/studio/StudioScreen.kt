@@ -7,6 +7,7 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
@@ -14,8 +15,13 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowLeft
+import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.outlined.Redo
 import androidx.compose.material.icons.automirrored.outlined.Undo
 import androidx.compose.material.icons.outlined.AutoAwesome
@@ -242,148 +248,300 @@ private fun PerspectiveMenuItem(type: PerspectiveType, label: String, active: Bo
     )
 }
 
+/** Groups of the creative tools menu; tapping a row opens the items of the group. */
+private enum class CreativeGroup(val titleRes: Int) {
+    SYMMETRY(R.string.symmetry_title),
+    GUIDES(R.string.menu_guides),
+    PERSPECTIVE(R.string.persp_title),
+    SHAPES(R.string.menu_shapes),
+}
+
+/** Separator of the names in the summary line of a group. */
+private const val SUMMARY_SEPARATOR = " · "
+
+/** Label of the symmetry that is on, or null while symmetry is off. */
+@Composable
+private fun symmetryMenuLabel(symmetry: SymmetryUi?): String? {
+    val current = symmetry ?: return null
+    return when (current.type) {
+        SymmetryType.MIRROR -> when (current.axes) {
+            MirrorAxes.V -> stringResource(R.string.symmetry_mirror_v)
+            MirrorAxes.H -> stringResource(R.string.symmetry_mirror_h)
+            MirrorAxes.VH -> stringResource(R.string.symmetry_mirror_vh)
+        }
+        SymmetryType.RADIAL -> stringResource(R.string.symmetry_radial)
+        SymmetryType.KALEIDO -> stringResource(R.string.symmetry_kaleido)
+    }
+}
+
+/** Label of the perspective grid [type]. */
+@Composable
+private fun perspectiveMenuLabel(type: PerspectiveType): String = when (type) {
+    PerspectiveType.ONE_POINT -> stringResource(R.string.persp_1pt)
+    PerspectiveType.TWO_POINT -> stringResource(R.string.persp_2pt)
+    PerspectiveType.THREE_POINT -> stringResource(R.string.persp_3pt)
+    PerspectiveType.ISO -> stringResource(R.string.persp_iso)
+    PerspectiveType.GRID_2D -> stringResource(R.string.persp_grid)
+}
+
+/** Names of the guides that are on, joined for the summary line of the guides group. */
+@Composable
+private fun guidesMenuLabel(state: StudioUiState): String? {
+    val on = listOfNotNull(
+        if (state.ruler != null) stringResource(R.string.guide_ruler) else null,
+        if (state.ellipse != null) stringResource(R.string.guide_ellipse) else null,
+        if (state.lazy != null) stringResource(R.string.guide_lazy) else null,
+    )
+    return if (on.isEmpty()) null else on.joinToString(SUMMARY_SEPARATOR)
+}
+
+/** Summary line of a group: the name of the item that is on, or null when everything in it is off. */
+@Composable
+private fun CreativeGroup.summary(state: StudioUiState): String? = when (this) {
+    CreativeGroup.SYMMETRY -> symmetryMenuLabel(state.symmetry)
+    CreativeGroup.GUIDES -> guidesMenuLabel(state)
+    CreativeGroup.PERSPECTIVE -> state.perspective?.let { perspectiveMenuLabel(it.type) }
+    CreativeGroup.SHAPES -> null
+}
+
+/** Top-level row of the creative tools menu: opens [group] and summarises what is on in it. */
+@Composable
+private fun CreativeGroupItem(group: CreativeGroup, state: StudioUiState, onOpen: () -> Unit) {
+    val summary = group.summary(state)
+    DropdownMenuItem(
+        text = {
+            Column {
+                Text(stringResource(group.titleRes))
+                if (summary != null) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            Modifier
+                                .padding(end = 6.dp)
+                                .size(6.dp)
+                                .background(MaterialTheme.colorScheme.primary, CircleShape),
+                        )
+                        Text(
+                            summary,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+            }
+        },
+        trailingIcon = { Icon(Icons.AutoMirrored.Outlined.KeyboardArrowRight, contentDescription = null) },
+        onClick = onOpen,
+    )
+}
+
+/** First row of an opened group: goes back to the top level of the menu. */
+@Composable
+private fun CreativeBackItem(group: CreativeGroup, onBack: () -> Unit) {
+    DropdownMenuItem(
+        text = { Text(stringResource(group.titleRes)) },
+        leadingIcon = { Icon(Icons.AutoMirrored.Outlined.KeyboardArrowLeft, contentDescription = null) },
+        onClick = onBack,
+    )
+    HorizontalDivider()
+}
+
+/** Symmetry items: off, the three mirrors, Radial and Kaleido. */
+@Composable
+private fun SymmetryMenuItems(actions: StudioActions, close: () -> Unit) {
+    DropdownMenuItem(
+        text = { Text(stringResource(R.string.symmetry_off)) },
+        onClick = {
+            close()
+            actions.setSymmetry(null)
+        },
+    )
+    DropdownMenuItem(
+        text = { Text(stringResource(R.string.symmetry_mirror_v)) },
+        onClick = {
+            close()
+            actions.setSymmetry(SymmetryType.MIRROR, MirrorAxes.V)
+        },
+    )
+    DropdownMenuItem(
+        text = { Text(stringResource(R.string.symmetry_mirror_h)) },
+        onClick = {
+            close()
+            actions.setSymmetry(SymmetryType.MIRROR, MirrorAxes.H)
+        },
+    )
+    DropdownMenuItem(
+        text = { Text(stringResource(R.string.symmetry_mirror_vh)) },
+        onClick = {
+            close()
+            actions.setSymmetry(SymmetryType.MIRROR, MirrorAxes.VH)
+        },
+    )
+    DropdownMenuItem(
+        text = { Text(stringResource(R.string.symmetry_radial)) },
+        onClick = {
+            close()
+            actions.setSymmetry(SymmetryType.RADIAL)
+        },
+    )
+    DropdownMenuItem(
+        text = { Text(stringResource(R.string.symmetry_kaleido)) },
+        onClick = {
+            close()
+            actions.setSymmetry(SymmetryType.KALEIDO)
+        },
+    )
+}
+
+/** Guide items: the ruler, the ellipse and the lazy rope; the check mark shows which of them are on. */
+@Composable
+private fun GuideMenuItems(state: StudioUiState, actions: StudioActions, close: () -> Unit) {
+    DropdownMenuItem(
+        text = { Text(stringResource(R.string.guide_ruler)) },
+        leadingIcon = menuCheck(state.ruler != null),
+        onClick = {
+            close()
+            actions.setRuler(state.ruler == null)
+        },
+    )
+    DropdownMenuItem(
+        text = { Text(stringResource(R.string.guide_ellipse)) },
+        leadingIcon = menuCheck(state.ellipse != null),
+        onClick = {
+            close()
+            actions.setEllipseGuide(state.ellipse == null)
+        },
+    )
+    DropdownMenuItem(
+        text = { Text(stringResource(R.string.guide_lazy)) },
+        leadingIcon = menuCheck(state.lazy != null),
+        onClick = {
+            close()
+            actions.setLazy(state.lazy == null)
+        },
+    )
+}
+
+/** Perspective items: picking the grid that is already on turns it off. */
+@Composable
+private fun PerspectiveMenuItems(state: StudioUiState, actions: StudioActions, close: () -> Unit) {
+    PerspectiveMenuItem(
+        PerspectiveType.ONE_POINT,
+        stringResource(R.string.persp_1pt),
+        state.perspective?.type == PerspectiveType.ONE_POINT,
+    ) {
+        close()
+        actions.setPerspective(perspectiveToggle(state.perspective, PerspectiveType.ONE_POINT))
+    }
+    PerspectiveMenuItem(
+        PerspectiveType.TWO_POINT,
+        stringResource(R.string.persp_2pt),
+        state.perspective?.type == PerspectiveType.TWO_POINT,
+    ) {
+        close()
+        actions.setPerspective(perspectiveToggle(state.perspective, PerspectiveType.TWO_POINT))
+    }
+    PerspectiveMenuItem(
+        PerspectiveType.THREE_POINT,
+        stringResource(R.string.persp_3pt),
+        state.perspective?.type == PerspectiveType.THREE_POINT,
+    ) {
+        close()
+        actions.setPerspective(perspectiveToggle(state.perspective, PerspectiveType.THREE_POINT))
+    }
+    PerspectiveMenuItem(
+        PerspectiveType.ISO,
+        stringResource(R.string.persp_iso),
+        state.perspective?.type == PerspectiveType.ISO,
+    ) {
+        close()
+        actions.setPerspective(perspectiveToggle(state.perspective, PerspectiveType.ISO))
+    }
+    PerspectiveMenuItem(
+        PerspectiveType.GRID_2D,
+        stringResource(R.string.persp_grid),
+        state.perspective?.type == PerspectiveType.GRID_2D,
+    ) {
+        close()
+        actions.setPerspective(perspectiveToggle(state.perspective, PerspectiveType.GRID_2D))
+    }
+}
+
+/** Shape items: the shape a drag creates. */
+@Composable
+private fun ShapeMenuItems(actions: StudioActions, close: () -> Unit) {
+    for ((shapeTool, label) in SHAPE_MENU) {
+        DropdownMenuItem(
+            text = { Text(stringResource(label)) },
+            onClick = {
+                close()
+                actions.selectShapeTool(shapeTool)
+            },
+        )
+    }
+}
+
+/** Whether any tool of the creative menu is on; tints its icon in the primary color. */
+private fun creativeToolsActive(state: StudioUiState): Boolean =
+    state.symmetry != null || state.ruler != null || state.ellipse != null ||
+        state.lazy != null || state.perspective != null
+
+/**
+ * "Creative tools" icon of the top bar with its two-level menu: the list of groups, then the items of the
+ * opened group. Dismissing the menu returns it to the list of groups.
+ */
+@Composable
+private fun CreativeToolsButton(state: StudioUiState, actions: StudioActions) {
+    var open by remember { mutableStateOf(false) }
+    var group by remember { mutableStateOf<CreativeGroup?>(null) }
+    val close = { open = false }
+    Box {
+        PainterIconButton(
+            Icons.Outlined.AutoAwesome,
+            stringResource(R.string.creative_tools),
+            {
+                group = null
+                open = true
+            },
+            tint = if (creativeToolsActive(state)) {
+                MaterialTheme.colorScheme.primary
+            } else {
+                MaterialTheme.colorScheme.onSurface
+            },
+        )
+        DropdownMenu(
+            expanded = open,
+            onDismissRequest = {
+                close()
+                group = null
+            },
+        ) {
+            val current = group
+            if (current == null) {
+                for (entry in CreativeGroup.entries) {
+                    CreativeGroupItem(entry, state) { group = entry }
+                }
+            } else {
+                CreativeBackItem(current) { group = null }
+                when (current) {
+                    CreativeGroup.SYMMETRY -> SymmetryMenuItems(actions, close)
+                    CreativeGroup.GUIDES -> GuideMenuItems(state, actions, close)
+                    CreativeGroup.PERSPECTIVE -> PerspectiveMenuItems(state, actions, close)
+                    CreativeGroup.SHAPES -> ShapeMenuItems(actions, close)
+                }
+            }
+        }
+    }
+}
+
 @Composable
 private fun StudioTopBar(state: StudioUiState, actions: StudioActions, modifier: Modifier = Modifier) {
     Row(modifier, verticalAlignment = Alignment.CenterVertically) {
         PanelSurface {
             Row(Modifier.padding(2.dp)) {
                 PainterIconButton(Icons.Outlined.Home, stringResource(R.string.cd_home), actions::openHome)
-                var creativeMenu by remember { mutableStateOf(false) }
-                Box {
-                    PainterIconButton(
-                        Icons.Outlined.AutoAwesome,
-                        stringResource(R.string.creative_tools),
-                        { creativeMenu = true },
-                        tint = if (
-                            state.symmetry == null && state.ruler == null && state.ellipse == null &&
-                            state.lazy == null && state.perspective == null
-                        ) {
-                            MaterialTheme.colorScheme.onSurface
-                        } else {
-                            MaterialTheme.colorScheme.primary
-                        },
-                    )
-                    DropdownMenu(expanded = creativeMenu, onDismissRequest = { creativeMenu = false }) {
-                        DropdownMenuItem(
-                            text = { Text(stringResource(R.string.symmetry_off)) },
-                            onClick = {
-                                creativeMenu = false
-                                actions.setSymmetry(null)
-                            },
-                        )
-                        DropdownMenuItem(
-                            text = { Text(stringResource(R.string.symmetry_mirror_v)) },
-                            onClick = {
-                                creativeMenu = false
-                                actions.setSymmetry(SymmetryType.MIRROR, MirrorAxes.V)
-                            },
-                        )
-                        DropdownMenuItem(
-                            text = { Text(stringResource(R.string.symmetry_mirror_h)) },
-                            onClick = {
-                                creativeMenu = false
-                                actions.setSymmetry(SymmetryType.MIRROR, MirrorAxes.H)
-                            },
-                        )
-                        DropdownMenuItem(
-                            text = { Text(stringResource(R.string.symmetry_mirror_vh)) },
-                            onClick = {
-                                creativeMenu = false
-                                actions.setSymmetry(SymmetryType.MIRROR, MirrorAxes.VH)
-                            },
-                        )
-                        DropdownMenuItem(
-                            text = { Text(stringResource(R.string.symmetry_radial)) },
-                            onClick = {
-                                creativeMenu = false
-                                actions.setSymmetry(SymmetryType.RADIAL)
-                            },
-                        )
-                        DropdownMenuItem(
-                            text = { Text(stringResource(R.string.symmetry_kaleido)) },
-                            onClick = {
-                                creativeMenu = false
-                                actions.setSymmetry(SymmetryType.KALEIDO)
-                            },
-                        )
-                        HorizontalDivider()
-                        DropdownMenuItem(
-                            text = { Text(stringResource(R.string.guide_ruler)) },
-                            leadingIcon = menuCheck(state.ruler != null),
-                            onClick = {
-                                creativeMenu = false
-                                actions.setRuler(state.ruler == null)
-                            },
-                        )
-                        DropdownMenuItem(
-                            text = { Text(stringResource(R.string.guide_ellipse)) },
-                            leadingIcon = menuCheck(state.ellipse != null),
-                            onClick = {
-                                creativeMenu = false
-                                actions.setEllipseGuide(state.ellipse == null)
-                            },
-                        )
-                        DropdownMenuItem(
-                            text = { Text(stringResource(R.string.guide_lazy)) },
-                            leadingIcon = menuCheck(state.lazy != null),
-                            onClick = {
-                                creativeMenu = false
-                                actions.setLazy(state.lazy == null)
-                            },
-                        )
-                        HorizontalDivider()
-                        PerspectiveMenuItem(
-                            PerspectiveType.ONE_POINT,
-                            stringResource(R.string.persp_1pt),
-                            state.perspective?.type == PerspectiveType.ONE_POINT,
-                        ) {
-                            creativeMenu = false
-                            actions.setPerspective(perspectiveToggle(state.perspective, PerspectiveType.ONE_POINT))
-                        }
-                        PerspectiveMenuItem(
-                            PerspectiveType.TWO_POINT,
-                            stringResource(R.string.persp_2pt),
-                            state.perspective?.type == PerspectiveType.TWO_POINT,
-                        ) {
-                            creativeMenu = false
-                            actions.setPerspective(perspectiveToggle(state.perspective, PerspectiveType.TWO_POINT))
-                        }
-                        PerspectiveMenuItem(
-                            PerspectiveType.THREE_POINT,
-                            stringResource(R.string.persp_3pt),
-                            state.perspective?.type == PerspectiveType.THREE_POINT,
-                        ) {
-                            creativeMenu = false
-                            actions.setPerspective(perspectiveToggle(state.perspective, PerspectiveType.THREE_POINT))
-                        }
-                        PerspectiveMenuItem(
-                            PerspectiveType.ISO,
-                            stringResource(R.string.persp_iso),
-                            state.perspective?.type == PerspectiveType.ISO,
-                        ) {
-                            creativeMenu = false
-                            actions.setPerspective(perspectiveToggle(state.perspective, PerspectiveType.ISO))
-                        }
-                        PerspectiveMenuItem(
-                            PerspectiveType.GRID_2D,
-                            stringResource(R.string.persp_grid),
-                            state.perspective?.type == PerspectiveType.GRID_2D,
-                        ) {
-                            creativeMenu = false
-                            actions.setPerspective(perspectiveToggle(state.perspective, PerspectiveType.GRID_2D))
-                        }
-                        HorizontalDivider()
-                        for ((shapeTool, label) in SHAPE_MENU) {
-                            DropdownMenuItem(
-                                text = { Text(stringResource(label)) },
-                                onClick = {
-                                    creativeMenu = false
-                                    actions.selectShapeTool(shapeTool)
-                                },
-                            )
-                        }
-                    }
-                }
+                CreativeToolsButton(state = state, actions = actions)
                 var toolsMenu by remember { mutableStateOf(false) }
                 Box {
                     PainterIconButton(

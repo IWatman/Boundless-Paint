@@ -147,6 +147,7 @@
     <string name="shape_outline">Outline</string>
     <string name="shape_fill">Fill</string>
     <string name="shape_stamp">Stamp</string>
+    <string name="menu_shapes">Shapes</string>
     <string name="symmetry_title">Symmetry</string>
     <string name="symmetry_off">Symmetry off</string>
     <string name="symmetry_mirror_v">Mirror vertical</string>
@@ -164,6 +165,7 @@
     <string name="guide_magnet">Magnet</string>
     <string name="guide_lock">Lock</string>
     <string name="guide_lazy_radius">Radius</string>
+    <string name="menu_guides">Guides</string>
     <string name="persp_title">Perspective</string>
     <string name="persp_1pt">1-point perspective</string>
     <string name="persp_2pt">2-point perspective</string>

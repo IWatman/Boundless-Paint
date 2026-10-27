@@ -50,13 +50,13 @@ fun GuidesBar(
                         style = MaterialTheme.typography.titleSmall,
                         modifier = Modifier.padding(start = 4.dp, end = 4.dp),
                     )
-                    GuideToggle(stringResource(R.string.guide_perpendicular), ruler.perpendicular) {
+                    ToggleChip(stringResource(R.string.guide_perpendicular), ruler.perpendicular) {
                         actions.setRulerPerpendicular(!ruler.perpendicular)
                     }
-                    GuideToggle(stringResource(R.string.guide_magnet), ruler.magnet) {
+                    ToggleChip(stringResource(R.string.guide_magnet), ruler.magnet) {
                         actions.setRulerMagnet(!ruler.magnet)
                     }
-                    GuideToggle(stringResource(R.string.guide_lock), ruler.locked) {
+                    ToggleChip(stringResource(R.string.guide_lock), ruler.locked) {
                         actions.setRulerLocked(!ruler.locked)
                     }
                     TextButton(onClick = { actions.setRuler(false) }) { Text("×") }
@@ -75,10 +75,10 @@ fun GuidesBar(
                         style = MaterialTheme.typography.titleSmall,
                         modifier = Modifier.padding(start = 4.dp, end = 4.dp),
                     )
-                    GuideToggle(stringResource(R.string.guide_magnet), ellipse.magnet) {
+                    ToggleChip(stringResource(R.string.guide_magnet), ellipse.magnet) {
                         actions.setEllipseMagnet(!ellipse.magnet)
                     }
-                    GuideToggle(stringResource(R.string.guide_lock), ellipse.locked) {
+                    ToggleChip(stringResource(R.string.guide_lock), ellipse.locked) {
                         actions.setEllipseLocked(!ellipse.locked)
                     }
                     TextButton(onClick = { actions.setEllipseGuide(false) }) { Text("×") }
@@ -129,26 +129,18 @@ fun GuidesBar(
                         style = MaterialTheme.typography.titleSmall,
                         modifier = Modifier.padding(start = 4.dp, end = 4.dp),
                     )
-                    GuideToggle(stringResource(R.string.persp_snap), perspective.snap) {
+                    ToggleChip(stringResource(R.string.persp_snap), perspective.snap) {
                         actions.setPerspectiveSnap(!perspective.snap)
                     }
-                    GuideToggle(stringResource(R.string.persp_visible), perspective.visible) {
+                    ToggleChip(stringResource(R.string.persp_visible), perspective.visible) {
                         actions.setPerspectiveVisible(!perspective.visible)
                     }
-                    GuideToggle(stringResource(R.string.guide_lock), perspective.locked) {
+                    ToggleChip(stringResource(R.string.guide_lock), perspective.locked) {
                         actions.setPerspectiveLocked(!perspective.locked)
                     }
                     TextButton(onClick = { actions.setPerspective(null) }) { Text("×") }
                 }
             }
         }
-    }
-}
-
-/** Text button of a bar toggle, drawn in the primary color while it is on. */
-@Composable
-private fun GuideToggle(label: String, on: Boolean, onClick: () -> Unit) {
-    TextButton(onClick = onClick) {
-        Text(label, color = if (on) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }

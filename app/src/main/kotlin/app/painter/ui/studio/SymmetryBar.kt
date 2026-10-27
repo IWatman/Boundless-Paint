@@ -40,23 +40,15 @@ fun SymmetryBar(symmetry: SymmetryUi, actions: StudioActions, modifier: Modifier
                     TextButton(onClick = { actions.setSymmetryPlanes(symmetry.planes + 1) }) { Text("+") }
                 }
             }
-            SymmetryToggle(stringResource(R.string.symmetry_lock), symmetry.locked) {
+            ToggleChip(stringResource(R.string.symmetry_lock), symmetry.locked) {
                 actions.setSymmetryLocked(!symmetry.locked)
             }
             if (symmetry.type != SymmetryType.RADIAL) {
-                SymmetryToggle(stringResource(R.string.symmetry_crop), symmetry.crop) {
+                ToggleChip(stringResource(R.string.symmetry_crop), symmetry.crop) {
                     actions.setSymmetryCrop(!symmetry.crop)
                 }
             }
             TextButton(onClick = { actions.setSymmetry(null) }) { Text("×") }
         }
-    }
-}
-
-/** Text button of a bar toggle, drawn in the primary color while it is on. */
-@Composable
-private fun SymmetryToggle(label: String, on: Boolean, onClick: () -> Unit) {
-    TextButton(onClick = onClick) {
-        Text(label, color = if (on) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
