@@ -22,12 +22,19 @@ import kotlin.math.roundToInt
 private const val MAX_LAZY_RADIUS = 200f
 
 /**
- * Contextual bar of the guide overlays, shown at the top end while [StudioUiState.ruler] or
- * [StudioUiState.lazy] is on: one row per active guide. The ruler row toggles Perpendicular, Magnet and Lock
- * and turns the ruler off; the lazy row sets the rope radius and turns the lazy rope off.
+ * Contextual bar of the guide overlays, shown at the top end while [StudioUiState.ruler],
+ * [StudioUiState.ellipse] or [StudioUiState.lazy] is on: one row per active guide. The ruler row toggles
+ * Perpendicular, Magnet and Lock and turns the ruler off; the ellipse row toggles Magnet and Lock and turns
+ * the ellipse off; the lazy row sets the rope radius and turns the lazy rope off.
  */
 @Composable
-fun GuidesBar(ruler: RulerUi?, lazy: LazyUi?, actions: StudioActions, modifier: Modifier = Modifier) {
+fun GuidesBar(
+    ruler: RulerUi?,
+    ellipse: EllipseUi?,
+    lazy: LazyUi?,
+    actions: StudioActions,
+    modifier: Modifier = Modifier,
+) {
     Column(modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
         if (ruler != null) {
             PanelSurface {
@@ -51,6 +58,28 @@ fun GuidesBar(ruler: RulerUi?, lazy: LazyUi?, actions: StudioActions, modifier: 
                         actions.setRulerLocked(!ruler.locked)
                     }
                     TextButton(onClick = { actions.setRuler(false) }) { Text("×") }
+                }
+            }
+        }
+        if (ellipse != null) {
+            PanelSurface {
+                Row(
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    Text(
+                        stringResource(R.string.guide_ellipse),
+                        style = MaterialTheme.typography.titleSmall,
+                        modifier = Modifier.padding(start = 4.dp, end = 4.dp),
+                    )
+                    GuideToggle(stringResource(R.string.guide_magnet), ellipse.magnet) {
+                        actions.setEllipseMagnet(!ellipse.magnet)
+                    }
+                    GuideToggle(stringResource(R.string.guide_lock), ellipse.locked) {
+                        actions.setEllipseLocked(!ellipse.locked)
+                    }
+                    TextButton(onClick = { actions.setEllipseGuide(false) }) { Text("×") }
                 }
             }
         }

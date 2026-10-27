@@ -33,6 +33,7 @@ import app.painter.core.fill.Region
 import app.painter.core.fill.RegionParams
 import app.painter.core.fill.Spread
 import app.painter.core.guide.DocRect
+import app.painter.core.guide.EllipseConfig
 import app.painter.core.guide.GuideJson
 import app.painter.core.guide.GuideState
 import app.painter.core.guide.LazyConfig
@@ -104,6 +105,7 @@ import app.painter.ui.home.ProjectCardUi
 import app.painter.ui.studio.AdjustEditorUi
 import app.painter.ui.studio.BrushModeUi
 import app.painter.ui.studio.CanvasTransformUi
+import app.painter.ui.studio.EllipseUi
 import app.painter.ui.studio.GradientStopUi
 import app.painter.ui.studio.GradientUi
 import app.painter.ui.studio.HudUi
@@ -231,6 +233,7 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
                 adjustmentEditor = null,
                 symmetry = symmetryUi(),
                 ruler = rulerUi(),
+                ellipse = ellipseUi(),
                 lazy = lazyUi(),
             )
         }
@@ -1472,6 +1475,13 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
     private fun LinesConfig.toUi(): RulerUi? =
         if (!on) null else RulerUi(a.x, a.y, b.x, b.y, perpendicular, magnet, locked)
 
+    /** Ellipse published to the overlay, null while it is off. */
+    private fun ellipseUi(): EllipseUi? = guides.ellipse.toUi()
+
+    /** View state of an ellipse config; null when the ellipse is off. */
+    private fun EllipseConfig.toUi(): EllipseUi? =
+        if (!on) null else EllipseUi(c.x, c.y, rx, rx * ratio, angleDeg, magnet, locked)
+
     /** Lazy rope published to the bar, null while it is off. */
     private fun lazyUi(): LazyUi? = guides.lazy.toUi()
 
@@ -1486,7 +1496,7 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
         guides = newGuides
         doc.guides = GuideJson.toElement(guides) as JsonObject
         markDirty()
-        _state.update { it.copy(symmetry = symmetryUi(), ruler = rulerUi(), lazy = lazyUi()) }
+        _state.update { it.copy(symmetry = symmetryUi(), ruler = rulerUi(), ellipse = ellipseUi(), lazy = lazyUi()) }
     }
 
     override fun setSymmetry(type: SymmetryType?, axes: MirrorAxes) {
@@ -1559,6 +1569,39 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
     override fun setRulerMagnet(on: Boolean) = applyGuides(guides.copy(lines = guides.lines.copy(magnet = on)))
 
     override fun setRulerLocked(on: Boolean) = applyGuides(guides.copy(lines = guides.lines.copy(locked = on)))
+
+    override fun setEllipseGuide(on: Boolean) {
+        var ellipse = guides.ellipse
+        // An ellipse that was never placed starts as a circle in the middle of the canvas (spec G2.2).
+        if (on && ellipse.c == EllipseConfig().c && ellipse.rx == EllipseConfig().rx) {
+            ellipse = EllipseConfig.defaultFor(DocRect(0f, 0f, doc.width.toFloat(), doc.height.toFloat()))
+        }
+        applyGuides(guides.copy(ellipse = ellipse.copy(on = on)))
+    }
+
+    override fun moveEllipse(dx: Float, dy: Float) {
+        val ellipse = guides.ellipse
+        if (!ellipse.on) return
+        applyGuides(guides.copy(ellipse = ellipse.copy(c = Vec2(ellipse.c.x + dx, ellipse.c.y + dy))))
+    }
+
+    override fun setEllipseRadii(rx: Float, ry: Float) {
+        val ellipse = guides.ellipse
+        if (!ellipse.on) return
+        val r = maxOf(rx, 4f)
+        // Kept above MIN_RATIO so the minor axis never collapses on the major one (spec G2.2).
+        val ratio = (ry / r).coerceAtLeast(EllipseConfig.MIN_RATIO)
+        applyGuides(guides.copy(ellipse = ellipse.copy(rx = r, ratio = ratio)))
+    }
+
+    override fun setEllipseAngle(deg: Float) {
+        if (!guides.ellipse.on) return
+        applyGuides(guides.copy(ellipse = guides.ellipse.copy(angleDeg = snapAngle(deg))))
+    }
+
+    override fun setEllipseMagnet(on: Boolean) = applyGuides(guides.copy(ellipse = guides.ellipse.copy(magnet = on)))
+
+    override fun setEllipseLocked(on: Boolean) = applyGuides(guides.copy(ellipse = guides.ellipse.copy(locked = on)))
 
     // ---- options ----
 

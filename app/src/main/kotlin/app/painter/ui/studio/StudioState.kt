@@ -152,6 +152,8 @@ data class StudioUiState(
     val gradient: GradientUi? = null,
     /** Ruler guide of the open document, null while the ruler is off. */
     val ruler: RulerUi? = null,
+    /** Ellipse guide of the open document, null while the ellipse is off. */
+    val ellipse: EllipseUi? = null,
     /** Lazy rope stabilizer of the open document, null while it is off. */
     val lazy: LazyUi? = null,
     /** Symmetry settings of the open document, null while symmetry is off. */
@@ -208,6 +210,21 @@ data class RulerUi(
     val bx: Float,
     val by: Float,
     val perpendicular: Boolean,
+    val magnet: Boolean,
+    val locked: Boolean,
+)
+
+/**
+ * Ellipse guide: centre ([cx], [cy]) and semi-axes [rx]/[ry] in document pixels, rotated by [angleDeg]
+ * around the centre, plus its snapping flags.
+ */
+@Immutable
+data class EllipseUi(
+    val cx: Float,
+    val cy: Float,
+    val rx: Float,
+    val ry: Float,
+    val angleDeg: Float,
     val magnet: Boolean,
     val locked: Boolean,
 )
@@ -373,6 +390,24 @@ interface StudioActions {
 
     /** Locks the ruler: a locked ruler cannot be moved by its handles. */
     fun setRulerLocked(on: Boolean) {}
+
+    /** Turns the ellipse guide on or off; turning it on the first time places a circle in the canvas middle. */
+    fun setEllipseGuide(on: Boolean) {}
+
+    /** Moves the ellipse centre by ([dx], [dy]) document pixels. */
+    fun moveEllipse(dx: Float, dy: Float) {}
+
+    /** Sets the semi-axes: [rx] is kept at 4 px or more and the vertical/horizontal ratio follows [ry]/[rx]. */
+    fun setEllipseRadii(rx: Float, ry: Float) {}
+
+    /** Rotation of the ellipse in degrees, snapped to multiples of 45° within ±3°. */
+    fun setEllipseAngle(deg: Float) {}
+
+    /** Keeps strokes started near the ellipse outline on it. */
+    fun setEllipseMagnet(on: Boolean) {}
+
+    /** Locks the ellipse: a locked ellipse cannot be moved or resized by its handles. */
+    fun setEllipseLocked(on: Boolean) {}
 
     /** Sets the main axis angle in degrees, snapped to multiples of 45° within ±3°. */
     fun setSymmetryAngle(deg: Float) {}

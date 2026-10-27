@@ -142,10 +142,12 @@ fun StudioScreen(
                 )
             }
             val ruler = state.ruler
+            val ellipse = state.ellipse
             val lazy = state.lazy
-            if (ruler != null || lazy != null) {
+            if (ruler != null || ellipse != null || lazy != null) {
                 GuidesBar(
                     ruler = ruler,
+                    ellipse = ellipse,
                     lazy = lazy,
                     actions = actions,
                     modifier = Modifier
@@ -214,7 +216,7 @@ private fun StudioTopBar(state: StudioUiState, actions: StudioActions, modifier:
                         Icons.Outlined.AutoAwesome,
                         stringResource(R.string.creative_tools),
                         { creativeMenu = true },
-                        tint = if (state.symmetry == null && state.ruler == null && state.lazy == null) {
+                        tint = if (state.symmetry == null && state.ruler == null && state.ellipse == null && state.lazy == null) {
                             MaterialTheme.colorScheme.onSurface
                         } else {
                             MaterialTheme.colorScheme.primary
@@ -270,6 +272,14 @@ private fun StudioTopBar(state: StudioUiState, actions: StudioActions, modifier:
                             onClick = {
                                 creativeMenu = false
                                 actions.setRuler(state.ruler == null)
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.guide_ellipse)) },
+                            leadingIcon = menuCheck(state.ellipse != null),
+                            onClick = {
+                                creativeMenu = false
+                                actions.setEllipseGuide(state.ellipse == null)
                             },
                         )
                         DropdownMenuItem(

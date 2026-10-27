@@ -148,6 +148,7 @@
     <string name="symmetry_crop">Crop at axis</string>
     <!-- Guides -->
     <string name="guide_ruler">Ruler</string>
+    <string name="guide_ellipse">Ellipse</string>
     <string name="guide_lazy">Lazy stroke</string>
     <string name="guide_perpendicular">Perpendicular</string>
     <string name="guide_magnet">Magnet</string>
