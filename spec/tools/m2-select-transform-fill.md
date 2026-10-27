@@ -1,198 +1,198 @@
-# Спеки инструментов M2: пипетка, выделение, трансформация, заливки
+# M2 tool specs: eyedropper, selection, transform, fills
 
-Источники: features/15-selection, 16-transform, 09-fill, 05-color, 02-workspace-ui-gestures; spec/GAPS.md (метрики), spec/UI-SHELL.md (каркас).
-Правило M2: растровые операции считаются на CPU в `:core` (тайл-параллельно, `Dispatchers.Default`), GPU только превью и композит. Всё, что записывается в документ, считает CPU. Превью на GPU должно совпадать с CPU-результатом с точностью ≤ 2/255.
-Монетизации нет: все режимы, интерполяции, типы градиентов доступны сразу.
+Sources: features/15-selection, 16-transform, 09-fill, 05-color, 02-workspace-ui-gestures; spec/GAPS.md (metrics), spec/UI-SHELL.md (shell).
+M2 rule: raster operations are computed on the CPU in `:core` (tile-parallel, `Dispatchers.Default`), the GPU only previews and composites. Everything that is written into the document is computed by the CPU. The GPU preview must match the CPU result to within ≤ 2/255.
+No monetization: all modes, interpolations and gradient types are available immediately.
 
-## 0. Общие изменения ядра (делает координатор, до остальных пакетов)
+## 0. Common core changes (done by the coordinator, before the other packages)
 
-### 0.1 Новые общие типы `core/raster`
-| Тип | Суть |
+### 0.1 New common types in `core/raster`
+| Type | Essence |
 |---|---|
-| `MaskTile` + `isEmpty()`, `isFull()`, `fill(v: Byte)` | дописать методы, формат данных не меняется |
-| `class MaskGrid(width, height)` | разреженная сетка `MaskTile`, отсутствующий тайл = 0. API зеркалит `TileGrid`: `get/getOrCreate/put/keys/entries/copy/compact/clear/keysInRect`, `value(x, y): Float` (0 вне холста), `bounds(): IntRect?` |
-| `data class IntRect(x0, y0, x1, y1)` | полуоткрытый прямоугольник в px документа. `intersect`, `union`, `isEmpty`, `tileKeys(gridW, gridH)` |
-| `class MaskPatch(before: Map<TileKey, MaskTile?>, after: …)` | аналог `TilePatch` для маски выделения. `byteSize = n · 65536` |
-| `class BitPlane(width, height)` | 1 бит на пиксель (`LongArray`), `get/set/clear/or/and/andNot/bounds()`. Для регионов заливки и палочки (4096² = 2 МБ) |
+| `MaskTile` + `isEmpty()`, `isFull()`, `fill(v: Byte)` | add the methods, the data format does not change |
+| `class MaskGrid(width, height)` | a sparse grid of `MaskTile`, a missing tile = 0. The API mirrors `TileGrid`: `get/getOrCreate/put/keys/entries/copy/compact/clear/keysInRect`, `value(x, y): Float` (0 outside the canvas), `bounds(): IntRect?` |
+| `data class IntRect(x0, y0, x1, y1)` | a half-open rectangle in document px. `intersect`, `union`, `isEmpty`, `tileKeys(gridW, gridH)` |
+| `class MaskPatch(before: Map<TileKey, MaskTile?>, after: …)` | the analogue of `TilePatch` for the selection mask. `byteSize = n · 65536` |
+| `class BitPlane(width, height)` | 1 bit per pixel (`LongArray`), `get/set/clear/or/and/andNot/bounds()`. For fill regions and the wand (4096² = 2 MB) |
 
-### 0.2 Документ
-- `Document.selection: Selection` (не null, пустая маска = выделения нет).
+### 0.2 Document
+- `Document.selection: Selection` (not null, an empty mask = no selection).
 - `class Selection(width, height) { val mask: MaskGrid; var active: Boolean = true; val isEmpty: Boolean; val version: Long }`.
-- «Действует» = `active && !isEmpty`. Только тогда инструменты маскируются.
-- `Selection.coverageOrNull(): MaskGrid?` возвращает маску, если выделение действует, иначе null. Им пользуются все пиксельные операции.
+- "Active" = `active && !isEmpty`. Only then are the tools masked.
+- `Selection.coverageOrNull(): MaskGrid?` returns the mask if the selection is active, otherwise null. All pixel operations use it.
 
-### 0.3 Прочие общие API
-| Где | Что | Зачем |
+### 0.3 Other common APIs
+| Where | What | Why |
 |---|---|---|
-| `core/blend/Compositor` | `fun flattenTile(doc, key, includePaper: Boolean): Tile?` | композит одного тайла. Пипетка и заливка по холсту не держат весь холст в памяти (4096² float = 256 МБ) |
-| `core/history` | `class MaskPatchCommand(patch, name)`, `class SetSelectionActive(on)` | undo выделения |
-| `core/raster/MaskedEdit.kt` | `fun maskedCommit(layer, result: Map<TileKey, Tile?>, mask: MaskGrid?, name): TilePatch` | общий путь: `out = before·(1−m) + after·m` (premult). Им пользуются заливка, градиент, Delete, фильтры (M3) |
-| `core/stroke/StrokeEngine` | ctor-параметр `clip: MaskGrid? = null` | мазок под выделением: в `compositeBuffer` `sa *= m`, в direct-режиме `DabRenderer.render(…, clip)` умножает покрытие даба на `m` |
-| `app/render/CanvasView` | `setSelection(mask?, showOverlay)`, `setFloating(FloatingPreview?)`, `setGradientPreview(GradientSpec?)`, `setRegionPreview(MaskGrid?, color)` | превью (раздел 2.7, 3.6, 4.5) |
-| `app/render` | `interface ToolInput { onDown/onMove/onUp/onCancel(docX, docY, p) ; onTap }` + маршрутизация в активный workspace | у workspace свои жесты, мазок не начинается |
+| `core/blend/Compositor` | `fun flattenTile(doc, key, includePaper: Boolean): Tile?` | composite of a single tile. The eyedropper and canvas fills do not keep the whole canvas in memory (4096² float = 256 MB) |
+| `core/history` | `class MaskPatchCommand(patch, name)`, `class SetSelectionActive(on)` | selection undo |
+| `core/raster/MaskedEdit.kt` | `fun maskedCommit(layer, result: Map<TileKey, Tile?>, mask: MaskGrid?, name): TilePatch` | the common path: `out = before·(1−m) + after·m` (premult). Used by fill, gradient, Delete and filters (M3) |
+| `core/stroke/StrokeEngine` | ctor parameter `clip: MaskGrid? = null` | a stroke under a selection: in `compositeBuffer` `sa *= m`, in direct mode `DabRenderer.render(…, clip)` multiplies the dab coverage by `m` |
+| `app/render/CanvasView` | `setSelection(mask?, showOverlay)`, `setFloating(FloatingPreview?)`, `setGradientPreview(GradientSpec?)`, `setRegionPreview(MaskGrid?, color)` | previews (sections 2.7, 3.6, 4.5) |
+| `app/render` | `interface ToolInput { onDown/onMove/onUp/onCancel(docX, docY, p) ; onTap }` + routing to the active workspace | workspaces have their own gestures, no stroke begins |
 
-### 0.4 Формат проекта (`core/io`)
-- `manifest.json`: `"selection": { "active": true }`. Поле отсутствует = нет выделения. Schema остаётся 1 (новое поле опционально, старые читатели его игнорируют). **Решение.**
-- `selection/tiles.idx` + `selection/tiles.bin`: формат как у `masks/<nodeId>/`, R8, LZ4 на тайл.
-- Выделение сохраняется всегда (у ibis это опция, у нас дефолт без настройки). **Решение.**
-- Буфер обмена, настройки инструментов и последний градиент хранятся в настройках приложения, не в проекте.
+### 0.4 Project format (`core/io`)
+- `manifest.json`: `"selection": { "active": true }`. The field is absent = no selection. The schema stays 1 (the new field is optional, old readers ignore it). **Decision.**
+- `selection/tiles.idx` + `selection/tiles.bin`: the same format as `masks/<nodeId>/`, R8, LZ4 per tile.
+- The selection is always saved (in ibis it is an option, for us the default is without a setting). **Decision.**
+- The clipboard, the tool settings and the last gradient are stored in the app settings, not in the project.
 
-## 1. Пипетка (`core/pick`)
+## 1. Eyedropper (`core/pick`)
 
-| Параметр | Диапазон | Дефолт |
+| Parameter | Range | Default |
 |---|---|---|
-| Источник | Холст (все видимые слои + Paper, скрытая Paper = белый) / Текущий слой | Холст |
-| Размер сэмпла | 1–100 px (диаметр круга) | 1 |
-| Задержка long-press | 200–1500 мс | 500 мс (сейчас константа 600 мс в `GestureRouter`, вынести в настройки) |
+| Source | Canvas (all visible layers + Paper, hidden Paper = white) / Current layer | Canvas |
+| Sample size | 1–100 px (circle diameter) | 1 |
+| Long-press delay | 200–1500 ms | 500 ms (currently a 600 ms constant in `GestureRouter`, move it to the settings) |
 
-**Алгоритм.** Берём пиксели в круге диаметра `d` с центром в `(floor x, floor y)`. Тайлы получаем через `flattenTile` или из слоя, они кешируются на сессию пипетки (ключ `doc.modified`). Premult-значения усредняются, потом цвет un-premultiply. Если средняя `α < 1/255`, результата нет. Режим «Текущий слой»: adjustment-слои выше игнорируются. Итоговая альфа всегда 1, цвет кладётся в current color и в recent colors.
+**Algorithm.** Take the pixels in a circle of diameter `d` centered at `(floor x, floor y)`. Tiles come from `flattenTile` or from the layer, they are cached for the eyedropper session (key `doc.modified`). The premult values are averaged, then the color is un-premultiplied. If the mean `α < 1/255`, there is no result. "Current layer" mode: adjustment layers above are ignored. The resulting alpha is always 1, the color is put into the current color and into the recent colors.
 
-**Вызов:**
-- long-press по холсту (дефолт, назначаемое);
-- drag от кнопки Color в main toolbar наружу больше 24 dp (T6);
-- иконка в Color panel;
-- кнопка стилуса (назначаемая, долг 12);
-- клавиша `I`.
+**Invocation:**
+- long-press on the canvas (default, assignable);
+- a drag from the Color button in the main toolbar outward by more than 24 dp (T6);
+- an icon in the Color panel;
+- a stylus button (assignable, debt 12);
+- the `I` key.
 
-Цвет обновляется на move и фиксируется на up. Тап вторым пальцем или drag обратно на кнопку отменяет.
+The color is updated on move and fixed on up. A tap with a second finger or a drag back onto the button cancels.
 
-**Лупа (UI):**
-- Кольцо диаметром 112 dp, толщина 14 dp, центр смещён на 96 dp вверх от точки (у края экрана уходит вниз или вбок).
-- Верхняя половина кольца = новый цвет, нижняя = текущий.
-- Внутри кольца пиксели под точкой с увеличением ×8 (nearest) и перекрестье 1 px. Сэмпл-круг обведён, если `d > 1`.
-- Под кольцом hex нового цвета.
-- Настройки (⚙ пипетки, также Settings → Input): источник, размер, задержка, «Лупа вкл/выкл» (вкл).
+**Loupe (UI):**
+- A ring of 112 dp diameter, 14 dp thick, its center offset 96 dp up from the point (near the screen edge it moves down or sideways).
+- The upper half of the ring = the new color, the lower half = the current one.
+- Inside the ring, the pixels under the point at ×8 magnification (nearest) and a 1 px crosshair. The sample circle is outlined if `d > 1`.
+- Below the ring the hex of the new color.
+- Settings (the eyedropper ⚙, also Settings → Input): source, size, delay, "Loupe on/off" (on).
 
 **API:**
 ```kotlin
 enum class PickSource { CANVAS, CURRENT_LAYER }
 class Eyedropper(doc: Document, source: PickSource, layerId: String?, diameter: Int = 1) {
     fun sample(x: Float, y: Float): Rgba?            // straight, a = 1
-    fun loupe(x: Int, y: Int, radius: Int, out: IntArray) // ARGB8888 (2r+1)², для UI
+    fun loupe(x: Int, y: Int, radius: Int, out: IntArray) // ARGB8888 (2r+1)², for the UI
 }
 ```
-**Приёмка:**
-- сэмпл однотонной области = цвет ± 1/255;
-- `d = 5` на шахматке чёрное/белое даёт серый ≈ 0.5;
-- 60 fps лупы на 4096² × 10 слоёв (кеш тайлов).
+**Acceptance:**
+- a sample of a solid area = the color ± 1/255;
+- `d = 5` on a black/white checkerboard gives a gray of ≈ 0.5;
+- 60 fps of the loupe on 4096² × 10 layers (tile cache).
 
-**Тесты:**
+**Tests:**
 - `pick_singlePixel_currentLayer`;
 - `pick_canvas_includesPaper`, `pick_canvas_hiddenPaperIsWhite`;
-- `pick_average_premultipliedNoDarkFringe` (полупрозрачный красный на прозрачном = чистый красный);
+- `pick_average_premultipliedNoDarkFringe` (semi-transparent red over transparent = pure red);
 - `pick_transparent_returnsNull`;
 - `pick_outOfBounds_null`;
 - `pick_cacheInvalidatedOnModified`.
 
-## 2. Выделение (`core/select`)
+## 2. Selection (`core/select`)
 
-### 2.1 Модель
-- Маска 8 бит уровня документа (`Document.selection.mask`), значения 0..1, мягкие края допустимы.
-- Отдельный от маски флаг `active`: выключение в top bar не стирает маску.
-- Комбинирование новой формы `S` с маской `M`, нечёткие операции (**решение**: max/min, без накопления краёв):
+### 2.1 Model
+- An 8-bit mask at document level (`Document.selection.mask`), values 0..1, soft edges are allowed.
+- The `active` flag is separate from the mask: turning it off in the top bar does not erase the mask.
+- Combining a new shape `S` with the mask `M`, fuzzy operations (**decision**: max/min, without accumulating edges):
 
-| Режим | Формула | Вызов |
+| Mode | Formula | Invocation |
 |---|---|---|
-| Новое | `S` | дефолт, если маска пуста |
-| Добавить | `max(M, S)` | дефолт, если маска есть (как Normal у IP) |
-| Вычесть | `min(M, 1 − S)` | |
-| Пересечь | `min(M, S)` | |
+| New | `S` | default if the mask is empty |
+| Add | `max(M, S)` | default if the mask exists (like Normal in IP) |
+| Subtract | `min(M, 1 − S)` | |
+| Intersect | `min(M, S)` | |
 
-- Touch-Alt (удержание пальца при стилусе) на время жеста меняет Добавить ↔ Вычесть.
+- Touch-Alt (holding a finger while using the stylus) switches Add ↔ Subtract for the duration of the gesture.
 
-### 2.2 Инструменты
-| Инструмент | Ввод | Алгоритм |
+### 2.2 Tools
+| Tool | Input | Algorithm |
 |---|---|---|
-| Лассо | свободный drag, на up контур замыкается | полилиния, прореженная до шага ≥ 1 px документа → `PolygonRaster` |
-| Полигон | тап = узел; drag = свободный участок; hold 1 с на узле = перетащить; тап по первому узлу или ✓ = замкнуть | тот же растеризатор |
-| Прямоугольник | drag от угла к углу. После up форма остаётся редактируемой: 8 ручек resize, ручка rotate, drag внутри = move. Следующий тап вне формы = коммит и новая форма | форма → 4 вершины |
-| Эллипс | drag от центра (IP). Ручки как у прямоугольника | 256 сегментов → полигон |
-| Палочка | тап = tolerance из настроек; drag от точки = live tolerance | `Region` из §4.1 (общий код с заливкой) → маска |
-| Кисть / ластик выделения | Paint и Erase main toolbar рисуют по маске любой кистью, цвет игнорируется | `MaskStrokeEngine`: обычный мазок в RGBA-буфер, на `end()` альфа буфера `a` идёт в маску: add `m + a(1−m)`, erase `m(1−a)` |
-| Выделить непрозрачное | Layer options слоя/группы | `m = α` слоя (группа: композит без Paper) с выбранным режимом §2.1 (булевы операции IP) |
+| Lasso | a free drag, the contour closes on up | a polyline decimated to a step ≥ 1 document px → `PolygonRaster` |
+| Polygon | tap = a node; drag = a free segment; hold for 1 s on a node = drag it; tapping the first node or ✓ = close | the same rasterizer |
+| Rectangle | drag from corner to corner. After up the shape stays editable: 8 resize handles, a rotate handle, drag inside = move. The next tap outside the shape = commit and a new shape | shape → 4 vertices |
+| Ellipse | drag from the center (IP). Handles as on the rectangle | 256 segments → a polygon |
+| Wand | tap = the tolerance from the settings; drag from the point = live tolerance | the `Region` from §4.1 (code shared with the fill) → a mask |
+| Selection brush / eraser | Paint and Erase in the main toolbar paint on the mask with any brush, the color is ignored | `MaskStrokeEngine`: a regular stroke into an RGBA buffer, on `end()` the buffer alpha `a` goes into the mask: add `m + a(1−m)`, erase `m(1−a)` |
+| Select opaque | Layer options of a layer/group | `m = α` of the layer (for a group: the composite without Paper) with the mode selected in §2.1 (IP boolean operations) |
 
 **PolygonRaster.**
-- Скан-линии, правило non-zero (самопересекающееся лассо закрашивает петли). **Решение.**
-- AA вкл: 4×4 суперсэмпл покрытия на пиксель (16 уровней). AA выкл: центр пикселя.
-- Работа ограничена bbox, тайлы параллельно.
+- Scanlines, non-zero rule (a self-intersecting lasso fills the loops). **Decision.**
+- AA on: 4×4 coverage supersampling per pixel (16 levels). AA off: the pixel center.
+- The work is bounded by the bbox, tiles run in parallel.
 
-**Параметры палочки** (⚙, общие с заливкой: tolerance, boundary, reference):
+**Wand parameters** (⚙, shared with the fill: tolerance, boundary, reference):
 
-| Параметр | Диапазон | Дефолт |
+| Parameter | Range | Default |
 |---|---|---|
 | Tolerance | 0–100 % | 15 % |
-| Смежные (contiguous) | вкл/выкл | вкл |
-| Источник | Холст / Текущий слой / Слой-источник | Холст |
-| Граница | Цвет / Непрозрачность | Цвет |
-| Расширение | −20…+20 px | 0 |
-| Сглаживание | вкл/выкл | вкл |
+| Contiguous | on/off | on |
+| Source | Canvas / Current layer / Source layer | Canvas |
+| Boundary | Color / Opacity | Color |
+| Expansion | −20…+20 px | 0 |
+| Antialiasing | on/off | on |
 
-Live tolerance: расстояние drag в dp / 300 dp → 0–100 %, пересчёт не чаще 15 Гц, последний запрос отменяет предыдущий.
+Live tolerance: drag distance in dp / 300 dp → 0–100 %, recomputed at most at 15 Hz, the last request cancels the previous one.
 
-### 2.3 Операции над маской
-| Операция | Параметры | Алгоритм |
+### 2.3 Mask operations
+| Operation | Parameters | Algorithm |
 |---|---|---|
-| Выделить всё | | все тайлы в пределах холста = 255 |
-| Инвертировать | | `1 − m` по всему холсту, отсутствующие тайлы → полные |
-| Снять | | маска пуста |
-| Расширить / сжать | −100…+100 px, дефолт 0, слайдер с live-превью | бинаризация `m ≥ 0.5`, знаковое EDT (§4.2), покрытие `clamp(e + 0.5 − s, 0, 1)`. Мягкость маски теряется (**решение**), после этого можно Растушевать |
-| Растушевать | радиус 0–250 px, дефолт 8 | гаусс σ = r/2, три box-прохода, сепарабельно, тайлы с полем 3σ |
-| Трансформировать маску | | §3 с объектом «маска» |
+| Select all | | all tiles within the canvas = 255 |
+| Invert | | `1 − m` over the whole canvas, missing tiles → full |
+| Deselect | | the mask is empty |
+| Expand / contract | −100…+100 px, default 0, a slider with a live preview | binarization `m ≥ 0.5`, signed EDT (§4.2), coverage `clamp(e + 0.5 − s, 0, 1)`. The softness of the mask is lost (**decision**), Feather can be applied afterwards |
+| Feather | radius 0–250 px, default 8 | Gaussian σ = r/2, three box passes, separable, tiles with a 3σ margin |
+| Transform mask | | §3 with the "mask" object |
 
-### 2.4 Операции над содержимым
-Пустое выделение означает весь слой или холст.
+### 2.4 Content operations
+An empty selection means the whole layer or canvas.
 
-| Операция | Что делает |
+| Operation | What it does |
 |---|---|
-| Копировать | активный слой × m → внутренний буфер + системный буфер (PNG через FileProvider) |
-| Копировать сведённое | видимый композит без Paper × m → буфер |
-| Вырезать | Копировать + Удалить, одна команда |
-| Вставить | из буфера (свежее из внутреннего и системного) → новый слой над активным, позиция = исходная (или центр видимой области, если источник извне) → сразу открывается Transform |
-| Дубликат на слой | активный × m → новый слой «<имя> копия», над активным → Transform |
-| Изолировать | Вырезать на новый слой → Transform |
-| Залить | текущий цвет, normal OVER, покрытие m, учитывает alpha lock |
-| Удалить | `maskedCommit` прозрачным |
-| Трансформировать | §3 с выделенным фрагментом |
+| Copy | the active layer × m → the internal buffer + the system clipboard (PNG via FileProvider) |
+| Copy merged | the visible composite without Paper × m → the buffer |
+| Cut | Copy + Delete, one command |
+| Paste | from the buffer (the fresher of the internal buffer and the system clipboard) → a new layer above the active one, position = the original one (or the center of the visible area if the source is external) → Transform opens immediately |
+| Duplicate to layer | the active layer × m → a new layer "<name> copy", above the active one → Transform |
+| Isolate | Cut onto a new layer → Transform |
+| Fill | the current color, normal OVER, coverage m, respects alpha lock |
+| Delete | `maskedCommit` with transparent |
+| Transform | §3 with the selected fragment |
 
-- После Вставить, Дубликат и Изолировать маска сохраняется и трансформируется вместе с фрагментом (**решение**, отличие от IP: выделение не сбрасывается).
-- `Clear layer` (long-press undo) при действующем выделении очищает только выделенное.
+- After Paste, Duplicate and Isolate the mask is preserved and transformed together with the fragment (**decision**, a difference from IP: the selection is not dropped).
+- `Clear layer` (long-press undo) with an active selection clears only the selected area.
 
-### 2.5 Маскирование других инструментов
-- Кисть, ластик, blend (M2), заливка, градиент, Delete, фильтры (M3): результат проходит через `m`. Для мазка через `StrokeEngine(clip)`, для остального через `maskedCommit`.
-- Workspace выделения открыт: Paint/Erase рисуют по маске, не по слою.
-- Выделение выключено (`active = false`) или пусто: маскирования нет.
+### 2.5 Masking other tools
+- Brush, eraser, blend (M2), fill, gradient, Delete, filters (M3): the result goes through `m`. For a stroke via `StrokeEngine(clip)`, for everything else via `maskedCommit`.
+- With the selection workspace open, Paint/Erase paint on the mask, not on the layer.
+- The selection is off (`active = false`) or empty: no masking.
 
-### 2.6 UI (IP-каркас)
-**Editing Tools → Selection** открывает Selection workspace. Тулбар внизу, скроллится:
-- ✗ (снять выделение и выйти);
-- селектор инструмента (Лассо, Полигон, Прямоугольник, Эллипс, Палочка, Кисть);
-- сегмент режима (Новое / Добавить / Вычесть / Пересечь);
-- операции маски (Всё, Инвертировать, Расширить/сжать, Растушевать, Трансформировать маску);
-- операции содержимого (Копировать, Копировать сведённое, Вырезать, Вставить, Дубликат, Изолировать, Залить, Удалить, Трансформировать);
-- ✓ (выйти, выделение действует).
+### 2.6 UI (IP shell)
+**Editing Tools → Selection** opens the Selection workspace. The toolbar is at the bottom, scrollable:
+- ✗ (deselect and exit);
+- tool selector (Lasso, Polygon, Rectangle, Ellipse, Wand, Brush);
+- mode segment (New / Add / Subtract / Intersect);
+- mask operations (All, Invert, Expand/contract, Feather, Transform mask);
+- content operations (Copy, Copy merged, Cut, Paste, Duplicate, Isolate, Fill, Delete, Transform);
+- ✓ (exit, the selection stays active).
 
-Прочие элементы:
-- **Top bar**, пока маска не пуста: меню Selection (те же операции без инструментов + вид маски) и тоггл Active (акцентный цвет, клавиша `\`).
-- **⚙** параметры палочки и AA фигур.
-- **Layer options**: «Выделить непрозрачное» с режимами Новое / Добавить / Вычесть / Пересечь.
-- **Вставить** продублировать в Options-меню, когда буфер не пуст.
+Other elements:
+- **Top bar**, while the mask is not empty: the Selection menu (the same operations without the tools + the mask view) and the Active toggle (accent color, key `\`).
+- **⚙** wand and shape AA parameters.
+- **Layer options**: "Select opaque" with the modes New / Add / Subtract / Intersect.
+- **Paste** duplicated in the Options menu when the buffer is not empty.
 
-### 2.7 Отображение
-- **Marching ants.** Контур по iso 0.5 маски, marching squares на CPU. Кеш по `MaskTile.version`. Отрезки в VBO.
-- Штрих 1 dp, шейдер чередует ч/б по `fract((gl_FragCoord.x + gl_FragCoord.y) / 16dp + t)`, сдвиг 0.5 периода в секунду. Полилинии сшивать не нужно. **Решение.**
-- **Overlay.** Невыделенная область тонируется (R8-текстура маски, цвет #E0405A, 35 %). Включён внутри workspace, вне его только ants. В меню вид: Ants / Overlay / оба, цвет, opacity 0–100 %.
-- Неактивное выделение: ants серым, без анимации.
+### 2.7 Display
+- **Marching ants.** A contour along the 0.5 iso of the mask, marching squares on the CPU. Cached by `MaskTile.version`. The segments go into a VBO.
+- Dash 1 dp, the shader alternates black/white by `fract((gl_FragCoord.x + gl_FragCoord.y) / 16dp + t)`, a shift of half a period per second. The polylines do not need to be stitched. **Decision.**
+- **Overlay.** The unselected area is tinted (the R8 mask texture, color #E0405A, 35 %). It is on inside the workspace, outside it only the ants. The view menu: Ants / Overlay / both, color, opacity 0–100 %.
+- Inactive selection: the ants are gray, without animation.
 
 ### 2.8 Undo
-- Каждая операция над маской = `MaskPatchCommand` (Лассо, Палочка, Расширить…). Мазок кисти выделения = одна команда.
-- Операции над содержимым = `CompoundCommand(TilePatchCommand…, MaskPatchCommand?, AddLayer?)`.
-- Тоггл Active = `SetSelectionActive`. ✗ = команда «Снять выделение».
-- Live-превью (live tolerance, слайдер расширения) в историю не попадает, только финальное значение.
+- Every mask operation = a `MaskPatchCommand` (Lasso, Wand, Expand…). A selection brush stroke = one command.
+- Content operations = `CompoundCommand(TilePatchCommand…, MaskPatchCommand?, AddLayer?)`.
+- The Active toggle = `SetSelectionActive`. ✗ = a "Deselect" command.
+- Live previews (live tolerance, the expand slider) do not go into history, only the final value.
 
 ### 2.9 API
 ```kotlin
 enum class SelectMode { NEW, ADD, SUBTRACT, INTERSECT }
-sealed interface SelShape { fun toPolygon(): FloatArray }  // xy-пары в px документа
+sealed interface SelShape { fun toPolygon(): FloatArray }  // xy pairs in document px
 data class PolyShape(val pts: FloatArray) : SelShape
 data class RectShape(val cx: Float, val cy: Float, val w: Float, val h: Float, val angleDeg: Float) : SelShape
 data class EllipseShape(val cx: Float, val cy: Float, val rx: Float, val ry: Float, val angleDeg: Float) : SelShape
@@ -202,12 +202,12 @@ object MaskOps {
     fun selectAll(m: MaskGrid); fun invert(m: MaskGrid); fun fromAlpha(g: TileGrid): MaskGrid
     fun expand(m: MaskGrid, px: Float, aa: Boolean): MaskGrid
     fun feather(m: MaskGrid, radius: Float): MaskGrid
-    fun contour(t: MaskTile, key: TileKey): FloatArray  // отрезки для ants
+    fun contour(t: MaskTile, key: TileKey): FloatArray  // segments for the ants
 }
 class MaskStrokeEngine(doc: Document, params: BrushParams, mode: StrokeMode) {
     fun begin(p: InputPoint); fun add(points: List<InputPoint>); fun end(): MaskPatch?; fun cancel()
 }
-object SelectionEdits {   // каждая функция возвращает готовую Command
+object SelectionEdits {   // every function returns a ready Command
     fun shape(doc: Document, s: SelShape, mode: SelectMode, aa: Boolean): Command
     fun wand(doc: Document, x: Int, y: Int, p: RegionParams, ref: RefSource, mode: SelectMode): Command
     fun copy(doc: Document, merged: Boolean): Floating  // Floating(pixels: TileGrid, bounds: IntRect)
@@ -215,16 +215,16 @@ object SelectionEdits {   // каждая функция возвращает г
     fun pasteAsLayer(doc: Document, f: Floating, at: IntRect): Command
 }
 ```
-**Приёмка:**
-- лассо-круг r = 100 даёт площадь πr² ± 1 %;
-- AA-край имеет промежуточные значения, без AA только 0 и 255;
-- инверт дважды = исходная маска (побитно);
-- мазок кистью вне выделения не меняет пиксели (побитно);
-- палочка на 4096² ≤ 300 мс на mid-range;
-- ants видны на любом фоне, 60 fps при pan;
-- выделение переживает save/load и force-stop.
+**Acceptance:**
+- a lasso circle of r = 100 gives an area of πr² ± 1 %;
+- the AA edge has intermediate values, without AA only 0 and 255;
+- inverting twice = the original mask (bitwise);
+- a brush stroke outside the selection does not change the pixels (bitwise);
+- the wand on 4096² ≤ 300 ms on mid-range;
+- the ants are visible on any background, 60 fps while panning;
+- the selection survives save/load and force-stop.
 
-**Тесты:**
+**Tests:**
 - `raster_rect_exactArea`, `raster_circle_areaWithin1pct`, `raster_selfIntersecting_nonZero`, `raster_aaOff_binary`;
 - `combine_add_max`, `combine_subtract`, `combine_intersect`, `combine_newReplaces`;
 - `invert_twice_identity`, `selectAll_coversCanvasOnly`;
@@ -238,92 +238,92 @@ object SelectionEdits {   // каждая функция возвращает г
 - `io_selection_saveLoad`, `io_noSelection_fieldAbsent`;
 - `contour_squareMask_4edges`.
 
-## 3. Трансформация (`core/transform`)
+## 3. Transform (`core/transform`)
 
-### 3.1 Объекты и сессия
-**Объект:**
-- Выделение действует: фрагмент `слой × m` на каждом слое набора, маска трансформируется вместе с ним.
-- Выделения нет: слой целиком.
-- Отдельный объект «маска выделения»: Selection → Трансформировать маску.
+### 3.1 Objects and session
+**Object:**
+- The selection is active: the fragment `layer × m` on every layer of the set, the mask is transformed together with it.
+- No selection: the whole layer.
+- A separate "selection mask" object: Selection → Transform mask.
 
-**Набор слоёв:**
-- По умолчанию активный слой.
-- Тап по превью в Layer panel добавляет или убирает слой (акцентная рамка).
-- Группа означает все её растровые потомки.
-- Заблокированные слои пропускаются (тост).
+**Layer set:**
+- By default the active layer.
+- A tap on a preview in the Layer panel adds or removes a layer (accent frame).
+- A group means all its raster descendants.
+- Locked layers are skipped (toast).
 
-**Вход в сессию:**
-1. Для каждого слоя `floating = pixels × m` (копия тайлов) и `rest = pixels × (1 − m)`. Без выделения `rest` пуст.
-2. Cage = общий плотный bbox альфы всех floating, выровнен по осям холста.
+**Entering a session:**
+1. For each layer `floating = pixels × m` (a copy of the tiles) and `rest = pixels × (1 − m)`. Without a selection `rest` is empty.
+2. Cage = the common tight alpha bbox of all floating content, aligned to the canvas axes.
 
-**Сессия:**
-- Режимы можно чередовать. Все правки составляют одно отображение от **исходного** floating, качество не теряется до ✓ (**решение**: virtual transform внутри сессии; сохранение source между сессиями по GAPS → M3).
-- ✓: CPU-ресэмплинг `floating` по обратному отображению → новые тайлы → normal OVER на `rest` → `TilePatch` на слой (+ `MaskPatch`) → одна `CompoundCommand("Трансформация")`.
-- Всё, что вышло за холст, обрезается. **Решение.**
-- ✗ восстанавливает слои без записи в историю.
+**Session:**
+- Modes can be alternated. All edits make up a single mapping from the **original** floating content, quality is not lost until ✓ (**decision**: virtual transform inside the session; keeping the source between sessions per GAPS → M3).
+- ✓: CPU resampling of `floating` by the inverse mapping → new tiles → normal OVER onto `rest` → `TilePatch` onto the layer (+ `MaskPatch`) → one `CompoundCommand("Transform")`.
+- Everything that goes outside the canvas is clipped. **Decision.**
+- ✗ restores the layers without writing to history.
 
-### 3.2 Режимы
-| Режим | Жесты | Модель |
+### 3.2 Modes
+| Mode | Gestures | Model |
 |---|---|---|
-| Базовый (дефолт) | drag внутри или вне cage = move; угол = scale (пропорция по тогглу «Uniform», дефолт вкл, от центра); боковая ручка = stretch по одной оси от противоположной стороны; ручка rotate над верхним краем (32 dp); 2 пальца внутри cage = move + pinch + rotate, вне cage = навигация; Touch-Alt: move по 45°, scale шагом 100 % | `Affine(a, b, c, d, tx, ty)` |
-| Якорь | как Базовый, но pivot = перетаскиваемая точка (может быть за холстом), прилипает к 9 точкам cage и центру холста в радиусе 24 dp. Pivot служит центром scale/rotate/flip/45° | Affine вокруг pivot |
-| Искажение | 4 угла свободно; боковая ручка: перпендикулярно = stretch, вдоль = skew (двигает оба угла); drag внутри = move всей четвёрки. Невыпуклый четырёхугольник не принимается, остаётся последнее валидное положение | гомография 3×3 по 4 парам точек (DLT, Гаусс 8×8 с выбором ведущего) |
-| Деформация | сетка 4×4 контрольных точек (3×3 ячейки), drag за любую точку внутри тянет ближайшую в параметрах (u, v) с весами Бернштейна | бикубический Безье-патч = clamped B-spline 4×4 (GAPS). Тесселяция 32×32 в превью, 64×64 на коммите |
+| Basic (default) | drag inside or outside the cage = move; a corner = scale (proportional by the "Uniform" toggle, default on, from the center); a side handle = stretch along one axis from the opposite side; the rotate handle above the top edge (32 dp); 2 fingers inside the cage = move + pinch + rotate, outside the cage = navigation; Touch-Alt: move in 45° steps, scale in 100 % steps | `Affine(a, b, c, d, tx, ty)` |
+| Anchor | like Basic, but the pivot is a draggable point (it may be outside the canvas), it snaps to the 9 cage points and the canvas center within a 24 dp radius. The pivot serves as the center for scale/rotate/flip/45° | Affine around the pivot |
+| Distort | the 4 corners move freely; a side handle: perpendicular = stretch, along = skew (moves both corners); drag inside = move the whole quad. A non-convex quad is rejected, the last valid position is kept | 3×3 homography from 4 point pairs (DLT, 8×8 Gaussian with pivoting) |
+| Warp | a 4×4 grid of control points (3×3 cells), a drag on any point inside pulls the nearest one in parameters (u, v) with Bernstein weights | a bicubic Bézier patch = a clamped 4×4 B-spline (GAPS). Tessellation 32×32 in the preview, 64×64 on commit |
 
-**Кнопки:**
-- Отразить H и Отразить V относительно pivot (центр cage, если pivot не задан).
-- ↻45° по часовой.
-- «Штамп»: текущий результат копируется на слой «<имя> штампы» (создаётся один раз за сессию), сессия продолжается.
-- «Только рамка» (unlock cage): двигается cage без объекта. Только Базовый и Искажение.
+**Buttons:**
+- Flip H and Flip V about the pivot (the cage center if no pivot is set).
+- ↻45° clockwise.
+- "Stamp": the current result is copied to the layer "<name> stamps" (created once per session), the session continues.
+- "Cage only" (unlock cage): the cage moves without the object. Basic and Distort only.
 
-**Композиция:** affine × homography сводится в одну гомографию. Warp применяется после неё, к узлам сетки, прошедшим через гомографию. Итог хранится как `Mapping`.
+**Composition:** affine × homography collapse into a single homography. Warp is applied after it, to the grid nodes that have gone through the homography. The result is stored as a `Mapping`.
 
-### 3.3 Числовой ввод
-Кнопка «123» открывает диалог:
+### 3.3 Numeric input
+The "123" button opens a dialog:
 
-| Поле | Диапазон | Примечание |
+| Field | Range | Note |
 |---|---|---|
-| X, Y | центр cage, px | |
-| W, H | 1…32768 px или 1…10000 % | замок пропорций |
-| Угол | −360…360°, шаг 0.1 | |
-| Сдвиг X/Y | −89…89° | |
+| X, Y | cage center, px | |
+| W, H | 1…32768 px or 1…10000 % | aspect lock |
+| Angle | −360…360°, step 0.1 | |
+| Skew X/Y | −89…89° | |
 
-Доступен в Базовом и Якоре. В Искажении диалог показывает координаты 4 углов.
+Available in Basic and Anchor. In Distort the dialog shows the coordinates of the 4 corners.
 
-### 3.4 Ресэмплинг
-| Метод | Формула | Когда |
+### 3.4 Resampling
+| Method | Formula | When |
 |---|---|---|
-| Ближайший | `floor(u), floor(v)` | пиксель-арт |
-| Билинейный | 2×2 | быстрый |
-| Бикубический (дефолт) | Catmull-Rom (a = −0.5), 4×4, premult, результат clamp: `α ∈ [0, 1]`, `rgb ≤ α` | качество |
+| Nearest | `floor(u), floor(v)` | pixel art |
+| Bilinear | 2×2 | fast |
+| Bicubic (default) | Catmull-Rom (a = −0.5), 4×4, premult, the result is clamped: `α ∈ [0, 1]`, `rgb ≤ α` | quality |
 
-- Уменьшение сильнее 2× (локальный якобиан: `max singular < 0.5`): сначала выбирается уровень box-mip-пирамиды floating (каждый уровень = среднее 2×2) с масштабом ≥ 0.5, потом метод. Так получается «усреднение» ibis без отдельного режима. **Решение.**
+- Downscaling by more than 2× (local Jacobian: `max singular < 0.5`): first a level of the floating box-mip pyramid (each level = a 2×2 average) with scale ≥ 0.5 is picked, then the method. This yields the "averaging" of ibis without a separate mode. **Decision.**
 - Lanczos 2/3 → P2.
-- Метод выбирается в ⚙ сессии и запоминается в настройках.
-- Превью на GPU: linear + mipmap, nearest для «Ближайшего».
+- The method is chosen in the session ⚙ and remembered in the settings.
+- GPU preview: linear + mipmap, nearest for "Nearest".
 
-### 3.5 Привязки (⚙, дефолт вкл)
-- Move: края и центр cage прилипают к краям и центру холста, порог 8 dp экрана.
-- Rotate: 0/90/180/270 ± 3° (как T1). С Touch-Alt шаг 15°.
-- Scale: к 100 % ± 2 %.
-- Pivot: см. Якорь.
+### 3.5 Snapping (⚙, on by default)
+- Move: the cage edges and center snap to the canvas edges and center, threshold 8 screen dp.
+- Rotate: 0/90/180/270 ± 3° (as in T1). With Touch-Alt the step is 15°.
+- Scale: to 100 % ± 2 %.
+- Pivot: see Anchor.
 
-### 3.6 Превью
+### 3.6 Preview
 - `CanvasView.setFloating(FloatingPreview(layerIds, textures, mapping, tess))`.
-- `rest` загружается как пиксели слоя. Floating рисуется сеткой треугольников с uv в стеке на месте слоя (тот же blend и opacity). Перезаливка floating-текстур не нужна.
-- Cage, ручки и pivot рисуются Compose-оверлеем поверх GL. HUD показывает W×H, угол, %.
+- `rest` is loaded as the layer pixels. The floating content is drawn as a triangle mesh with uv in the stack at the layer position (the same blend and opacity). Re-uploading the floating textures is not needed.
+- The cage, handles and pivot are drawn by a Compose overlay above GL. The HUD shows W×H, the angle, the %.
 
 ### 3.7 UI
-**Вход:** Editing Tools → Transform; из Selection; автоматически после Вставить, Дубликат, Изолировать, Импорт изображения.
+**Entry:** Editing Tools → Transform; from Selection; automatically after Paste, Duplicate, Isolate, Import image.
 
-**Тулбар внизу:** ✗ · режим (Базовый / Якорь / Искажение / Деформация) · Отразить H · Отразить V · ↻45° · Штамп · Только рамка · 123 · ✓.
+**Toolbar at the bottom:** ✗ · mode (Basic / Anchor / Distort / Warp) · Flip H · Flip V · ↻45° · Stamp · Cage only · 123 · ✓.
 
-**⚙:** интерполяция, Uniform, привязки.
+**⚙:** interpolation, Uniform, snapping.
 
 ### 3.8 API
 ```kotlin
 sealed interface Mapping {
-    /** dst → src; false если точка вне области отображения. */
+    /** dst → src; false if the point is outside the mapping area. */
     fun inverse(x: Float, y: Float, out: FloatArray): Boolean
     fun dstBounds(src: IntRect): IntRect
 }
@@ -332,30 +332,30 @@ data class Affine(val a: Float, val b: Float, val c: Float, val d: Float, val tx
     companion object { val IDENTITY: Affine; fun trs(tx: Float, ty: Float, sx: Float, sy: Float, rotDeg: Float, px: Float, py: Float): Affine }
 }
 class Projective(val m: FloatArray /*3×3*/) : Mapping { companion object { fun fromQuads(src: FloatArray, dst: FloatArray): Projective? } }
-class BezierWarp(val pre: Projective, val ctrl: FloatArray /*16 точек dst*/, val src: IntRect, val tess: Int = 64) : Mapping
+class BezierWarp(val pre: Projective, val ctrl: FloatArray /*16 dst points*/, val src: IntRect, val tess: Int = 64) : Mapping
 enum class Resample { NEAREST, BILINEAR, BICUBIC }
 object Resampler { fun sample(src: TileGrid, mips: MipChain?, u: Float, v: Float, mode: Resample, out: FloatArray) }
 class TransformSession(doc: Document, layerIds: List<String>, target: Target /*PIXELS, SELECTION_MASK*/) {
     val cage: IntRect; val floating: Map<String, TileGrid>
     fun stamp(mapping: Mapping, mode: Resample): Command
-    fun commit(mapping: Mapping, mode: Resample): Command  // CompoundCommand, уже применена
+    fun commit(mapping: Mapping, mode: Resample): Command  // CompoundCommand, already applied
     fun cancel()
 }
 object Snap { fun move(cage: RectF, canvasW: Int, canvasH: Int, thresholdPx: Float): PointF; fun angle(deg: Float, step: Float, tol: Float): Float }
 ```
-- Коммит: обходятся тайлы `dstBounds ∩ холст`, параллельно, на каждый пиксель `inverse` → `sample`.
-- Warp: для каждого треугольника тесселяции барицентрический обход dst-пикселей → uv. Это та же геометрия, что на GPU.
+- Commit: the tiles of `dstBounds ∩ canvas` are iterated, in parallel, `inverse` → `sample` per pixel.
+- Warp: for each tessellation triangle a barycentric walk over the dst pixels → uv. This is the same geometry as on the GPU.
 
-**Приёмка:**
-- move на целые px с Nearest и Bicubic побитно равен сдвигу;
-- поворот 4 × 90° = исходник побитно, flip дважды = исходник;
-- scale 50 % шахматки 1 px = серый 0.5 ± 1/255 (mip);
-- Искажение квадрата в те же углы = identity ± 1/255;
-- превью и коммит расходятся ≤ 2/255 и ≤ 0.5 px;
-- 3 слоя + выделение → одна запись undo, undo восстанавливает слои и маску побитно;
-- коммит 4096² bicubic ≤ 1.5 с.
+**Acceptance:**
+- move by whole px with Nearest and Bicubic is bitwise equal to the shift;
+- four 90° rotations = the source bitwise, flipping twice = the source;
+- scale 50 % of a 1 px checkerboard = gray 0.5 ± 1/255 (mip);
+- Distorting a square into the same corners = identity ± 1/255;
+- the preview and the commit differ by ≤ 2/255 and ≤ 0.5 px;
+- 3 layers + selection → a single undo record, undo restores the layers and the mask bitwise;
+- commit of 4096² bicubic ≤ 1.5 s.
 
-**Тесты:**
+**Tests:**
 - `affine_compose_inverse`;
 - `trs_aroundPivot`;
 - `homography_identityQuad`, `homography_squareToTrapezoid_cornersExact`, `homography_degenerate_null`;
@@ -367,119 +367,119 @@ object Snap { fun move(cage: RectF, canvasW: Int, canvasH: Int, thresholdPx: Flo
 - `stamp_createsLayerOnce`;
 - `snap_move_edges`, `snap_angle_90`.
 
-## 4. Заливки (`core/fill`)
+## 4. Fills (`core/fill`)
 
-### 4.1 Регион (общий для ведра, палочки, ограничения градиента)
-**Источник пикселей `PixelSource.tile(key)`:**
-- Холст: видимые слои, без Paper. Пустые места остаются прозрачными, поэтому граница по непрозрачности работает. **Решение.**
-- Текущий слой.
-- Слой-источник: назначается в Layer options «Сделать источником заливки». Пока источник ≠ активному, на тулбаре видна иконка.
+### 4.1 Region (shared by the bucket, the wand and the gradient limit)
+**Pixel source `PixelSource.tile(key)`:**
+- Canvas: visible layers, without Paper. Empty places stay transparent, so the opacity boundary works. **Decision.**
+- Current layer.
+- Source layer: assigned in Layer options "Make fill source". While the source ≠ the active layer, an icon is visible in the toolbar.
 
-**Шаги:**
-1. **Seed:** цвет `c0` под точкой (un-premult).
-2. **Fillable `F`** (BitPlane, тайлы параллельно):
-   - граница Цвет: `max(|ΔR|, |ΔG|, |ΔB|, |ΔA|) ≤ tol` на un-premult (GAPS);
-   - граница Непрозрачность: `|ΔA| ≤ tol`;
-   - tol 100 % = весь холст.
-3. **Gap closing** `g` (0–20 px, дефолт 0 для палочки, 4 для ведра):
+**Steps:**
+1. **Seed:** the color `c0` under the point (un-premult).
+2. **Fillable `F`** (BitPlane, tiles in parallel):
+   - Color boundary: `max(|ΔR|, |ΔG|, |ΔB|, |ΔA|) ≤ tol` on un-premult (GAPS);
+   - Opacity boundary: `|ΔA| ≤ tol`;
+   - tol 100 % = the whole canvas.
+3. **Gap closing** `g` (0–20 px, default 0 for the wand, 4 for the bucket):
    - `B = ¬F`; `B' = dilate(B, g)` (EDT ≤ g);
-   - flood от seed в `¬B'` даёт `R'`;
+   - a flood from the seed in `¬B'` gives `R'`;
    - `R = dilate(R', g + 1) ∩ F`;
-   - если seed попал в `B'`, gap closing не применяется;
-   - протечка через разрыв ограничена g px (принято).
-4. **Flood:** скан-линейный с явным стеком отрезков, 4-связность (не протекает через диагональные линии). Non-contiguous: `R = F`.
-5. **Expansion** `e` и AA → покрытие через знаковое EDT (§4.2): `cov = AA ? clamp(e + 0.5 − s, 0, 1) : (s ≤ e ? 1 : 0)`.
-6. **Итог:** `cov × selection`.
+   - if the seed falls into `B'`, gap closing is not applied;
+   - leakage through a gap is bounded by g px (accepted).
+4. **Flood:** scanline with an explicit stack of spans, 4-connectivity (does not leak through diagonal lines). Non-contiguous: `R = F`.
+5. **Expansion** `e` and AA → coverage via the signed EDT (§4.2): `cov = AA ? clamp(e + 0.5 − s, 0, 1) : (s ≤ e ? 1 : 0)`.
+6. **Result:** `cov × selection`.
 
 ### 4.2 EDT
-- Точное евклидово, Felzenszwalb–Huttenlocher: 1D-параболы, сначала столбцы, потом строки, параллельно по полосам.
-- Считается только в `bbox(R) ± (|e| + g + 2)`.
-- Знаковое расстояние:
-  - `s = d_in − 0.5` снаружи (`d_in` = расстояние до ближайшего пикселя R);
-  - `s = −(d_out − 0.5)` внутри.
+- Exact Euclidean, Felzenszwalb–Huttenlocher: 1D parabolas, first the columns, then the rows, in parallel over bands.
+- Computed only within `bbox(R) ± (|e| + g + 2)`.
+- Signed distance:
+  - `s = d_in − 0.5` outside (`d_in` = distance to the nearest pixel of R);
+  - `s = −(d_out − 0.5)` inside.
 
-### 4.3 Ведро
-| Параметр | Диапазон | Дефолт |
+### 4.3 Bucket
+| Parameter | Range | Default |
 |---|---|---|
-| Tolerance (общий с палочкой) | 0–100 % | 15 % |
-| Граница | Цвет / Непрозрачность | Цвет |
-| Источник | Холст / Текущий слой / Слой-источник | Холст |
+| Tolerance (shared with the wand) | 0–100 % | 15 % |
+| Boundary | Color / Opacity | Color |
+| Source | Canvas / Current layer / Source layer | Canvas |
 | Gap closing | 0–20 px | 4 |
-| Expansion | −20…+20 px, шаг 0.5 | +1.5 (как у ibis, закрывает щели антиалиаса лайнарта) |
-| Сглаживание | вкл/выкл | вкл |
-| Смежные | вкл/выкл | вкл |
-| Режим | Залить / Стереть (в прозрачность) | Залить |
+| Expansion | −20…+20 px, step 0.5 | +1.5 (like ibis, closes antialiasing slits in line art) |
+| Antialiasing | on/off | on |
+| Contiguous | on/off | on |
+| Mode | Fill / Erase (to transparency) | Fill |
 | Opacity | 0–100 % | 100 % |
 
-- **Применение:** Залить = normal OVER цвета с `cov · opacity`, alpha lock соблюдается. Стереть = `d ·= 1 − cov · opacity`. Через `maskedCommit`, одна команда «Заливка».
-- **Перекраска:** после заливки смена цвета в Color panel перекрашивает последнюю заливку (revert + повтор с новым цветом, та же запись undo), пока не сделана следующая заливка или ✓. **Решение.**
-- **Live tolerance:** как у палочки. Превью = `setRegionPreview(cov, color)`.
-- **Лассо-заливка** (подтип в селекторе): обвести → полигон (§2.2, non-zero, AA вкл) → залить или стереть с opacity, с учётом выделения. Варианты «все слои» и Surrounding fill → M4.
+- **Application:** Fill = normal OVER of the color with `cov · opacity`, alpha lock is respected. Erase = `d ·= 1 − cov · opacity`. Via `maskedCommit`, one "Fill" command.
+- **Recolor:** after a fill, changing the color in the Color panel recolors the last fill (revert + repeat with the new color, the same undo record) until the next fill or ✓. **Decision.**
+- **Live tolerance:** as with the wand. Preview = `setRegionPreview(cov, color)`.
+- **Lasso fill** (a subtype in the selector): outline → polygon (§2.2, non-zero, AA on) → fill or erase with opacity, respecting the selection. The "all layers" and Surrounding fill variants → M4.
 
-### 4.4 Градиент
-**Типы.** `p0` = старт, `p1` = конец, `d = p1 − p0`.
+### 4.4 Gradient
+**Types.** `p0` = start, `p1` = end, `d = p1 − p0`.
 
-| Тип | `t` |
+| Type | `t` |
 |---|---|
-| Линейный | `dot(p − p0, d) / |d|²` |
-| Радиальный | `|p − p0| / |d|` |
-| Симметричный | `|dot(p − p0, d)| / |d|²` |
-| Угловой | `((atan2(p − p0) − atan2(d)) / 2π) mod 1`, затем `fract(t · n)`, повторы n = 1–100 (дефолт 1) |
+| Linear | `dot(p − p0, d) / |d|²` |
+| Radial | `|p − p0| / |d|` |
+| Symmetric | `|dot(p − p0, d)| / |d|²` |
+| Angular | `((atan2(p − p0) − atan2(d)) / 2π) mod 1`, then `fract(t · n)`, repetitions n = 1–100 (default 1) |
 
-**Повтор:**
-- Pad (дефолт) = clamp;
+**Spread:**
+- Pad (default) = clamp;
 - Repeat = `fract`;
-- Reflect = треугольник;
+- Reflect = triangle;
 - Reverse: `t → 1 − t`.
 
-Для Углового Reflect по умолчанию вкл, как у IP.
+For Angular, Reflect is on by default, as in IP.
 
-**Стопы:**
-- 2–32 штуки, `pos 0..1`, цвет straight sRGB с альфой.
-- Интерполяция между соседними стопами линейная в **premultiplied** (нет тёмной каймы у прозрачных стопов). **Решение.**
-- За пределами крайних стопов цвет крайнего.
-- Пресеты: «Цвет → прозрачный» (дефолт при первом запуске: current color α1 → тот же α0), «Цвет → предыдущий цвет». Потом используется последний градиент.
+**Stops:**
+- 2–32 of them, `pos 0..1`, straight sRGB color with alpha.
+- Interpolation between adjacent stops is linear in **premultiplied** space (no dark fringe at transparent stops). **Decision.**
+- Outside the outermost stops the color of the outermost stop is used.
+- Presets: "Color → transparent" (the default on first run: current color α1 → the same α0), "Color → previous color". After that the last gradient is used.
 
-**Дизеринг** (дефолт вкл):
-- к premult-RGBA добавляется детерминированный треугольный шум `(h1 + h2 − 1) / 255`, где `h` = хеш `(x, y, канал)` в [0, 1);
-- clamp в `[0, α]`;
-- детерминизм нужен, чтобы превью, коммит и тесты совпадали.
+**Dithering** (on by default):
+- deterministic triangular noise `(h1 + h2 − 1) / 255` is added to the premult-RGBA, where `h` = a hash of `(x, y, channel)` in [0, 1);
+- clamped to `[0, α]`;
+- determinism is needed so that the preview, the commit and the tests match.
 
-**Применение:**
-- normal OVER с `opacity (0–100 %, деф. 100) × selection × (регион?)`;
-- тоггл «Ограничить областью» (дефолт выкл) берёт регион §4.1 от `p0` с настройками ведра;
-- alpha lock соблюдается;
-- одна команда «Градиент» на каждый подтверждённый градиент.
+**Application:**
+- normal OVER with `opacity (0–100 %, default 100) × selection × (region?)`;
+- the "Limit to region" toggle (off by default) takes the region of §4.1 from `p0` with the bucket settings;
+- alpha lock is respected;
+- one "Gradient" command per confirmed gradient.
 
-**Ручки (до ✓ или до начала следующего градиента):**
-- стоп-кружки на оси: drag = двигать, tap = цвет (Color panel + opacity стопа), увести от оси дальше 48 dp = удалить (минимум 2 остаются);
-- tap по оси = новый стоп (цвет = текущее значение в этой точке);
-- drag оси = двигать весь градиент;
-- концы `p0` и `p1` двигаются.
+**Handles (until ✓ or until the next gradient starts):**
+- stop circles on the axis: drag = move, tap = color (Color panel + stop opacity), dragging farther than 48 dp from the axis = delete (at least 2 remain);
+- a tap on the axis = a new stop (color = the current value at that point);
+- dragging the axis = move the whole gradient;
+- the ends `p0` and `p1` move.
 
-Для Радиального рисуется окружность-превью, для Углового луч 0°.
+For Radial a preview circle is drawn, for Angular a 0° ray.
 
-**Превью:**
-- GPU-шейдер с теми же формулами (uniform: тип, p0, p1, до 32 стопов, повтор, n, дизеринг) поверх слоя под маской выделения;
-- CPU-коммит считает ту же функцию, тест-вектор GPU↔CPU обязателен (как долг 5).
+**Preview:**
+- a GPU shader with the same formulas (uniforms: type, p0, p1, up to 32 stops, spread, n, dithering) over the layer under the selection mask;
+- the CPU commit computes the same function, a GPU↔CPU test vector is mandatory (as with debt 5).
 
 ### 4.5 UI
-**Вход:** Creative Tools → Tools → Fill открывает Fill workspace.
+**Entry:** Creative Tools → Tools → Fill opens the Fill workspace.
 
-**Тулбар внизу:**
-- тип: Ведро / Градиент (подтип в выпадающем меню: Линейный, Радиальный, Симметричный, Угловой) / Лассо-заливка;
-- Источник (иконка-переключатель Холст / Текущий / Слой-источник);
-- Залить ↔ Стереть;
-- контролы типа;
+**Toolbar at the bottom:**
+- type: Bucket / Gradient (the subtype in a dropdown menu: Linear, Radial, Symmetric, Angular) / Lasso fill;
+- Source (a toggle icon: Canvas / Current / Source layer);
+- Fill ↔ Erase;
+- type controls;
 - ✓.
 
-Контролы типа:
-- Ведро: tolerance (virtual slider);
-- Градиент: повтор, Reverse, повторы n (Угловой), пресет, дизеринг, opacity.
+Type controls:
+- Bucket: tolerance (virtual slider);
+- Gradient: spread, Reverse, repetitions n (Angular), preset, dithering, opacity.
 
-**⚙:** tolerance, граница, gap, expansion, AA, смежные, «Ограничить областью».
+**⚙:** tolerance, boundary, gap, expansion, AA, contiguous, "Limit to region".
 
-У Ведра нет ✗: ✓ + undo (как у IP). У Градиента ✗ отменяет только текущий градиент. Main toolbar и Color panel остаются доступны. Несколько заливок разных типов подряд допускаются.
+The Bucket has no ✗: ✓ + undo (like IP). The Gradient's ✗ cancels only the current gradient. The main toolbar and the Color panel stay available. Several fills of different types in a row are allowed.
 
 ### 4.6 API
 ```kotlin
@@ -493,7 +493,7 @@ object Region {
     fun fillable(src: PixelSource, w: Int, h: Int, seed: Rgba, p: RegionParams): BitPlane
     fun flood(f: BitPlane, x: Int, y: Int): BitPlane
     fun coverage(r: BitPlane, expandPx: Float, aa: Boolean): MaskGrid
-    fun compute(doc: Document, ref: RefSource, x: Int, y: Int, p: RegionParams): MaskGrid?  // весь пайплайн §4.1
+    fun compute(doc: Document, ref: RefSource, x: Int, y: Int, p: RegionParams): MaskGrid?  // the whole pipeline of §4.1
 }
 object Edt { fun signed(r: BitPlane, area: IntRect): FloatArray }
 object BucketFill { fun apply(doc: Document, layerId: String, cov: MaskGrid, color: Rgba, opacity: Float, erase: Boolean): TilePatch? }
@@ -509,20 +509,20 @@ object Gradient {
     fun apply(doc: Document, layerId: String, g: GradientSpec, opacity: Float, region: MaskGrid?): TilePatch?
 }
 ```
-Все `apply` сами умножают на `doc.selection.coverageOrNull()` и возвращают патч уже применённым (как `StrokeEngine.end()`).
+All `apply` functions themselves multiply by `doc.selection.coverageOrNull()` and return the patch already applied (like `StrokeEngine.end()`).
 
-**Приёмка:**
-- заливка замкнутого круга лайнарта толщиной 3 px с разрывом 3 px при gap 4 не протекает наружу;
-- при expansion 1.5 нет белой каймы у AA-линии;
-- tol 0 на однотонном слое заливает весь смежный регион, tol 100 весь слой;
-- 4-связность: диагональная линия толщиной 1 px не пропускает заливку;
-- ведро на 4096² ≤ 300 мс (gap 0), ≤ 800 мс (gap 4);
-- градиент на 4096² ≤ 500 мс, без бандинга на 8-битном экспорте при dither вкл;
-- превью и коммит ≤ 2/255.
+**Acceptance:**
+- filling a closed circle of 3 px line art with a 3 px gap at gap 4 does not leak outside;
+- at expansion 1.5 there is no white fringe at the AA line;
+- tol 0 on a solid layer fills the whole contiguous region, tol 100 the whole layer;
+- 4-connectivity: a diagonal line 1 px thick does not let the fill through;
+- the bucket on 4096² ≤ 300 ms (gap 0), ≤ 800 ms (gap 4);
+- the gradient on 4096² ≤ 500 ms, without banding on an 8-bit export with dithering on;
+- the preview and the commit ≤ 2/255.
 
-**Тесты:**
+**Tests:**
 - `fillable_chebyshevMetric`, `fillable_alphaBoundary`, `fillable_tol100_all`;
-- `flood_4connected_diagonalBlocks`, `flood_nonContiguous_equalsF`, `flood_largeNoStackOverflow` (4096² пустой);
+- `flood_4connected_diagonalBlocks`, `flood_nonContiguous_equalsF`, `flood_largeNoStackOverflow` (4096² empty);
 - `gap_closesSmallGap`, `gap_seedInGap_fallback`;
 - `edt_matchesBruteForce_random64`;
 - `expand_positive_negative`, `aa_coverageRamp`;
@@ -537,14 +537,14 @@ object Gradient {
 - `undo_fill_singleCommand`;
 - `recolor_lastFill_sameHistoryEntry`.
 
-## 5. Порядок реализации
-1. **§0 (координатор):** общие типы, `Document.selection`, `MaskPatchCommand`, `flattenTile`, `maskedCommit`, `StrokeEngine(clip)`, IO выделения. Без этого остальное не собирается.
-2. **Параллельно:** `core/pick` (§1), `core/fill/Region + Edt` (§4.1–4.2, нужен палочке), `core/transform` (§3, от выделения зависит только через `MaskGrid`).
-3. **`core/select`** (§2), использует `Region`.
-4. **Ведро и градиент** (§4.3–4.4).
+## 5. Implementation order
+1. **§0 (coordinator):** the common types, `Document.selection`, `MaskPatchCommand`, `flattenTile`, `maskedCommit`, `StrokeEngine(clip)`, selection IO. Without this the rest does not compile.
+2. **In parallel:** `core/pick` (§1), `core/fill/Region + Edt` (§4.1–4.2, needed by the wand), `core/transform` (§3, it depends on the selection only through `MaskGrid`).
+3. **`core/select`** (§2), it uses `Region`.
+4. **Bucket and gradient** (§4.3–4.4).
 5. **App:**
-   - `ToolInput`-маршрутизация;
-   - шейдеры overlay/ants/floating/gradient;
-   - workspaces Selection, Transform, Fill;
-   - лупа;
-   - настройки.
+   - `ToolInput` routing;
+   - overlay/ants/floating/gradient shaders;
+   - the Selection, Transform and Fill workspaces;
+   - the loupe;
+   - the settings.

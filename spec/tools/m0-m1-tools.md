@@ -1,55 +1,55 @@
-# Спеки инструментов M0–M1
+# Tool specs M0–M1
 
-## T1. Навигация холста
-- 2 пальца: pan + pinch zoom (0.05×–64×, по центру жеста) + rotate (свободно, snap к 0/90/180/270 ±3°).
-- Быстрый pinch и отпускание (scale < 0.8 за < 250 мс) = fit. Двойной тап 1 пальцем = fit (настраивается).
-- Холст рендерится с mipmap при zoom < 1, nearest при zoom ≥ 4 (опция pixel view, иначе linear).
-- Фон вокруг холста: #2B2B2B (dark) / #D0D0D0 (light).
-- Приёмка: 60 fps при pan на холсте 4096² с 10 слоями.
+## T1. Canvas navigation
+- 2 fingers: pan + pinch zoom (0.05×–64×, at the gesture center) + rotate (free, snap to 0/90/180/270 ±3°).
+- Fast pinch and release (scale < 0.8 in < 250 ms) = fit. Double tap with 1 finger = fit (configurable).
+- The canvas is rendered with mipmap at zoom < 1, nearest at zoom ≥ 4 (pixel view option, otherwise linear).
+- Background around the canvas: #2B2B2B (dark) / #D0D0D0 (light).
+- Acceptance: 60 fps while panning on a 4096² canvas with 10 layers.
 
-## T2. Кисть (Paint)
-- Параметры M1: size, opacity, flow, spacing, hardness, pressure → size (кривая linear, min 20%), pressure → flow (выкл), smoothing (EMA), taper start/end, color.
-- Головы: процедурная круглая (hardness → профиль `smoothstep(1, h, r)`).
+## T2. Brush (Paint)
+- M1 parameters: size, opacity, flow, spacing, hardness, pressure → size (linear curve, min 20%), pressure → flow (off), smoothing (EMA), taper start/end, color.
+- Heads: procedural round (hardness → profile `smoothstep(1, h, r)`).
 - Stroke buffer + cap opacity.
-- Пальцем pressure = 1. Стилусом используются `getPressure()` и история (`getHistoricalX`) для каждой точки.
-- Приёмка:
-  - прямая линия без зазоров при spacing ≤ 25%;
-  - круглые концы;
-  - opacity 50% не накапливается внутри мазка;
-  - undo убирает мазок целиком.
+- With a finger pressure = 1. With a stylus, `getPressure()` and the history (`getHistoricalX`) are used for every point.
+- Acceptance:
+  - a straight line with no gaps at spacing ≤ 25%;
+  - round ends;
+  - opacity 50% does not accumulate inside a stroke;
+  - undo removes the whole stroke.
 
-## T3. Ластик (Erase)
-- Та же кисть, композит destination-out. Своя выбранная кисть для режима.
+## T3. Eraser (Erase)
+- The same brush, composited destination-out. Its own selected brush for the mode.
 
-## T4. Blend (smudge, M2) — в M1 кнопка видна, неактивна.
+## T4. Blend (smudge, M2) — in M1 the button is visible but inactive.
 
 ## T5. Undo / Redo
-- Кнопки слева снизу. Жесты 2-тап (undo) и 3-тап (redo): касания в пределах 250 мс, без движения > 20 px.
-- Long-press undo = очистить слой (с подтверждением-тостом и возможностью undo).
-- Лимит 100 шагов.
+- Buttons at the bottom left. 2-tap (undo) and 3-tap (redo) gestures: touches within 250 ms, no movement > 20 px.
+- Long-press undo = clear the layer (with a toast confirmation and the ability to undo).
+- Limit of 100 steps.
 
 ## T6. Main toolbar
-- Paint · Blend · Erase · Size (virtual slider + попап: size, hardness, angle) · Color (тап = Color panel, drag вверх/вниз = яркость, drag наружу = пипетка в M2) · Opacity (virtual slider + попап: opacity, flow, hardness. Выбранный пункт управляет слайдером).
-- 3 пальца вертикально = size, горизонтально = opacity.
-- HUD с кольцом размера.
+- Paint · Blend · Erase · Size (virtual slider + popup: size, hardness, angle) · Color (tap = Color panel, drag up/down = brightness, drag outward = eyedropper in M2) · Opacity (virtual slider + popup: opacity, flow, hardness. The selected item controls the slider).
+- 3 fingers vertically = size, horizontally = opacity.
+- HUD with a size ring.
 
 ## T7. Color panel
-- Вкладки:
-  - HSB wheel (стиль default: кольцо + квадрат S-B);
+- Tabs:
+  - HSB wheel (default style: ring + S-B square);
   - Sliders (HSB / RGB + hex);
-  - Palette (одна стандартная палитра + recent 10).
-- Previous/current свотч. Добавление цвета в палитру.
+  - Palette (one standard palette + 10 recent).
+- Previous/current swatch. Adding a color to the palette.
 
 ## T8. Layer panel
-- Справа, тоггл в top bar. Collapsed (превью) / expanded.
+- On the right, toggled in the top bar. Collapsed (preview) / expanded.
 - Add, delete, duplicate, clear, merge down, reorder (long-press drag), visibility, opacity 0–100, blend (12: normal, multiply, screen, overlay, darken, lighten, color dodge, color burn, soft light, hard light, add, difference), alpha lock, clip, rename.
-- Paper: цвет, вкл/выкл.
-- Лимит слоёв по формуле GAPS.
+- Paper: color, on/off.
+- Layer limit by the GAPS formula.
 
-## T9. Проекты и галерея
-- Home: «Новый холст» (размер: экран / пресеты / свой, px), Recent.
-- Projects: сетка превью, открыть, rename, duplicate, delete (с подтверждением). Без папок в M1.
-- Автосейв при выходе из Studio и при `onStop`. Ручной Save.
+## T9. Projects and gallery
+- Home: "New canvas" (size: screen / presets / custom, px), Recent.
+- Projects: preview grid, open, rename, duplicate, delete (with confirmation). No folders in M1.
+- Autosave on leaving Studio and on `onStop`. Manual Save.
 
-## T10. Экспорт
-- Options → Export: PNG (прозрачный фон да/нет), JPG (quality). Через `ACTION_CREATE_DOCUMENT` (SAF) или Share.
+## T10. Export
+- Options → Export: PNG (transparent background yes/no), JPG (quality). Via `ACTION_CREATE_DOCUMENT` (SAF) or Share.
