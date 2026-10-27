@@ -128,6 +128,11 @@
     <string name="tool_magic_wand">Magic wand</string>
     <string name="tool_transform">Transform</string>
     <string name="tool_fill">Fill</string>
+    <string name="tool_gradient">Gradient</string>
+    <string name="gradient_linear">Linear</string>
+    <string name="gradient_radial">Radial</string>
+    <string name="gradient_symmetric">Symmetric</string>
+    <string name="gradient_angular">Angular</string>
     <string name="action_apply">Apply</string>
     <string name="deselect">Deselect</string>
     <string name="select_all">Select all</string>

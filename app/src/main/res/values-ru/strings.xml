@@ -127,6 +127,11 @@
     <string name="tool_magic_wand">Волшебная палочка</string>
     <string name="tool_transform">Трансформация</string>
     <string name="tool_fill">Заливка</string>
+    <string name="tool_gradient">Градиент</string>
+    <string name="gradient_linear">Линейный</string>
+    <string name="gradient_radial">Радиальный</string>
+    <string name="gradient_symmetric">Симметричный</string>
+    <string name="gradient_angular">Угловой</string>
     <string name="action_apply">Применить</string>
     <string name="deselect">Снять выделение</string>
     <string name="select_all">Выделить всё</string>

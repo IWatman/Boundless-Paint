@@ -7,6 +7,7 @@ import app.painter.core.blend.BlendMode
 import app.painter.core.color.Rgba
 import app.painter.core.doc.ColorTag
 import app.painter.core.doc.EditTarget
+import app.painter.core.fill.GradientType
 import app.painter.core.history.MaskInit
 
 /** Brush mode of the main toolbar. */
@@ -15,9 +16,10 @@ import app.painter.core.history.MaskInit
  * [SELECT_LASSO] drag a selection (rectangle, ellipse or freehand outline); [SELECT_WAND] taps a region
  * of the layer and adds it to the selection. [TRANSFORM] moves, uniformly scales and rotates the active
  * layer pixels (or the selected pixels when a selection exists) with the cage overlay. [FILL] taps a region
- * of the canvas and fills it on the active layer with the current color.
+ * of the canvas and fills it on the active layer with the current color. [GRADIENT] drags the axis of a
+ * two-stop gradient and applies it to the active layer.
  */
-enum class ToolUi { BRUSH, SELECT_RECT, SELECT_ELLIPSE, SELECT_LASSO, SELECT_WAND, TRANSFORM, FILL }
+enum class ToolUi { BRUSH, SELECT_RECT, SELECT_ELLIPSE, SELECT_LASSO, SELECT_WAND, TRANSFORM, FILL, GRADIENT }
 
 /** True for the tools that build a selection instead of painting. */
 val ToolUi.isSelectionTool: Boolean
@@ -143,6 +145,8 @@ data class StudioUiState(
     val adjustmentEditor: AdjustEditorUi? = null,
     /** Transform cage while the transform tool is active, null otherwise. */
     val transform: TransformUi? = null,
+    /** Gradient ends and type while a gradient is open, null otherwise. */
+    val gradient: GradientUi? = null,
 )
 
 /**
@@ -151,6 +155,10 @@ data class StudioUiState(
  */
 @Immutable
 data class TransformUi(val corners: List<PointUi>)
+
+/** Gradient tool state: the two document-space ends [p0] → [p1] and the gradient [type] to draw between them. */
+@Immutable
+data class GradientUi(val p0: PointUi, val p1: PointUi, val type: GradientType)
 
 /** All user intents raised by [StudioScreen]. Display indices refer to [StudioUiState.layers]. */
 interface StudioActions {
@@ -164,6 +172,15 @@ interface StudioActions {
 
     /** Drops the open transform session, restoring the pixels, and returns to [ToolUi.BRUSH]. */
     fun transformCancel() {}
+
+    /** Applies the open gradient as one undoable step; the tool stays on [ToolUi.GRADIENT]. */
+    fun gradientApply() {}
+
+    /** Drops the open gradient, restoring the pixels, without a history entry. */
+    fun gradientCancel() {}
+
+    /** Picks the [app.painter.core.fill.GradientType] of the gradient tool and redraws an open gradient. */
+    fun setGradientType(type: GradientType) {}
 
     /** Clears the selection. */
     fun deselect()

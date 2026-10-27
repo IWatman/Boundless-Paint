@@ -67,6 +67,7 @@ fun StudioScreen(
         Box(Modifier.fillMaxSize()) { canvas() }
         SelectionOverlay(state = state, modifier = Modifier.fillMaxSize())
         TransformOverlay(state = state, modifier = Modifier.fillMaxSize())
+        GradientOverlay(state = state, modifier = Modifier.fillMaxSize())
 
         Box(
             Modifier
@@ -124,6 +125,16 @@ fun StudioScreen(
             }
 
             val adjustmentEditor = state.adjustmentEditor
+            val gradient = state.gradient
+            if (gradient != null) {
+                GradientBar(
+                    gradient = gradient,
+                    actions = actions,
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .padding(top = 64.dp),
+                )
+            }
             if (state.transform != null) {
                 TransformBar(
                     actions = actions,
@@ -213,6 +224,13 @@ private fun StudioTopBar(state: StudioUiState, actions: StudioActions, modifier:
                             onClick = {
                                 toolsMenu = false
                                 actions.selectTool(ToolUi.FILL)
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.tool_gradient)) },
+                            onClick = {
+                                toolsMenu = false
+                                actions.selectTool(ToolUi.GRADIENT)
                             },
                         )
                         if (state.hasSelection) {

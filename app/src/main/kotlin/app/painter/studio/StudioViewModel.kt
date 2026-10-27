@@ -24,6 +24,10 @@ import app.painter.core.doc.RasterLayer
 import app.painter.core.doc.effectivelyLocked
 import app.painter.core.fill.BucketFill
 import app.painter.core.fill.FillCommand
+import app.painter.core.fill.Gradient
+import app.painter.core.fill.GradientSpec
+import app.painter.core.fill.GradientStop
+import app.painter.core.fill.GradientType
 import app.painter.core.fill.RefSource
 import app.painter.core.fill.Region
 import app.painter.core.fill.RegionParams
@@ -68,6 +72,8 @@ import app.painter.core.stroke.StrokeTarget
 import app.painter.core.geom.Vec2
 import app.painter.core.raster.Tile
 import app.painter.core.raster.TileKey
+import app.painter.core.raster.TilePatch
+import app.painter.core.raster.applyTiles
 import app.painter.core.transform.Affine
 import app.painter.core.transform.CageMath
 import app.painter.core.transform.FloatRect
@@ -87,6 +93,7 @@ import app.painter.ui.home.ProjectCardUi
 import app.painter.ui.studio.AdjustEditorUi
 import app.painter.ui.studio.BrushModeUi
 import app.painter.ui.studio.CanvasTransformUi
+import app.painter.ui.studio.GradientUi
 import app.painter.ui.studio.HudUi
 import app.painter.ui.studio.PointUi
 import app.painter.ui.studio.RectUi
@@ -183,6 +190,7 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
 
     private fun setDocument(d: Document) {
         finishTransform(apply = false)
+        finishGradient(apply = false)
         save(refreshList = false) // flush pending changes of the previous document
         doc = d
         history.clear()
@@ -316,6 +324,7 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
 
     override fun setMode(mode: BrushModeUi) {
         finishTransform(apply = true)
+        finishGradient(apply = true)
         _state.update { it.copy(mode = mode, tool = ToolUi.BRUSH, selectionDraft = null, selectionDraftPath = null) }
         syncBrushState()
     }
@@ -330,10 +339,12 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
     private val lassoPoints = ArrayList<PointUi>()
 
     override val toolActive: Boolean
-        get() = _state.value.tool == ToolUi.TRANSFORM || _state.value.tool == ToolUi.FILL || _state.value.tool.isSelectionTool
+        get() = _state.value.tool == ToolUi.TRANSFORM || _state.value.tool == ToolUi.FILL ||
+            _state.value.tool == ToolUi.GRADIENT || _state.value.tool.isSelectionTool
 
     override fun selectTool(tool: ToolUi) {
         if (tool != ToolUi.TRANSFORM) finishTransform(apply = true)
+        if (tool != ToolUi.GRADIENT) finishGradient(apply = true)
         _state.update { it.copy(tool = tool, selectionDraft = null, selectionDraftPath = null) }
         if (tool == ToolUi.TRANSFORM) startTransform()
     }
@@ -356,6 +367,10 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
         if (!toolActive) return
         if (_state.value.tool == ToolUi.TRANSFORM) {
             transformDown(x, y)
+            return
+        }
+        if (_state.value.tool == ToolUi.GRADIENT) {
+            gradientDown(x, y)
             return
         }
         if (_state.value.tool == ToolUi.FILL) return
@@ -381,6 +396,10 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
         if (!toolActive) return
         if (_state.value.tool == ToolUi.TRANSFORM) {
             transformMoveTo(x, y)
+            return
+        }
+        if (_state.value.tool == ToolUi.GRADIENT) {
+            gradientMove(x, y, force = false)
             return
         }
         if (_state.value.tool == ToolUi.FILL) return
@@ -413,6 +432,10 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
         if (_state.value.tool == ToolUi.TRANSFORM) {
             transformMoveTo(x, y)
             transformUp()
+            return
+        }
+        if (_state.value.tool == ToolUi.GRADIENT) {
+            gradientMove(x, y, force = true)
             return
         }
         if (_state.value.tool == ToolUi.FILL) {
@@ -454,6 +477,8 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
             transformDrag = TransformDrag.NONE
             return
         }
+        // A cancelled gesture only stops moving the end: the gradient session stays open.
+        if (_state.value.tool == ToolUi.GRADIENT) return
         lassoPoints.clear()
         _state.update { it.copy(selectionDraft = null, selectionDraftPath = null) }
     }
@@ -722,6 +747,132 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
         return out
     }
 
+    // ---- gradient tool ----
+
+    /** Layer the open gradient is previewed on, null while the tool is idle. */
+    private var gradientLayerId: String? = null
+
+    /** Ends of the open gradient in document pixels; [gradientDragP1] tells which end the drag moves. */
+    private var gradientP0 = PointUi(0f, 0f)
+    private var gradientP1 = PointUi(0f, 0f)
+    private var gradientDragP1 = true
+
+    /** Patch the preview has already written into the layer (outside history), null before the first draw. */
+    private var gradientPatch: TilePatch? = null
+
+    /** Type of the open gradient and of the next one. */
+    private var gradientType = GradientType.LINEAR
+    private var gradientLastPreviewMs = 0L
+
+    /** Active, unlocked raster layer the gradient can be drawn on. */
+    private fun gradientTarget(): RasterLayer? =
+        (doc.activeId?.let { doc.findNode(it) } as? RasterLayer)?.takeIf { !it.locked }
+
+    /** Stops of the current color: opaque at p0, fully transparent at p1. */
+    private fun gradientStops(): List<GradientStop> {
+        val c = _state.value.color
+        return listOf(GradientStop(0f, c), GradientStop(1f, c.copy(a = 0f)))
+    }
+
+    /** Publishes the open gradient so the overlay can draw its ends; null when the session is closed. */
+    private fun publishGradient() {
+        val layerId = gradientLayerId
+        _state.update {
+            it.copy(gradient = if (layerId == null) null else GradientUi(gradientP0, gradientP1, gradientType))
+        }
+    }
+
+    override fun setGradientType(type: GradientType) {
+        gradientType = type
+        publishGradient()
+        renderGradient(force = true)
+    }
+
+    /**
+     * Starts a gradient at ([x], [y]) on the active raster layer, or grabs the nearer end when the touch lands
+     * on an end of the open one. An uncommitted gradient is discarded (reverted), never applied.
+     */
+    private fun gradientDown(x: Float, y: Float) {
+        val layer = gradientTarget() ?: return
+        if (layer.id == gradientLayerId) {
+            val tol = handleTolerance()
+            val d0 = kotlin.math.hypot(x - gradientP0.x, y - gradientP0.y)
+            val d1 = kotlin.math.hypot(x - gradientP1.x, y - gradientP1.y)
+            if (minOf(d0, d1) <= tol) {
+                gradientDragP1 = d1 <= d0
+                return
+            }
+        }
+        finishGradient(apply = false)
+        gradientLayerId = layer.id
+        gradientP0 = PointUi(clampX(x), clampY(y))
+        gradientP1 = gradientP0
+        gradientDragP1 = true
+        gradientPatch = null
+        gradientLastPreviewMs = 0L
+        publishGradient()
+    }
+
+    /** Moves the grabbed end of the open gradient to ([x], [y]) and redraws the preview. */
+    private fun gradientMove(x: Float, y: Float, force: Boolean) {
+        if (gradientLayerId == null) return
+        val p = PointUi(clampX(x), clampY(y))
+        if (gradientDragP1) gradientP1 = p else gradientP0 = p
+        publishGradient()
+        renderGradient(force)
+    }
+
+    /**
+     * Live preview: reverts the tiles of the previous preview and draws the gradient again with the current
+     * color and type straight into the layer (outside history). Throttled to about 30 fps while dragging and
+     * always redrawn on finger lift.
+     */
+    private fun renderGradient(force: Boolean) {
+        val layerId = gradientLayerId ?: return
+        val layer = doc.findNode(layerId) as? RasterLayer
+        if (layer == null) {
+            finishGradient(apply = false)
+            return
+        }
+        val now = SystemClock.uptimeMillis()
+        if (!force && now - gradientLastPreviewMs < PREVIEW_FRAME_MS) return
+        gradientLastPreviewMs = now
+        // A zero-length axis (a tap) has no direction: keep the layer untouched until the finger moves.
+        if (kotlin.math.hypot(gradientP1.x - gradientP0.x, gradientP1.y - gradientP0.y) < 1f) return
+        val old = gradientPatch
+        if (old != null) applyTiles(layer.pixels, old.before)
+        val spec = GradientSpec(gradientType, gradientP0.x, gradientP0.y, gradientP1.x, gradientP1.y, gradientStops())
+        val patch = Gradient.apply(doc, layerId, spec, 1f, null)
+        gradientPatch = patch
+        val dirty = HashSet<TileKey>()
+        old?.let { dirty.addAll(it.before.keys); dirty.addAll(it.after.keys) }
+        patch?.let { dirty.addAll(it.after.keys) }
+        canvas?.invalidate(layerId, dirty)
+    }
+
+    /**
+     * Closes the gradient session. [apply] records the drawn patch as one undoable "Gradient" step (its pixels
+     * already are in the layer); otherwise the tiles are restored without a history entry.
+     */
+    private fun finishGradient(apply: Boolean) {
+        val layerId = gradientLayerId ?: return
+        val patch = gradientPatch
+        gradientLayerId = null
+        gradientPatch = null
+        gradientDragP1 = true
+        gradientLastPreviewMs = 0L
+        if (patch != null) {
+            if (apply) history.push(TilePatchCommand(patch, "Gradient"))
+            else (doc.findNode(layerId) as? RasterLayer)?.let { applyTiles(it.pixels, patch.before) }
+        }
+        publishGradient()
+        canvas?.invalidate(layerId, null)
+    }
+
+    override fun gradientApply() = finishGradient(apply = true)
+
+    override fun gradientCancel() = finishGradient(apply = false)
+
     /** Bucket settings (spec §4.3): 15 % tolerance over the canvas, gap closing 4 px, expansion 1.5 px. */
     private val bucketParams = RegionParams(tolerance = 0.15f, contiguous = true, gapPx = 4, expandPx = 1.5f)
 
@@ -812,6 +963,7 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
             canvas?.invalidate(fill.layerId, null)
             markDirty()
         }
+        if (gradientLayerId != null) renderGradient(force = true)
     }
 
     override fun addColorToPalette(color: Rgba) = _state.update {
@@ -821,13 +973,13 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
     // ---- history ----
 
     override fun undo() {
-        if (transformSession != null) return
+        if (transformSession != null || gradientLayerId != null) return
         commitPendingOpacity()
         if (history.undo(doc)) canvas?.invalidate(null, null)
     }
 
     override fun redo() {
-        if (transformSession != null) return
+        if (transformSession != null || gradientLayerId != null) return
         commitPendingOpacity()
         if (history.redo(doc)) canvas?.invalidate(null, null)
     }
@@ -951,6 +1103,7 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
 
     override fun selectLayer(id: String) {
         finishTransform(apply = true)
+        finishGradient(apply = true)
         commitPendingOpacity()
         doc.activeId = id
         refreshLayers()
@@ -1079,6 +1232,7 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
 
     override fun save() {
         finishTransform(apply = true)
+        finishGradient(apply = true)
         save(refreshList = true)
     }
 
@@ -1113,9 +1267,9 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
         autosaveJob?.cancel()
         autosaveJob = viewModelScope.launch {
             delay(AUTOSAVE_DELAY_MS)
-            // A stroke in progress may already have touched layer tiles and an open transform session holds
-            // pixels outside history: save only once both are done.
-            while (stroke != null || transformSession != null) delay(AUTOSAVE_DELAY_MS)
+            // A stroke, a transform session or a gradient preview may already have touched layer tiles and
+            // hold pixels outside history: save only once all of them are done.
+            while (stroke != null || transformSession != null || gradientLayerId != null) delay(AUTOSAVE_DELAY_MS)
             autosaveJob = null
             save(refreshList = false)
         }
@@ -1143,6 +1297,7 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
 
     private fun exec(cmd: Command) {
         finishTransform(apply = true)
+        finishGradient(apply = true)
         commitPendingOpacity()
         history.execute(doc, cmd)
         canvas?.invalidate(null, null)
