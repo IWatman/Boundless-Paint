@@ -1,71 +1,71 @@
-# Infinite Painter: фильтры
+# Infinite Painter: filters
 
-Источник: User Guide /painter/filters/*. 41 фильтр. 27 из них доступны как неразрушающие Filter layers (точный список в доке не дан).
+Source: User Guide /painter/filters/*. 41 filters. 27 of them are available as non-destructive Filter layers (the exact list is not given in the docs).
 
-## Общий toolbar
+## Shared toolbar
 - Cancel.
-- **Variant selector** (у фильтров с вариантами, циклический).
-- Another filter (спросит: применить или бросить текущий).
-- Masking menu (quick masks, см. 17).
+- **Variant selector** (for the filters that have variants, cyclic).
+- Another filter (it will ask: apply or discard the current one).
+- Masking menu (quick masks, see 17).
 - Invert mask.
 - Confirm.
 - Hide effect.
-- Strength (значение + слайдер, обычно 0…100%, у некоторых −100…+100).
-- Специфичные контролы на холсте: центр, направление.
-- Селектор фильтров: долгое нажатие Compare = до/после.
-- Применяется к слою или выделению, а также к маске слоя или выделения.
+- Strength (a value + a slider, usually 0…100%, for some −100…+100).
+- Filter-specific controls on the canvas: the center, the direction.
+- Filter selector: a long press on Compare = before/after.
+- It is applied to a layer or a selection, and also to a layer mask or a selection mask.
 
 ## Photographic (11)
-| Фильтр | Strength / поведение |
+| Filter | Strength / behavior |
 |---|---|
-| Black & White | −100…+100 (светлый ↔ тёмный ч/б) |
-| Fade | 0–100%, перманентно снижает альфу |
-| Glow | 0–100, ширина свечения светов |
-| Invert ×4 | RGB / Chroma / Luminance / Alpha, −100 (оригинал) … +100 (инверсия). Alpha 100% → прозрачное становится серым #808080 |
+| Black & White | −100…+100 (light ↔ dark B/W) |
+| Fade | 0–100%, permanently lowers the alpha |
+| Glow | 0–100, the width of the glow of the highlights |
+| Invert ×4 | RGB / Chroma / Luminance / Alpha, −100 (original) … +100 (inverted). Alpha 100% → transparent becomes gray #808080 |
 | Sepia | 0–100 |
 | Grain ×3 | Mono / RGB / Alpha noise |
-| Bokeh | 0–100, зависит от разрешения |
+| Bokeh | 0–100, depends on the resolution |
 | Local Contrast | 0–100 |
-| Warm | −100 (холод) … +100 (тепло) |
-| Lens flare | 0–100, drag = центр |
-| Gradient map | редактор градиента как в Linear fill, без прозрачности, стопы без лимита |
+| Warm | −100 (cool) … +100 (warm) |
+| Lens flare | 0–100, drag = the center |
+| Gradient map | a gradient editor like in Linear fill, without transparency, no limit on the stops |
 
 ## Structure (11)
-| Фильтр | Поведение |
+| Filter | Behavior |
 |---|---|
-| Blur | настоящий Gaussian (у filter-слоя Blur другой, не гауссов, алгоритм) |
-| Smooth | шумоподавление с сохранением краёв |
-| Bloom / Gloom | усилить / затемнить светлые области |
-| Dilate / Erode | морфология; на лайнарте утолщает / утоньшает линии |
+| Blur | a true Gaussian (the Blur of the filter layer is different, not Gaussian, algorithmic) |
+| Smooth | edge-preserving noise reduction |
+| Bloom / Gloom | brighten / darken the light areas |
+| Dilate / Erode | morphology; on line art it thickens / thins the lines |
 | Scatter | frosted glass |
 | Sharpen | — |
-| High-pass | high-pass копии + Hard Light, по сути unsharp mask |
-| Emboss | relief height, ч/б, направление света фиксировано |
-| Fisheye | −100 (pinch) … +100 (fisheye), drag = центр |
+| High-pass | a high-pass copy + Hard Light, essentially an unsharp mask |
+| Emboss | the relief height, B/W, the light direction is fixed |
+| Fisheye | −100 (pinch) … +100 (fisheye), drag = the center |
 
 ## Artistic (16)
-| Фильтр | Поведение |
+| Filter | Behavior |
 |---|---|
 | Halftone ×4 | Grayscale / B&W / CMYK / Alpha |
-| Manga | ч/б: края → линии, плоские заливки → скринтон; strength = яркость |
-| Hexagons | размер ≈ px, среднее по ячейке |
-| Pixelate | размер блока |
+| Manga | B/W: edges → lines, flat fills → screentone; strength = brightness |
+| Hexagons | size ≈ px, the average over the cell |
+| Pixelate | the block size |
 | Stained Glass | Voronoi |
-| Stamp | 1-bit, порог |
-| Edges | чёрные края на прозрачном |
-| Trace | чёрные края поверх оригинала |
-| Stereo | смещение RGB-каналов (хроматическая аберрация), фон прозрачный |
-| Kaleidoscope | 1–12 зеркал, drag = центр |
-| Palette | posterize 2–48 цветов (палитра из изображения) |
-| Monet / Van Gogh | импрессионизм / завихрения |
-| Pop-art | halftone + усиление цвета |
-| Pencil | штриховка, длина штрихов |
-| Paintbrush | масляная живопись |
+| Stamp | 1-bit, a threshold |
+| Edges | black edges on transparent |
+| Trace | black edges over the original |
+| Stereo | an RGB channel offset (chromatic aberration), the background is transparent |
+| Kaleidoscope | 1–12 mirrors, drag = the center |
+| Palette | posterize to 2–48 colors (the palette from the image) |
+| Monet / Van Gogh | impressionism / swirls |
+| Pop-art | halftone + a color boost |
+| Pencil | hatching, the stroke length |
+| Paintbrush | oil painting |
 
 ## Motion (3)
-- **Direction**: motion blur, drag = направление.
-- **Zoom**: radial zoom blur, drag = центр.
-- **Spin**: −/+ = против / по часовой.
+- **Direction**: motion blur, drag = the direction.
+- **Zoom**: radial zoom blur, drag = the center.
+- **Spin**: −/+ = counter-clockwise / clockwise.
 
-## Фильтры в кистях
-- См. 04: кисть применяет фильтр или коррекцию к слою под мазком или к самому мазку.
+## Filters in brushes
+- See 04: a brush applies a filter or a correction to the layer under the stroke or to the stroke itself.

@@ -1,48 +1,48 @@
-# Infinite Painter: трансформации
+# Infinite Painter: transforms
 
-Источник: User Guide /painter/transform/*.
+Source: User Guide /painter/transform/*.
 
-## Объекты трансформации
-- Выделенный фрагмент (Selection toolbar → Transform). Можно на нескольких слоях сразу.
-- Весь текущий слой (по умолчанию, если нет выделения).
-- **Набор слоёв**: в режиме Transform тап по превью слоёв добавляет или убирает их (красная рамка). Группы тоже. С выделением трансформируется фрагмент на каждом слое.
-- Маска выделения (Transform mask), маска слоя.
-- Нельзя: редактируемый Text и Panels (7.2), сначала растеризовать.
-- Workspace открывается автоматически после Import image, Duplicate, Isolate, Copy Merged.
+## Objects of the transform
+- The selected fragment (Selection toolbar → Transform). It can span several layers at once.
+- The whole current layer (the default if there is no selection).
+- **A set of layers**: in Transform mode a tap on a layer preview adds or removes it (a red frame). Groups too. With a selection, the fragment on each layer is transformed.
+- The selection mask (Transform mask), a layer mask.
+- Not possible: editable Text and Panels (7.2), rasterize first.
+- The workspace opens automatically after Import image, Duplicate, Isolate, Copy Merged.
 
 ## Workspace / toolbar
 - Cancel.
-- **Unlock bounding box**: трансформировать только cage, без объекта. Не для Warp. Совет: квадратный cage для контроля перспективы.
+- **Unlock bounding box**: transform only the cage, without the object. Not for Warp. Tip: a square cage for controlling perspective.
 - Mode selector.
-- **Flip** (только горизонтально. Через центр или anchor. Вертикальный = flip + 180°).
-- **Rotate 45°** (только по часовой).
+- **Flip** (horizontal only. Through the center or the anchor. Vertical = flip + 180°).
+- **Rotate 45°** (clockwise only).
 - **Stamp**.
 - Confirm.
-- Режимы можно чередовать в одной сессии.
-- Cage выровнен по краям холста (v7).
+- The modes can be alternated within one session.
+- The cage is aligned to the canvas edges (v7).
 
-## Режимы
-- **Basic** (дефолт):
-  - drag где угодно = move;
-  - угловая ручка = scale (пропорционально от центра) или rotate, по направлению drag;
-  - двумя пальцами внутри cage: move, pinch-scale, rotate. Снаружи cage жест = навигация;
-  - Touch-Alt: move по 45°, resize шагом 100%.
-- **Anchor**: как Basic, но pivot = перемещаемая точка (можно за холстом). Она же ось flip и центр rotate 45°.
+## Modes
+- **Basic** (the default):
+  - a drag anywhere = move;
+  - a corner handle = scale (proportionally from the center) or rotate, depending on the drag direction;
+  - two fingers inside the cage: move, pinch-scale, rotate. Outside the cage the gesture = navigation;
+  - Touch-Alt: move in 45° steps, resize in 100% steps.
+- **Anchor**: like Basic, but the pivot = a movable point (it can be outside the canvas). It is also the flip axis and the center of Rotate 45°.
 - **Distort**:
-  - сетка 4×4;
-  - боковые ручки: перпендикулярно = stretch, вдоль края = skew;
-  - угловые ручки = free distort / perspective;
-  - объект и его штампы двигаются в виртуальной плоскости перспективы, пока не трогаешь ручки.
-- **Warp**: сплайн-сетка, ручки 3×3, стороны cage = Bézier (ручки касательных скрыты). Тянуть можно за любую точку внутри. Аналог Photoshop Warp.
+  - a 4×4 grid;
+  - side handles: perpendicular = stretch, along the edge = skew;
+  - corner handles = free distort / perspective;
+  - the object and its stamps move in a virtual perspective plane as long as you don't touch the handles.
+- **Warp**: a spline grid, 3×3 handles, the cage sides = Bézier (the tangent handles are hidden). You can pull any point inside. The analogue of Photoshop Warp.
 
 ## Stamp
-- Копия в любой момент, в любом режиме, в т.ч. в quick-жестах.
-- Оригинал получает финальную трансформацию. Копии ложатся на новый слой с тем же именем. Cancel оставляет слой копий.
+- A copy at any moment, in any mode, including in quick gestures.
+- The original receives the final transform. The copies land on a new layer with the same name. Cancel keeps the layer of copies.
 
-## Virtual transformations (важная фича)
-- Слой хранит оригинал до первой правки (например, мазка). Цепочка трансформаций не теряет качество, скрытые за краем холста части восстанавливаются.
-- Аналог PS Smart Object, но всегда включено.
-- Реализация: хранить source-битмап + накопленную матрицу или сетку. Коммит при деструктивной правке.
+## Virtual transformations (an important feature)
+- The layer stores the original until the first edit (a brush stroke, for example). A chain of transforms does not lose quality, parts hidden behind the canvas edge are restored.
+- The analogue of a PS Smart Object, but always on.
+- Implementation: store a source bitmap + an accumulated matrix or grid. Commit on a destructive edit.
 
 ## Liquify
-- Отдельный инструмент деформации (см. 19).
+- A separate deformation tool (see 19).

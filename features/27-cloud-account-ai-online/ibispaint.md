@@ -1,33 +1,33 @@
-# ibisPaint: облако, аккаунт, онлайн, ИИ
+# ibisPaint: cloud, account, online, AI
 
-Источник: ibispaint.com/lecture №21, 22, 155, 157, 158, 172, 174, 177, 192, 194, 203–205.
+Source: ibispaint.com/lecture №21, 22, 155, 157, 158, 172, 174, 177, 192, 194, 203–205.
 
 ## ibisAccount
-- Sign up / Log in / Delete account. Нужен для облака, публикации, Brush Pattern editor.
+- Sign up / Log in / Delete account. Needed for the cloud, publication, the Brush Pattern editor.
 
 ## Cloud Storage
-- Синк только пока открыт My Gallery. Опции: Wi-Fi only / mobile, не засыпать.
-- Синкаются артворки и структура папок. Кисти и палитры нет, для них ipcfg-бэкап.
-- Статусы: Scheduled / Complete / Corrupted / Stopped / Cloud-only.
-- Удаление: спросить / только локально / везде.
-- Конфликты → дубликат с суффиксом даты.
+- Syncing only while My Gallery is open. Options: Wi-Fi only / mobile, do not sleep.
+- Artworks and the folder structure are synced. Not the brushes and palettes, those use an ipcfg backup.
+- Statuses: Scheduled / Complete / Corrupted / Stopped / Cloud-only.
+- Deletion: ask / locally only / everywhere.
+- Conflicts → a duplicate with a date suffix.
 
 ## Online Gallery
-- Upload артворка (URL, шаринг в X/Facebook).
-- Comics с главами.
-- Brush release через QR.
+- Uploading an artwork (a URL, sharing to X/Facebook).
+- Comics with chapters.
+- Brush release via a QR code.
 - Daily Ranking.
-- Комментарии, push-уведомления.
-- Downloads folder.
+- Comments, push notifications.
+- The Downloads folder.
 
-## ИИ / «Smart»-функции
-- **Watercolor** (фото → акварельный фон).
+## AI / "Smart" features
+- **Watercolor** (a photo → a watercolor background).
 - **Relief HQ**.
-- **Background Removal** (тап по объекту / по фону).
-- **Super-resolution ×2** при экспорте.
-- **AI Disturbance** (шум против обучения ИИ на работе).
+- **Background Removal** (a tap on the object / on the background).
+- **Super-resolution ×2** on export.
+- **AI Disturbance** (noise against AI training on the artwork).
 
-## Для нашего приложения
-- Монетизации нет: никаких уровней, кредитов, рекламы и водяных знаков. Все функции открыты.
-- Облако, онлайн-галерея, ранкинг — сервисная часть вне ядра редактора. Решить отдельно: локально-первое приложение + опциональная синхронизация (WebDAV, свой сервер, файлы).
-- ИИ-функции только с собственными или открыто лицензированными локальными моделями (см. 00-clean-room).
+## For our app
+- There is no monetization: no tiers, credits, ads or watermarks. All features are open.
+- The cloud, the online gallery, ranking are a service part outside the editor's core. To be decided separately: a local-first app + optional synchronization (WebDAV, our own server, files).
+- AI features only with our own or openly licensed local models (see 00-clean-room).

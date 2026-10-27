@@ -1,56 +1,56 @@
-# Infinite Painter: импорт, экспорт, форматы
+# Infinite Painter: import, export, formats
 
-Источник: User Guide /painter/data/*.
+Source: User Guide /painter/data/*.
 
-## Импорт (Options → Import)
-- Назначения:
-  - новый проект;
-  - слой (только JPG/PNG/WebP, один файл за раз, над активным или сверху, вписан в холст, сразу Transform);
-  - референс;
-  - тайл паттерна;
-  - голова или текстура кисти;
-  - текстура бумаги;
+## Import (Options → Import)
+- Destinations:
+  - a new project;
+  - a layer (JPG/PNG/WebP only, one file at a time, above the active one or on top, fitted into the canvas, immediately in Transform);
+  - a reference;
+  - a pattern tile;
+  - a brush tip or texture;
+  - a paper texture;
   - PNTR;
-  - ассеты (кисти, палитры).
-- Источники:
-  - **Gallery** (системный пикер);
+  - assets (brushes, palettes).
+- Sources:
+  - **Gallery** (the system picker);
   - **Camera**;
-  - **Files** (облако; PSD, PNTR, PRBR, PRZP только отсюда);
-  - **Search** (Pixabay: тип, ориентация, категория, сортировка, editor's choice, safe search; превью ограниченного разрешения);
-  - **Clipboard** (внутренний).
-- **PSD-импорт**: только RGB-битмап-слои. Векторы, 3D, анимация, эффекты, несовместимые adjustment игнорируются. Всегда новый проект с именем файла.
+  - **Files** (the cloud; PSD, PNTR, PRBR, PRZP only from here);
+  - **Search** (Pixabay: type, orientation, category, sort order, editor's choice, safe search; previews of a limited resolution);
+  - **Clipboard** (the internal one).
+- **PSD import**: RGB bitmap layers only. Vectors, 3D, animation, effects, incompatible adjustments are ignored. Always a new project named after the file.
 
-## Экспорт (Options → Export)
-- Панель:
-  - имя (автоматически добавляется timestamp);
-  - формат;
-  - Background toggle (PNG/WebP: прозрачность);
+## Export (Options → Export)
+- The panel:
+  - a name (a timestamp is added automatically);
+  - the format;
+  - the Background toggle (PNG/WebP: transparency);
   - Export;
-  - Share (system share sheet).
-- Форматы:
-  - **PNG**: bg off = скрыть Paper, RGBA; bg on = плоский с Paper;
+  - Share (the system share sheet).
+- Formats:
+  - **PNG**: bg off = hide Paper, RGBA; bg on = flat with Paper;
   - **JPG**: quality;
-  - **WebP**: quality + прозрачность;
-  - **PSD**: слои, adjustment layers, маски (Paper-текстура может потеряться, не для Pattern-проектов);
-  - **ZIP**: каждый слой отдельным PNG, без масок и adjustments;
-  - **PNTR**: опционально с историей версий и таймлапсом.
-- Пути Android: Pictures/Infinite Painter (растровые), Documents/Infinite Painter (PSD, ZIP), …/Brushes, …/Brush Packs, …/Palettes.
+  - **WebP**: quality + transparency;
+  - **PSD**: layers, adjustment layers, masks (the Paper texture may be lost, not for Pattern projects);
+  - **ZIP**: every layer as a separate PNG, without masks and adjustments;
+  - **PNTR**: optionally with the version history and the timelapse.
+- Android paths: Pictures/Infinite Painter (raster), Documents/Infinite Painter (PSD, ZIP), …/Brushes, …/Brush Packs, …/Palettes.
 
-## Собственные форматы
-| Расширение | Что |
+## Own formats
+| Extension | What |
 |---|---|
-| .pntr | проект целиком (история, таймлапс, референсы), кросс-платформенно iOS↔Android |
-| .prbr | одна кисть |
-| .przp | пак кистей (папка), имя пака неизменно |
-| .clrs | палитра (общий с Infinite Design) |
-- Имена ассетов внутренние: переименование файла ничего не меняет. Timestamp в имени файла не даёт перезаписать.
-- Для clean-room: свои форматы проектируем сами. Совместимость с .pntr/.prbr не нужна и не реверсим.
+| .pntr | the whole project (history, timelapse, references), cross-platform iOS↔Android |
+| .prbr | a single brush |
+| .przp | a brush pack (a folder), the pack name is immutable |
+| .clrs | a palette (shared with Infinite Design) |
+- The asset names are internal: renaming a file changes nothing. The timestamp in the file name prevents overwriting.
+- For the clean room: we design our own formats ourselves. Compatibility with .pntr/.prbr is not needed and we do not reverse-engineer them.
 
-## Clipboard (внутренняя библиотека)
-- Постоянное хранилище PNG RGBA: фрагменты, слои, иконки, паттерны, головы кистей.
-- Из Selection toolbar → Clipboard. Импорт через источник Clipboard.
-- Long-press → Delete. Теряется при переустановке.
+## Clipboard (the internal library)
+- A permanent store of RGBA PNGs: fragments, layers, icons, patterns, brush tips.
+- From the Selection toolbar → Clipboard. Import through the Clipboard source.
+- Long-press → Delete. It is lost on reinstall.
 
-## Перенос между устройствами
-- Через PNTR (Share в галерее или Export).
-- Облака нет, проекты локальные.
+## Moving between devices
+- Via PNTR (Share in the gallery or Export).
+- There is no cloud, the projects are local.

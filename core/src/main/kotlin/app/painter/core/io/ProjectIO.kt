@@ -40,7 +40,7 @@ import java.util.zip.ZipOutputStream
 import kotlin.math.roundToInt
 
 /**
- * Reads and writes projects in the unpacked directory layout of spec/file-formats.md («Проект .pnt»)
+ * Reads and writes projects in the unpacked directory layout of spec/file-formats.md («Project .pnt»)
  * and packs/unpacks them as `.pnt` ZIP archives.
  */
 object ProjectIO {

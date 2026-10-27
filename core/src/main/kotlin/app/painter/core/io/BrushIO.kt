@@ -18,7 +18,7 @@ import java.util.zip.ZipInputStream
 import java.util.zip.ZipOutputStream
 
 /**
- * Brush codec (spec/tools/m2-brush.md §3.1–§3.2, spec/file-formats.md «Кисть»).
+ * Brush codec (spec/tools/m2-brush.md §3.1–§3.2, spec/file-formats.md «Brush .pbrush / pack .pbrushes»).
  *
  * - `brush.json` schema 1: unknown fields are ignored, missing ones take defaults; a newer schema is read
  *   best-effort and stamped with the current schema ([migrate]).

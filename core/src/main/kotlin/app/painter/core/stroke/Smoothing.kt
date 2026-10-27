@@ -43,7 +43,7 @@ class BrushLazyRope(private val radiusScreen: Float, private val elastic: Float,
 }
 
 /**
- * Pen-up re-fit (spec/GAPS.md «Стабилизатор» → after): Gaussian smoothing of positions over arc length with
+ * Pen-up re-fit (spec/GAPS.md «Stabilizer» → after): Gaussian smoothing of positions over arc length with
  * σ = 0.5·[amount] px; the first and last points stay fixed.
  */
 object AfterSmoothing {

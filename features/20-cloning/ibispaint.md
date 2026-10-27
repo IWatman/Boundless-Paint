@@ -1,14 +1,14 @@
 # ibisPaint: Copy Pen
 
-Источник: ibispaint.com/lecture №141.
+Source: ibispaint.com/lecture №141.
 
-- **Copy Pen (Relative)**: штамп со смещением (offset). Источник наводится, размер = Thickness. Для удаления объектов.
-- **Copy Pen (Fixed)**: фиксированная точка источника, тиражирование элемента.
+- **Copy Pen (Relative)**: a stamp with an offset. The source is set by pointing, the size = Thickness. For removing objects.
+- **Copy Pen (Fixed)**: a fixed source point, tiling an element.
   - Brush Pattern;
   - **Jitter of Copy Angle**;
   - Reference Layer (Specific Layer);
-  - **Copy Zoom** (масштаб копий, 100% = тот же размер).
+  - **Copy Zoom** (the scale of the copies, 100% = the same size).
 
-## Сопоставление с IP
-- IP Clone покрывает Relative (Offset + Align on) и Fixed (Align off).
-- Добавить из ibis: Jitter of Copy Angle, Copy Zoom (масштаб источника).
+## Comparison with IP
+- IP Clone covers Relative (Offset + Align on) and Fixed (Align off).
+- To add from ibis: Jitter of Copy Angle, Copy Zoom (the source scale).

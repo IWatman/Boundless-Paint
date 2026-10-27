@@ -1,45 +1,45 @@
-# ibisPaint: импорт, экспорт, форматы
+# ibisPaint: import, export, formats
 
-Источник: ibispaint.com/lecture №21, 22, 28, 32, 33, 84, 119, 137, 188, 205, 206, 207, 210.
+Source: ibispaint.com/lecture №21, 22, 28, 32, 33, 84, 119, 137, 188, 205, 206, 207, 210.
 
-## Экспорт изображения (Save Image)
-- File Type: **PNG** (Transparent toggle), **JPEG**, **PSD** (Preserved Layers / Flattened).
-- **Super-resolution ×2** (ИИ-апскейл при экспорте, PNG).
-- **AI Disturbance** (шум против дообучения ИИ, слайдер интенсивности).
+## Image export (Save Image)
+- File Type: **PNG** (a Transparent toggle), **JPEG**, **PSD** (Preserved Layers / Flattened).
+- **Super-resolution ×2** (an AI upscale on export, PNG).
+- **AI Disturbance** (noise against AI training, an intensity slider).
 - **Color Space**:
   - RGB;
   - **CMYK** (PSD);
   - **Grayscale 8-bit**;
   - **Monochrome 1-bit**.
 - CMYK:
-  - **Color Profile** (загружаемые профили типографий);
-  - **Rendering Intent** (Perceptual / Relative Colorimetric [дефолт] / Saturation / Absolute);
-  - **Black Point Compensation** (выкл при Absolute).
-- **Save Layer as Transparent PNG** (слой или папка).
+  - **Color Profile** (loadable print shop profiles);
+  - **Rendering Intent** (Perceptual / Relative Colorimetric [the default] / Saturation / Absolute);
+  - **Black Point Compensation** (off with Absolute).
+- **Save Layer as Transparent PNG** (a layer or a folder).
 
-## Проектные форматы
-- **IPV**: артворк + история таймлапса, кросс-платформенный.
-- **IPVZ**: проект с анимацией и аудио.
-- **ipcfg**: бэкап настроек (кисти, палитры).
-- **CLIP**: аплоад в Clip Studio cloud (структура слоёв; текст и тон растеризуются).
-- **PSD import**: открытие PSD как артворк.
-- Кисти: **QR-код** PNG.
+## Project formats
+- **IPV**: the artwork + the timelapse history, cross-platform.
+- **IPVZ**: a project with animation and audio.
+- **ipcfg**: a backup of the settings (brushes, palettes).
+- **CLIP**: an upload to the Clip Studio cloud (the layer structure; text and tone are rasterized).
+- **PSD import**: opening a PSD as an artwork.
+- Brushes: a **QR code** PNG.
 
-## Видео
-- Таймлапс в фотоальбом. YouTube upload.
-- Анимация: **MOV, MP4**. Онлайн-галерея режет звук.
+## Video
+- The timelapse to the photo album. YouTube upload.
+- Animation: **MOV, MP4**. The online gallery strips the sound.
 
-## Перенос
-- IPV через: облако ibis, Dropbox и др., AirDrop, Finder, Quick Share, USB/MTP.
+## Transfer
+- IPV via: the ibis cloud, Dropbox and others, AirDrop, Finder, Quick Share, USB/MTP.
 
-## Что добавить к IP
-- Экспорт CMYK PSD с ICC-профилем, intent, BPC.
-- Grayscale 8 / 1-bit экспорт.
+## What to add to IP
+- CMYK PSD export with an ICC profile, intent, BPC.
+- Grayscale 8 / 1-bit export.
 - PSD Flattened.
-- Super-resolution (опционально, локальная модель).
-- AI-Disturbance (опционально, нужна своя реализация adversarial noise).
-- Экспорт отдельного слоя/папки в PNG.
-- Бэкап настроек.
-- Видео-форматы анимации.
-- Свои форматы: проект (ZIP-контейнер как у IP PNTR), кисть, пак, палитра, настройки.
-- Импорт и экспорт **OpenRaster (.ora)** и **PSD** для совместимости. Решение за нами, у оригиналов ORA нет.
+- Super-resolution (optional, a local model).
+- AI-Disturbance (optional, our own implementation of adversarial noise is needed).
+- Export of a single layer/folder to PNG.
+- A settings backup.
+- Video formats for animation.
+- Our own formats: project (a ZIP container like IP's PNTR), brush, pack, palette, settings.
+- Import and export of **OpenRaster (.ora)** and **PSD** for compatibility. The decision is ours, the originals have no ORA.

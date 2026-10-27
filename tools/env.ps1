@@ -1,5 +1,5 @@
-# Окружение разработки Painter. Всё локально в папке проекта.
-# Использование: . .\tools\env.ps1
+# Painter development environment. Everything is local in the project folder.
+# Usage: . .\tools\env.ps1
 $root = Split-Path -Parent $PSScriptRoot
 $env:PAINTER_ROOT = $root
 # In a git worktree .tools/.venv are absent: use the main checkout's copies.

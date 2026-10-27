@@ -1,40 +1,40 @@
 # ibisPaint: Liquify Pen, Mesh/Perspective Form
 
-Источник: ibispaint.com/lecture №35, 36, 138, 154.
+Source: ibispaint.com/lecture №35, 36, 138, 154.
 
 ## Liquify Pen (Special Pen)
-- Параметры: **Thickness**, **Strength**.
-- Режимы:
+- Parameters: **Thickness**, **Strength**.
+- Modes:
   - **Drag** (push);
   - **Shrink** (pinch);
   - **Expand** (bloat);
-  - **Smoothen** (сгладить деформацию);
-  - **Revert** (восстановить).
-- Работает как обычная кисть-инструмент (без отдельного workspace).
+  - **Smoothen** (smooth out the deformation);
+  - **Revert** (restore).
+- It works like a regular brush tool (without a separate workspace).
 
 ## Transform → Perspective Form
-- 4 угла.
+- 4 corners.
 - Perspective on/off.
 - **Repeat**:
   - Off;
-  - Inner (тиражирование внутри четырёхугольника);
-  - Horizon (внутри и снаружи, до горизонта);
-  - Full (как Horizon, зеркально чередуясь).
-- **Repeat X/Y** (кол-во), **Phase X/Y** (сдвиг).
+  - Inner (tiling inside the quad);
+  - Horizon (inside and outside, up to the horizon);
+  - Full (like Horizon, alternating mirrored).
+- **Repeat X/Y** (the count), **Phase X/Y** (the offset).
 - Interpolation on/off.
-- Применение: текстура пола в перспективе.
+- Use case: a floor texture in perspective.
 
 ## Transform → Mesh Form
-- **Division X/Y** (сетка).
+- **Division X/Y** (the grid).
 - **Smoothness**.
-- **Draw Order** (порядок наложения ячеек).
-- Применение: складки юбки и пр.
+- **Draw Order** (the order in which the cells are overlaid).
+- Use case: skirt folds and so on.
 
-## Сопоставление с IP
-- IP Liquify: Move, Pinch, Bloat, Swirl CW/CCW, Restore, Rewind + сетка + Symmetry.
-- Добавить из ibis:
+## Comparison with IP
+- IP Liquify: Move, Pinch, Bloat, Swirl CW/CCW, Restore, Rewind + the grid + Symmetry.
+- To add from ibis:
   - Strength;
-  - Smoothen (аналог Rewind, но локальный);
-  - быстрый режим Liquify-кисти без входа в workspace (опционально).
-- IP Warp (3×3 Bézier) против ibis Mesh (N×M + smoothness + draw order): **объединить** = Warp с настраиваемой сеткой.
-- Perspective Form Repeat (Inner/Horizon/Full) — нет у IP. **Добавить** в Distort как опцию тайлинга.
+  - Smoothen (an analogue of Rewind, but local);
+  - a quick mode of the Liquify brush without entering the workspace (optionally).
+- IP Warp (3×3 Bézier) versus ibis Mesh (N×M + smoothness + draw order): **merge** = Warp with a configurable grid.
+- Perspective Form Repeat (Inner/Horizon/Full) — IP does not have it. **Add** it to Distort as a tiling option.

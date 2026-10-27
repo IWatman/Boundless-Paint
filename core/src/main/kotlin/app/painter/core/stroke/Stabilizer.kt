@@ -3,7 +3,7 @@ package app.painter.core.stroke
 import kotlin.math.sqrt
 
 /**
- * Real-time EMA stabilizer (spec/GAPS.md «Стабилизатор»).
+ * Real-time EMA stabilizer (spec/GAPS.md «Stabilizer»).
  *
  * Position alpha is `α = 1 − 0.95·smoothing/100`, further divided by `1 + k·speed` where
  * `k = 0.5·smoothingSpeed/100` and speed is in px/ms. Pressure and tilt use a lighter

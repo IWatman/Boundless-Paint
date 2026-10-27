@@ -1,38 +1,38 @@
-# ibisPaint: трансформации
+# ibisPaint: transforms
 
-Источник: ibispaint.com/lecture №35, 36, 153, 154, 156.
+Source: ibispaint.com/lecture №35, 36, 153, 154, 156.
 
 ## Translate Scale
-- Тогглы: Scaling, Rotation, **Repeat** (показ повтора).
-- Числовые: **Movement X/Y**, **Zoom**, **Angle**.
-- **Interpolation** (6 методов):
-  - Nearest Neighbor (пиксель-арт);
-  - Average Pixel (для уменьшения);
+- Toggles: Scaling, Rotation, **Repeat** (showing the repeat).
+- Numeric: **Movement X/Y**, **Zoom**, **Angle**.
+- **Interpolation** (6 methods):
+  - Nearest Neighbor (pixel art);
+  - Average Pixel (for downscaling);
   - Bilinear;
   - Bicubic;
   - Lanczos 2;
   - Lanczos 3.
-- **Target**: текущий слой или весь холст.
-- Show Frame around Object: тач вне рамки = навигация.
-- Жесты: corner = scale, inside = move, rotation knob, 2 пальца вне рамки = холст.
+- **Target**: the current layer or the whole canvas.
+- Show Frame around Object: a touch outside the frame = navigation.
+- Gestures: corner = scale, inside = move, the rotation knob, 2 fingers outside the frame = the canvas.
 
 ## Perspective Form
-- 4 угла.
-- Repeat: Off / Inner / Horizon / Full (зеркальное чередование).
+- 4 corners.
+- Repeat: Off / Inner / Horizon / Full (mirrored alternation).
 - Repeat X/Y, Phase X/Y, Interpolation.
 
 ## Mesh Form
 - Division X/Y, Smoothness, Draw Order.
 
-## Прочее
-- Flip layer H/V, flip canvas H/V (кнопки в Layer window).
-- Move Folder (все слои папки).
-- Vector и adjustment слои при деформации растеризуются (с подтверждением).
+## Other
+- Flip layer H/V, flip canvas H/V (buttons in the Layer window).
+- Move Folder (all the layers of the folder).
+- Vector and adjustment layers are rasterized on deformation (with a confirmation).
 
-## Что добавить к IP
-- Числовой ввод (X, Y, zoom, angle).
-- Выбор интерполяции (6 методов).
-- Target = весь холст (у IP мультивыбор слоёв, это эквивалент).
-- Vertical flip (у IP только горизонтальный).
-- Repeat-тайлинг в Perspective.
+## What to add to IP
+- Numeric input (X, Y, zoom, angle).
+- A choice of interpolation (6 methods).
+- Target = the whole canvas (IP has multi-select of layers, which is the equivalent).
+- Vertical flip (IP has only horizontal).
+- Repeat tiling in Perspective.
 - Mesh N×M.

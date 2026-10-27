@@ -1,26 +1,26 @@
 # Infinite Painter: Clone tool
 
-Источник: User Guide /painter/cloning/*.
+Source: User Guide /painter/cloning/*.
 
-## Общее
-- Creative Tools → Clone. Работает как 4-й режим кисти: подходит любая кисть. Иконка Clone на main toolbar открывает опции режима.
-- Target = всегда активный слой.
-- Source = любой слой (Layer options → источник). Дефолт: активный слой при старте.
+## General
+- Creative Tools → Clone. It works as a 4th brush mode: any brush will do. The Clone icon on the main toolbar opens the mode's options.
+- Target = always the active layer.
+- Source = any layer (Layer options → source). Default: the active layer at start.
 - **Offset mode**:
-  - прицел-источник перетаскивается;
-  - смещение постоянное;
-  - **Align on**: источник движется с кистью, новый мазок продолжает клон;
-  - **Align off**: каждый мазок от исходной точки.
-- Offset off = клонирование «на месте» между слоями.
-- Guides, шейпы и симметрии работают, кроме Smart. Blend и Erase работают.
+  - the source crosshair is dragged;
+  - the offset is constant;
+  - **Align on**: the source moves with the brush, a new stroke continues the clone;
+  - **Align off**: every stroke starts from the original point.
+- Offset off = cloning "in place" between layers.
+- Guides, shapes and symmetries work, except Smart. Blend and Erase work.
 
-## Режимы
-1. **Photo**: точная копия пикселей через голову и текстуру кисти. Ретушь, фотобашинг. Дефолт: offset on, тот же слой.
-2. **Artistic**: источник = палитра цветов в голове кисти. Опции **Blur**, **Pull** (как в Paint tab, сохраняются в кисть).
-3. **Smart**: алгоритм сам кладёт много коротких мазков по контурам источника, пока двигаешь кистью.
-   - Stroke length (0 = тычки);
+## Modes
+1. **Photo**: an exact copy of the pixels through the tip and the brush texture. Retouching, photobashing. Default: offset on, the same layer.
+2. **Artistic**: the source = a palette of colors in the brush tip. Options **Blur**, **Pull** (as in the Paint tab, they are saved into the brush).
+3. **Smart**: the algorithm itself lays many short strokes along the source's contours while you move the brush.
+   - Stroke length (0 = dabs);
    - Mix-in;
-   - Smart rotation (следовать контурам);
+   - Smart rotation (follow the contours);
    - Edge contrast (−100…+100);
-   - Complete strokes (look-ahead, «живописнее»).
-   - Некоторые кисти работают неожиданно.
+   - Complete strokes (look-ahead, "more painterly").
+   - Some brushes behave unexpectedly.

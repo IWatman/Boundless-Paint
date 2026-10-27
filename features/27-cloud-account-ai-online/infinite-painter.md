@@ -1,34 +1,34 @@
-# Infinite Painter: онлайн, аккаунт, Challenges
+# Infinite Painter: online, account, Challenges
 
-Источник: User Guide /painter/home/*, /projects/challenges/.
+Source: User Guide /painter/home/*, /projects/challenges/.
 
 ## Home workspace
-- 3 вкладки: **Discover**, **Home**, **Projects**. Свайп или иконки.
+- 3 tabs: **Discover**, **Home**, **Projects**. A swipe or the icons.
 - Home:
-  - имя приложения (версия);
+  - the app name (the version);
   - Blank canvas;
   - From image;
   - Pattern;
   - Challenges;
   - Recent projects.
-- Discover (нужен интернет): карточки-новости, мануалы (онлайн или скачать), обновления, туториалы, artist spotlights, соцсети. Обновляются периодически.
-- Options → Community: онлайн-галерея пользователей. Детали не документированы.
-- Community brushes: см. 03.
+- Discover (the internet is needed): news cards, manuals (online or download), updates, tutorials, artist spotlights, social networks. They are updated periodically.
+- Options → Community: an online gallery of users. The details are not documented.
+- Community brushes: see 03.
 
 ## Challenges (7.1+)
-- Тип проекта «упражнение». Выбор типа → инструкция → выполнение.
-- Часть функций намеренно отключена (например, пипетка, undo).
-- Условия меняются со временем или от числа мазков.
-- Результат экспортируется как обычное изображение. В Regular не конвертируется.
+- An "exercise" project type. Choosing the type → the instructions → doing it.
+- Some functions are deliberately disabled (for example, the eyedropper, undo).
+- The conditions change over time or with the number of strokes.
+- The result is exported as a regular image. It is not converted into a Regular one.
 
-## Аккаунт
-- Опциональный логин (имя, email). Logout ничего не отключает.
+## Account
+- An optional login (name, email). Logout disables nothing.
 
-## Облако
-- Нет. Проекты только локально, перенос через PNTR.
+## Cloud
+- None. The projects are local only, transfer via PNTR.
 
-## AI-функции
-- Нет.
+## AI features
+- None.
 
-## Для нашего приложения
-- Монетизации нет: все функции доступны всем, без уровней и ограничений.
+## For our app
+- There is no monetization: all features are available to everyone, without tiers and limits.

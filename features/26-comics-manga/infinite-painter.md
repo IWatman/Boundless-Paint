@@ -1,11 +1,11 @@
-# Infinite Painter: комиксы и манга
+# Infinite Painter: comics and manga
 
-В IP отдельного «манга-режима» нет. Есть набор связанных функций:
-- **Panels tool / Panels layer**: рамки, гаттеры, мазки ограничены панелью (см. 22-canvas-ops).
-- **Text tool**: баллоны и подписи, outline, RTL (см. 08-text). Самих фигур баллонов нет, только шейпы.
-- **Screentone**: кисти и эффект Screentone в кисти (spacing, angle), Screentone Fill brush (см. 03/04).
-- **Фильтры**: Halftone (4 варианта), Manga, Stamp (1-bit) (см. 18).
-- **Line Art blending mode** и proofing-режим Line Art (см. 07/05).
-- Многостраничности нет: страницы делают слоями в режиме Solo или отдельными проектами.
+IP has no separate "manga mode". There is a set of related features:
+- **Panels tool / Panels layer**: frames, gutters, strokes confined to a panel (see 22-canvas-ops).
+- **Text tool**: balloons and captions, outline, RTL (see 08-text). There are no balloon shapes as such, only the shapes.
+- **Screentone**: brushes and the Screentone effect in the brush (spacing, angle), the Screentone Fill brush (see 03/04).
+- **Filters**: Halftone (4 variants), Manga, Stamp (1-bit) (see 18).
+- The **Line Art blending mode** and the Line Art proofing mode (see 07/05).
+- There is no multi-page support: pages are made as layers in Solo mode or as separate projects.
 
-Всё остальное (manga manuscript, frame divider, баллоны, вертикальный текст, материалы, печать) берём из ibisPaint (см. ibispaint.md).
+Everything else (manga manuscript, frame divider, balloons, vertical text, materials, printing) we take from ibisPaint (see ibispaint.md).

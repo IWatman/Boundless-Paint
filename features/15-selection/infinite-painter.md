@@ -1,74 +1,74 @@
-# Infinite Painter: выделения
+# Infinite Painter: selections
 
-Источник: User Guide /painter/selections/*.
+Source: User Guide /painter/selections/*.
 
-## Модель
-- Выделение = **8-bit маска** (мягкие края возможны). Работает как трафарет для кистей, заливок, фильтров. Само может трансформироваться и редактироваться.
-- Selection workspace: пока он открыт, **обычные инструменты редактируют маску**, а не слой. Работают кисти, Pattern tools, Liquify, фильтры (для 8-bit полезны не все), трансформация маски.
+## Model
+- A selection = an **8-bit mask** (soft edges are possible). It works as a stencil for brushes, fills, filters. It can itself be transformed and edited.
+- Selection workspace: while it is open, **the regular tools edit the mask**, not the layer. Brushes, Pattern tools, Liquify, filters (not all of them are useful for 8-bit), mask transform all work.
 
-## Workspace (общий тулбар)
-- Список инструментов (тап по имени текущего).
-- Режим:
+## Workspace (shared toolbar)
+- The tool list (tap the name of the current one).
+- Mode:
   - **Normal (add)**;
   - **Subtract**.
-- Cancel (закрыть и очистить), Confirm (закрыть, выделение активно).
-- Операции над маской, операции над содержимым. Тулбар скроллится.
+- Cancel (close and clear), Confirm (close, the selection is active).
+- Operations on the mask, operations on the content. The toolbar scrolls.
 - Top bar:
-  - Selection menu (только если есть выделение): те же операции + Mask appearance, без инструментов;
-  - тоггл Active (красный). Выключение не стирает маску. Клавиша `\`.
+  - Selection menu (only if there is a selection): the same operations + Mask appearance, without the tools;
+  - the Active toggle (red). Turning it off does not erase the mask. The `\` key.
 
-## Инструменты (8 + слой)
-- **Lasso**: свободный контур.
-- **Rectangle**: ручки rotate, resize, move, stretch. Stamp.
-- **Circle**: от центра. Stretch → эллипс. Move, resize, rotate. Stamp.
+## Tools (8 + layer)
+- **Lasso**: a free contour.
+- **Rectangle**: rotate, resize, move, stretch handles. Stamp.
+- **Circle**: from the center. Stretch → an ellipse. Move, resize, rotate. Stamp.
 - **Polyline**:
-  - тап = узел;
-  - drag = свободная линия;
-  - hold ~1 с = precision-перетаскивание узла;
+  - a tap = a node;
+  - a drag = a free line;
+  - holding ~1 s = precision-dragging a node;
   - ✓.
-- **Path**: Bézier (drag = smooth, tap = cusp, тап по узлу = toggle, drag на соседа = удалить), close, ✓.
+- **Path**: Bézier (drag = smooth, tap = cusp, tapping a node = toggle, dragging onto a neighbor = delete), close, ✓.
 - **Wand**:
-  - как bucket, но создаёт выделение;
-  - тап = preset tolerance, drag = Live Tolerance;
-  - tolerance общий с Fill (1–100%);
+  - like bucket, but it creates a selection;
+  - a tap = preset tolerance, drag = Live Tolerance;
+  - the tolerance is shared with Fill (1–100%);
   - sampling multi/single layer;
   - source layer.
-- **Brush**: рисовать выделение любой кистью. Paint добавляет, Erase убирает. Цвет игнорируется.
-- **Color range**: тап по цвету → все похожие цвета на текущем слое, несвязные тоже. Свой tolerance, независимый.
-- **Select Layer** (Layer options): непрозрачные пиксели слоя, группы или маски.
+- **Brush**: painting a selection with any brush. Paint adds, Erase removes. The color is ignored.
+- **Color range**: tap a color → all similar colors on the current layer, non-contiguous ones too. Its own tolerance, independent.
+- **Select Layer** (Layer options): the opaque pixels of a layer, group or mask.
 
-## Совместимость с гайдами (таблица из доки)
-- Rectangle, Circle, Polyline — это Lasso с другим типом шейпа.
-- Brush selection совместим со всем.
-- Wand и Color range ни с чем не совместимы.
-- Lasso совместим только с Symmetry. Rect/Circle добавляют Lines/Ellipse/Pen guides и Grids.
+## Compatibility with guides (table from the docs)
+- Rectangle, Circle, Polyline — this is Lasso with a different shape type.
+- Brush selection is compatible with everything.
+- Wand and Color range are not compatible with anything.
+- Lasso is compatible only with Symmetry. Rect/Circle add Lines/Ellipse/Pen guides and Grids.
 
-## Boolean (Layer options → Boolean, когда выделение уже есть)
-- A = выделение, B = область слоя:
-  - Select (заменить);
+## Boolean (Layer options → Boolean, when a selection already exists)
+- A = the selection, B = the layer's area:
+  - Select (replace);
   - Add;
   - Subtract A−B;
   - Reverse Subtract B−A;
   - Intersect;
   - Difference (XOR).
 
-## Операции над маской
+## Operations on the mask
 - Select all.
 - Invert.
 - Clear.
-- Transform mask (все режимы трансформации).
-- **Expand** / **Contract**: слайдер 0% → max 6 px, применять повторно.
-- **Feather** (= blur маски).
+- Transform mask (all transform modes).
+- **Expand** / **Contract**: a slider 0% → max 6 px, apply repeatedly.
+- **Feather** (= a mask blur).
 
-## Операции над содержимым
+## Operations on the content
 - Transform.
-- **Duplicate**: на новый слой без имени, opacity, blend и маски. Пустое выделение = весь слой.
-- **Isolate** (cut → new layer).
-- **Copy Merged**: со всех видимых слоёв, сразу открывается в Transform. Пустое = весь холст.
-- **Delete** (только активный слой).
-- **Clipboard**: во внутренний постоянный буфер-библиотеку (см. 23).
-- **Make Brush**: фрагмент → Brush Creator как head.
-- После операции выделение очищается. Повторно использовать маску: сохранить её в layer mask.
+- **Duplicate**: into a new layer without a name, opacity, blend and masks. An empty selection = the whole layer.
+- **Isolate** (cut → a new layer).
+- **Copy Merged**: from all visible layers, it opens immediately in Transform. Empty = the whole canvas.
+- **Delete** (the active layer only).
+- **Clipboard**: into the internal permanent buffer-library (see 23).
+- **Make Brush**: a fragment → Brush Creator as a head.
+- After the operation the selection is cleared. To reuse the mask: save it into a layer mask.
 
 ## Mask appearance
-- **Marching ants** или **Color overlay** (дефолт серый 50%). Цвет и opacity оверлея (100% удобно для ручной правки маски).
+- **Marching ants** or **Color overlay** (default gray 50%). The color and opacity of the overlay (100% is convenient for manual mask editing).

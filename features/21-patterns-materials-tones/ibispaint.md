@@ -1,28 +1,28 @@
-# ibisPaint: материалы, скринтоны, бумаги
+# ibisPaint: materials, screentones, papers
 
-Источник: ibispaint.com/lecture №17, 29, 42, 163, 186, store listing.
+Source: ibispaint.com/lecture №17, 29, 42, 163, 186, store listing.
 
 ## Material tool (top-right)
-- Онлайн-библиотека (тысячи материалов):
+- An online library (thousands of materials):
   - Cloth Patterns (Color);
   - Screen tones;
   - Backgrounds (Anime Background Gray…);
   - Manga Balloon;
   - Tracing Sketches (Whole body / Mini / Partial / Building);
   - **3D Materials**;
-- Поиск по имени. Материал ставится новым слоем → size → ✓ → clip / mesh / multiply.
-- Материальный скринтон растеризован (не масштабировать).
+- Search by name. A material is placed as a new layer → size → ✓ → clip / mesh / multiply.
+- A material screentone is rasterized (do not scale it).
 
 ## Screentone
-- 46 тонов: Dot L6…L16, линии и др.
-- **Layer blend «Screentone»**: слой рисуется в градациях, отображается растром. Плотность = яркость. Нерастеризованный тон сохраняет размер точки при ресайзе.
-- Brush/Bucket по такому слою.
+- 46 tones: Dot L6…L16, lines and others.
+- The **"Screentone" layer blend**: the layer is painted in grayscales and displayed as a halftone. The density = brightness. A non-rasterized tone keeps its dot size on resize.
+- Brush/Bucket over such a layer.
 
 ## Canvas Papers
-- 22+ текстур бумаги (см. 06).
+- 22+ paper textures (see 06).
 
-## Сопоставление с IP
-- IP: Pattern tools (Symmetry/Path/Quilt/Tile), Pattern fill, screentone-кисти, Halftone-фильтры.
-- Добавить:
-  - библиотеку материалов (локальный каталог + импорт пользователя). Онлайн-магазин опционально;
-  - Screentone-слой как неразрушающее свойство (тип точки, LPI, угол).
+## Comparison with IP
+- IP: Pattern tools (Symmetry/Path/Quilt/Tile), Pattern fill, screentone brushes, Halftone filters.
+- To add:
+  - a materials library (a local catalog + user import). An online store optionally;
+  - a Screentone layer as a non-destructive property (the dot type, LPI, angle).

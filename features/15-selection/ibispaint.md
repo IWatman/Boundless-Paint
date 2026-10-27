@@ -1,27 +1,27 @@
-# ibisPaint: выделения
+# ibisPaint: selections
 
-Источник: ibispaint.com/lecture №9, 24, 52, 162, 169.
+Source: ibispaint.com/lecture №9, 24, 52, 162, 169.
 
-- Инструменты: **Lasso**, **Magic Wand** (настройки как у Bucket: strength, expansion, gap, reference layer, boundary), **Selection Layer** (рисовать выделение кистью и ластиком), **Color Range**, Select Opacity (по альфе слоя).
-- Режимы: **Set** (заменить), **Add**, **Subtract**.
-- Команды: Invert Selection, Clear.
+- Tools: **Lasso**, **Magic Wand** (settings like Bucket: strength, expansion, gap, reference layer, boundary), **Selection Layer** (drawing a selection with a brush and an eraser), **Color Range**, Select Opacity (by the layer's alpha).
+- Modes: **Set** (replace), **Add**, **Subtract**.
+- Commands: Invert Selection, Clear.
 - Selection Area window:
-  - **Expand/Contract** (слайдер);
+  - **Expand/Contract** (a slider);
   - **Cut**;
-  - **Copy** (всех слоёв, merged);
+  - **Copy** (of all layers, merged);
   - **Paste**;
   - Remove Selection Area.
 - **Color Range**:
-  - до **5 reference points** (перемещаемые);
+  - up to **5 reference points** (movable);
   - **Fuzziness**;
   - **Range**;
   - Show Selection.
-- Отображение: пунктир + голубая заливка на Selection Layer.
-- Transform выделенного: drag, pinch, Rotate ON.
-- Settings: «Save Selection Area» (выделение сохраняется после выхода в галерею).
+- Display: a dashed outline + a light blue fill on the Selection Layer.
+- Transforming the selection: drag, pinch, Rotate ON.
+- Settings: "Save Selection Area" (the selection is preserved after going back to the gallery).
 
-## Что добавить к IP
-- Режим Set (явная замена) в дополнение к Add/Subtract. Intersect есть в boolean IP.
-- Color Range с несколькими эталонными точками + Fuzziness/Range (у IP один тап + tolerance).
-- Copy/Cut/Paste в системный буфер (у IP постоянная библиотека Clipboard, обычного copy-paste нет). **Нужны оба.**
-- Сохранение выделения между сессиями.
+## What to add to IP
+- A Set mode (an explicit replace) in addition to Add/Subtract. Intersect exists in IP's boolean.
+- Color Range with several reference points + Fuzziness/Range (IP has one tap + tolerance).
+- Copy/Cut/Paste to the system clipboard (IP has a permanent Clipboard library, there is no regular copy-paste). **Both are needed.**
+- Keeping the selection between sessions.

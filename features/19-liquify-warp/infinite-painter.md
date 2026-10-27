@@ -1,32 +1,32 @@
 # Infinite Painter: Liquify
 
-Источник: User Guide /painter/liquify/*.
+Source: User Guide /painter/liquify/*.
 
-## Модель
-- Деформации пишутся в **невидимую сетку смещений**, исходник не портится. Сетка редактируема до закрытия инструмента.
-- Внутри сессии обычный undo не работает: шаги не отменяются по одному. Есть Restore и Rewind. После закрытия вся сессия = один шаг undo.
-- Confirm применяет и выбрасывает сетку.
-- Работает с Symmetry.
-- Работает на маске выделения (в Selection workspace).
+## Model
+- The deformations are written into an **invisible displacement grid**, the source is not damaged. The grid is editable until the tool is closed.
+- Inside a session the regular undo does not work: the steps are not undone one by one. There are Restore and Rewind. After closing, the whole session = one undo step.
+- Confirm applies and discards the grid.
+- Works with Symmetry.
+- Works on a selection mask (in the Selection workspace).
 
 ## Toolbar
 - Cancel.
-- Show/Hide grid (видна только во время работы инструмента).
-- **Size** (max = размер холста). В Rewind слайдер = степень отката.
+- Show/Hide grid (visible only while the tool is running).
+- **Size** (max = the canvas size). In Rewind the slider = the degree of rollback.
 - Hide effect.
 - Confirm.
 
-## Инструменты
-- Деформация:
-  - **Move (push)**: универсальный, «скульптинг»;
+## Tools
+- Deformation:
+  - **Move (push)**: the universal one, "sculpting";
   - **Pinch**;
   - **Bloat**;
   - **Swirl CCW**;
   - **Swirl CW**.
-- Восстановление:
-  - **Restore**: локально сглаживает сетку в 0 (быстро);
-  - **Rewind**: глобально ослабляет всю деформацию сессии (слайдер от «нет деформации» до «текущее»).
-- Strength, pressure, falloff в доке не описаны. В ibisPaint Liquify Pen параметров больше, см. ibispaint.md.
+- Restoration:
+  - **Restore**: locally smooths the grid to 0 (fast);
+  - **Rewind**: globally weakens the whole deformation of the session (a slider from "no deformation" to "current").
+- Strength, pressure, falloff are not described in the docs. In ibisPaint the Liquify Pen has more parameters, see ibispaint.md.
 
-## Другие деформации
-- Warp и Distort в Transform (16). Fisheye как фильтр (18).
+## Other deformations
+- Warp and Distort in Transform (16). Fisheye as a filter (18).

@@ -37,7 +37,7 @@ object Constrain {
 /** Kinds of shapes that the Shape tool creates (spec G3.1). */
 enum class ShapeTool { LINE, RECT, ELLIPSE, POLYGON, ARC }
 
-/** Creates shapes from the initial drag (spec G3.1 table, column «Создание»). */
+/** Creates shapes from the initial drag (spec G3.1 table, column «Creation»). */
 object ShapeFactory {
     /** Sag of a new arc's mid point, fraction of the chord. */
     const val ARC_SAG = 0.25f
@@ -70,7 +70,7 @@ object ShapeFactory {
     private fun sgn(v: Float) = if (v < 0f) -1f else 1f
 }
 
-/** What a handle does (spec G3.1 «Ручки»). */
+/** What a handle does (spec G3.1 «Handles»). */
 enum class HandleKind { MOVE, ROTATE, END_A, END_B, CORNER, SIDE, RX, RY, VERTEX, ARC_START, ARC_END, ARC_MID, NODE, IN, OUT }
 
 /** A draggable handle at [pos]; [index] = corner/side/node number. */

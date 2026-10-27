@@ -36,7 +36,7 @@ class CompoundCommand(
 }
 
 /**
- * Linear undo/redo stack (spec/document-model.md «История»). Limited to [maxSteps] entries and
+ * Linear undo/redo stack (spec/document-model.md «History (undo)»). Limited to [maxSteps] entries and
  * [maxBytes] of retained data, whichever is hit first; the oldest entries are evicted.
  * The most recent entry is always kept even if it alone exceeds [maxBytes].
  */

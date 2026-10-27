@@ -1,30 +1,30 @@
-# Infinite Painter: таймлапс (анимации нет)
+# Infinite Painter: timelapse (no animation)
 
-Источник: User Guide /painter/data/timelapse/.
+Source: User Guide /painter/data/timelapse/.
 
-## Запись
-- Пишутся только реальные правки (мазки), не экран. Темп = время рисования, паузы вырезаются. Данные хранятся в проекте.
+## Recording
+- Only real edits (strokes) are recorded, not the screen. The pace = the drawing time, pauses are cut out. The data is stored in the project.
 - Settings → New Project:
-  - качество (разрешение) видео: выбирается до создания проекта, потом не меняется;
-  - вкл/выкл для новых проектов.
-- Пропорции видео = пропорции холста.
-- Режимы:
-  - **Regular** (холст всегда в кадре);
-  - **Show navigation** (видео следует за zoom, pan, rotate), переключается во время записи.
-- UI, курсоры и касания не пишутся никогда.
-- **Hide when recording** на слое или группе.
+  - the video quality (resolution): chosen before creating the project, it does not change afterwards;
+  - on/off for new projects.
+- The video proportions = the canvas proportions.
+- Modes:
+  - **Regular** (the canvas is always in frame);
+  - **Show navigation** (the video follows zoom, pan, rotate), switchable during recording.
+- The UI, cursors and touches are never recorded.
+- **Hide when recording** on a layer or a group.
 - Record panel:
-  - индикатор (красная точка);
+  - an indicator (a red dot);
   - on/off;
-  - длительность и оценка размера;
+  - the duration and the size estimate;
   - Show navigation;
   - View Playback.
-- Статистика проекта: число мазков, время (по касаниям), пройденная дистанция мазков, число undo.
+- Project statistics: the number of strokes, the time (by touches), the distance travelled by the strokes, the number of undos.
 
 ## Playback
-- Скраббер без play/pause, Close, Delete (необратимо).
-- **Export**: выбор длительности клипа из списка (зависит от длины записи). Можно несколько экспортов разной длины. В галерею или в Share.
-- FPS, кодек и водяной знак в доке не указаны.
+- A scrubber without play/pause, Close, Delete (irreversible).
+- **Export**: choosing the clip duration from a list (it depends on the recording length). Several exports of different lengths are possible. To the gallery or to Share.
+- The FPS, the codec and the watermark are not specified in the docs.
 
-## Анимация
-- Отсутствует. Берём из ibisPaint (см. ibispaint.md).
+## Animation
+- Absent. We take it from ibisPaint (see ibispaint.md).

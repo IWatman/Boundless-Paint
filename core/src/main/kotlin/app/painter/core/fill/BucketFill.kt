@@ -82,7 +82,7 @@ object LassoFill {
 }
 
 /**
- * Applied fill whose color can be changed afterwards without a new history entry (spec §4.3 «Перекраска»):
+ * Applied fill whose color can be changed afterwards without a new history entry (spec §4.3 «Recolor»):
  * [recolor] reverts the current pixels and refills with the new color.
  */
 class FillCommand internal constructor(

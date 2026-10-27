@@ -1,33 +1,33 @@
-# Infinite Painter: Pattern tools (размножение)
+# Infinite Painter: Pattern tools (multiplication)
 
-Источник: User Guide /painter/patterns/*. Pattern project см. в 01. Pattern fill см. в 09. Screentone-кисти см. в 03/04. Halftone и Manga фильтры см. в 18.
+Source: User Guide /painter/patterns/*. For the Pattern project see 01. For Pattern fill see 09. For Screentone brushes see 03/04. For the Halftone and Manga filters see 18.
 
-- Editing Tools → Patterns. Источник: содержимое текущего слоя или выделение. Лучше всего маленькие изолированные фрагменты.
+- Editing Tools → Patterns. Source: the content of the current layer or a selection. Small isolated fragments work best.
 
 ## Symmetry pattern
-- Радиальное размножение готового фрагмента вокруг центра (дефолт центр холста).
-- **Planes** 1–100 (копии + оригинал).
+- Radial multiplication of a ready-made fragment around a center (default: the canvas center).
+- **Planes** 1–100 (copies + the original).
 - **Fan angle** (100% = 360°).
-- **Reflect** + Angle отражённого набора (ручка на холсте).
+- **Reflect** + the angle of the reflected set (a handle on the canvas).
 - Real-time, Cancel/Confirm.
 
-## Path pattern («генератор листьев»)
-- Копии вдоль нарисованного пути, уменьшаются к концу.
-- Copies 1–100 (меняется после рисования), **Size jitter**, **Angular jitter**.
-- Путь нельзя править, только перерисовать. Можно рисовать с гайдами и шейпами.
+## Path pattern ("the leaf generator")
+- Copies along a drawn path, they shrink toward the end.
+- Copies 1–100 (changed after drawing), **Size jitter**, **Angular jitter**.
+- The path cannot be edited, only redrawn. You can draw with guides and shapes.
 
 ## Quilt pattern
-- Прямоугольная область заполняется сеткой копий.
-- Ручки:
+- A rectangular area is filled with a grid of copies.
+- Handles:
   - base point;
   - vertical divisions;
   - horizontal divisions;
-  - область.
-- Больше 100 копий по каждой оси. Помнит последние значения.
-- **Reflect H / V** (чередование, дефолт off).
-- Оригинал класть в угол области.
+  - the area.
+- More than 100 copies along each axis. It remembers the last values.
+- **Reflect H / V** (alternation, default off).
+- Put the original in a corner of the area.
 
 ## Tile pattern
-- Прямоугольник-контроль (ручки по отдельности + drag) → бесшовное замощение **заменяет слой**.
-- 2 переключателя отражения (H/V).
-- **Save pattern** → библиотека (Imported) для Pattern fill. Сохраняет и настройки симметрии. Можно сохранить без применения.
+- A control rectangle (separate handles + drag) → seamless tiling that **replaces the layer**.
+- 2 reflection switches (H/V).
+- **Save pattern** → the library (Imported) for Pattern fill. It also saves the symmetry settings. You can save without applying.

@@ -1,8 +1,8 @@
-# ibisPaint: цветокоррекция
+# ibisPaint: color correction
 
-Источник: ibispaint.com/lecture №53–61, 99–100, 159–160, 173, 179.
+Source: ibispaint.com/lecture №53–61, 99–100, 159–160, 173, 179.
 
-- Коррекции живут как фильтры категории **Adjust Color** (см. 18):
+- The corrections live as filters of the **Adjust Color** category (see 18):
   - Brightness & Contrast;
   - Tone Curve;
   - HSL;
@@ -17,11 +17,11 @@
   - Invert;
   - Change Drawing Color;
   - Extract Line Drawing.
-- **Adjustment layer**: любой фильтр из Filter Selector становится неразрушающим слоем. Readjust, сила = opacity.
-- Маскирование коррекции = выделение (quick masks как у IP нет).
+- **Adjustment layer**: any filter from the Filter Selector becomes a non-destructive layer. Readjust, the strength = opacity.
+- Masking a correction = a selection (ibis has no quick masks like IP).
 
-## Что добавить к IP
-- **Levels** (гистограмма, auto, по каналам).
+## What to add to IP
+- **Levels** (a histogram, auto, per channel).
 - **Color Balance**.
 - **Replace Color** (multi-point).
-- Расширить набор Adjustment layer до всех фильтров (у IP 11 коррекций + 27 фильтров).
+- Extend the set of Adjustment layers to all the filters (IP has 11 corrections + 27 filters).

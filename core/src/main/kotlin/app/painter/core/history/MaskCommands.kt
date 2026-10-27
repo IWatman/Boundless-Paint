@@ -14,7 +14,7 @@ import app.painter.core.raster.Tile
 import app.painter.core.raster.TileGrid
 import app.painter.core.raster.TileKey
 
-/** How [AddMask] initializes a new mask (spec L3 «Создание»). */
+/** How [AddMask] initializes a new mask (spec L3 «Creation»). */
 enum class MaskInit {
     /** Default 255, no tiles. */
     REVEAL_ALL,
