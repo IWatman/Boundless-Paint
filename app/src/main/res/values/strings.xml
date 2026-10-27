@@ -126,6 +126,8 @@
     <string name="tool_ellipse_select">Ellipse selection</string>
     <string name="tool_lasso_select">Lasso selection</string>
     <string name="tool_magic_wand">Magic wand</string>
+    <string name="tool_transform">Transform</string>
+    <string name="action_apply">Apply</string>
     <string name="deselect">Deselect</string>
     <string name="select_all">Select all</string>
     <string name="invert_selection">Invert selection</string>

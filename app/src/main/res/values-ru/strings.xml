@@ -125,6 +125,8 @@
     <string name="tool_ellipse_select">Эллиптическое выделение</string>
     <string name="tool_lasso_select">Лассо</string>
     <string name="tool_magic_wand">Волшебная палочка</string>
+    <string name="tool_transform">Трансформация</string>
+    <string name="action_apply">Применить</string>
     <string name="deselect">Снять выделение</string>
     <string name="select_all">Выделить всё</string>
     <string name="invert_selection">Инвертировать выделение</string>

@@ -66,6 +66,7 @@ fun StudioScreen(
     ) {
         Box(Modifier.fillMaxSize()) { canvas() }
         SelectionOverlay(state = state, modifier = Modifier.fillMaxSize())
+        TransformOverlay(state = state, modifier = Modifier.fillMaxSize())
 
         Box(
             Modifier
@@ -123,6 +124,14 @@ fun StudioScreen(
             }
 
             val adjustmentEditor = state.adjustmentEditor
+            if (state.transform != null) {
+                TransformBar(
+                    actions = actions,
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .padding(top = 64.dp),
+                )
+            }
             if (adjustmentEditor != null) {
                 AdjustmentEditor(
                     editor = adjustmentEditor,
@@ -190,6 +199,13 @@ private fun StudioTopBar(state: StudioUiState, actions: StudioActions, modifier:
                             onClick = {
                                 toolsMenu = false
                                 actions.selectTool(ToolUi.SELECT_WAND)
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.tool_transform)) },
+                            onClick = {
+                                toolsMenu = false
+                                actions.selectTool(ToolUi.TRANSFORM)
                             },
                         )
                         if (state.hasSelection) {

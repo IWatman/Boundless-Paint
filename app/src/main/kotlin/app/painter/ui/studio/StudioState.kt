@@ -13,13 +13,15 @@ import app.painter.core.history.MaskInit
 /**
  * Active canvas tool. [BRUSH] paints with the current brush mode; [SELECT_RECT], [SELECT_ELLIPSE] and
  * [SELECT_LASSO] drag a selection (rectangle, ellipse or freehand outline); [SELECT_WAND] taps a region
- * of the layer and adds it to the selection.
+ * of the layer and adds it to the selection. [TRANSFORM] moves, uniformly scales and rotates the active
+ * layer pixels (or the selected pixels when a selection exists) with the cage overlay.
  */
-enum class ToolUi { BRUSH, SELECT_RECT, SELECT_ELLIPSE, SELECT_LASSO, SELECT_WAND }
+enum class ToolUi { BRUSH, SELECT_RECT, SELECT_ELLIPSE, SELECT_LASSO, SELECT_WAND, TRANSFORM }
 
 /** True for the tools that build a selection instead of painting. */
 val ToolUi.isSelectionTool: Boolean
-    get() = this != ToolUi.BRUSH
+    get() = this == ToolUi.SELECT_RECT || this == ToolUi.SELECT_ELLIPSE ||
+        this == ToolUi.SELECT_LASSO || this == ToolUi.SELECT_WAND
 
 /** A document-space point (selection draft vertices, in document pixels). */
 @Immutable
@@ -138,7 +140,16 @@ data class StudioUiState(
     val canvasTransform: CanvasTransformUi = CanvasTransformUi(),
     /** Open adjustment editor, null when closed. */
     val adjustmentEditor: AdjustEditorUi? = null,
+    /** Transform cage while the transform tool is active, null otherwise. */
+    val transform: TransformUi? = null,
 )
+
+/**
+ * Transform tool state: the cage of the open [app.painter.core.transform.TransformSession] after the current
+ * mapping, as 4 document-space corners clockwise from top-left. Non-null only while the tool is active.
+ */
+@Immutable
+data class TransformUi(val corners: List<PointUi>)
 
 /** All user intents raised by [StudioScreen]. Display indices refer to [StudioUiState.layers]. */
 interface StudioActions {
@@ -146,6 +157,12 @@ interface StudioActions {
 
     /** Selects the active tool; switching away from a selection tool drops its draft. */
     fun selectTool(tool: ToolUi)
+
+    /** Applies the open transform session (undoable) and returns to [ToolUi.BRUSH]. */
+    fun transformApply() {}
+
+    /** Drops the open transform session, restoring the pixels, and returns to [ToolUi.BRUSH]. */
+    fun transformCancel() {}
 
     /** Clears the selection. */
     fun deselect()

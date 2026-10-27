@@ -1,6 +1,7 @@
 package app.painter.studio
 
 import android.app.ActivityManager
+import android.os.SystemClock
 import android.app.Application
 import android.graphics.Bitmap
 import androidx.compose.ui.graphics.ImageBitmap
@@ -28,6 +29,7 @@ import app.painter.core.history.AddLayer
 import app.painter.core.history.AddMask
 import app.painter.core.history.ApplyMask
 import app.painter.core.history.ClearLayer
+import app.painter.core.history.CompoundCommand
 import app.painter.core.history.Command
 import app.painter.core.history.DeleteMask
 import app.painter.core.history.DeleteNode
@@ -60,6 +62,16 @@ import app.painter.core.stroke.StrokeMode
 import app.painter.core.stroke.StrokeOptions
 import app.painter.core.raster.MaskGrid
 import app.painter.core.stroke.StrokeTarget
+import app.painter.core.geom.Vec2
+import app.painter.core.raster.Tile
+import app.painter.core.raster.TileKey
+import app.painter.core.transform.Affine
+import app.painter.core.transform.CageMath
+import app.painter.core.transform.FloatRect
+import app.painter.core.transform.Handle
+import app.painter.core.transform.Resample
+import app.painter.core.transform.Snap
+import app.painter.core.transform.TransformSession
 import app.painter.core.select.EllipseShape
 import app.painter.core.select.MaskOps
 import app.painter.core.select.PolyShape
@@ -81,6 +93,7 @@ import app.painter.ui.studio.adjustTitleRes
 import app.painter.ui.studio.LayerUi
 import app.painter.ui.studio.StudioActions
 import app.painter.ui.studio.StudioUiState
+import app.painter.ui.studio.TransformUi
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -166,6 +179,7 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
     }
 
     private fun setDocument(d: Document) {
+        finishTransform(apply = false)
         save(refreshList = false) // flush pending changes of the previous document
         doc = d
         history.clear()
@@ -298,6 +312,7 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
     // ---- brush ----
 
     override fun setMode(mode: BrushModeUi) {
+        finishTransform(apply = true)
         _state.update { it.copy(mode = mode, tool = ToolUi.BRUSH, selectionDraft = null, selectionDraftPath = null) }
         syncBrushState()
     }
@@ -311,10 +326,13 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
     /** Lasso trail in document pixels while dragging (points closer than 2 px are merged). */
     private val lassoPoints = ArrayList<PointUi>()
 
-    override val toolActive: Boolean get() = _state.value.tool.isSelectionTool
+    override val toolActive: Boolean
+        get() = _state.value.tool == ToolUi.TRANSFORM || _state.value.tool.isSelectionTool
 
-    override fun selectTool(tool: ToolUi) = _state.update {
-        it.copy(tool = tool, selectionDraft = null, selectionDraftPath = null)
+    override fun selectTool(tool: ToolUi) {
+        if (tool != ToolUi.TRANSFORM) finishTransform(apply = true)
+        _state.update { it.copy(tool = tool, selectionDraft = null, selectionDraftPath = null) }
+        if (tool == ToolUi.TRANSFORM) startTransform()
     }
 
     private fun clampX(x: Float) = x.coerceIn(0f, doc.width.toFloat())
@@ -333,6 +351,10 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
 
     override fun onToolDown(x: Float, y: Float) {
         if (!toolActive) return
+        if (_state.value.tool == ToolUi.TRANSFORM) {
+            transformDown(x, y)
+            return
+        }
         toolStartX = clampX(x)
         toolStartY = clampY(y)
         lassoPoints.clear()
@@ -353,6 +375,10 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
 
     override fun onToolMove(x: Float, y: Float) {
         if (!toolActive) return
+        if (_state.value.tool == ToolUi.TRANSFORM) {
+            transformMoveTo(x, y)
+            return
+        }
         val cx = clampX(x)
         val cy = clampY(y)
         if (_state.value.tool == ToolUi.SELECT_WAND) return
@@ -379,6 +405,11 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
 
     override fun onToolUp(x: Float, y: Float) {
         if (!toolActive) return
+        if (_state.value.tool == ToolUi.TRANSFORM) {
+            transformMoveTo(x, y)
+            transformUp()
+            return
+        }
         val tool = _state.value.tool
         onToolMove(x, y)
         val draft = _state.value.selectionDraft
@@ -410,8 +441,276 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
     }
 
     override fun onToolCancel() {
+        if (_state.value.tool == ToolUi.TRANSFORM) {
+            transformDrag = TransformDrag.NONE
+            return
+        }
         lassoPoints.clear()
         _state.update { it.copy(selectionDraft = null, selectionDraftPath = null) }
+    }
+
+    // ---- transform tool ----
+
+    /** Open transform session of the active layer, null while the tool is idle. */
+    private var transformSession: TransformSession? = null
+
+    /** Mapping shown by the session; always applied to the original floating pixels. */
+    private var transformMap: Affine = Affine.IDENTITY
+
+    /** Cage the session started from, in document pixels. */
+    private var transformCage: FloatRect? = null
+
+    private enum class TransformDrag { NONE, MOVE, SCALE, ROTATE }
+
+    private var transformDrag = TransformDrag.NONE
+    private var transformHandle = Handle.TOP_LEFT
+    private var transformStartX = 0f
+    private var transformStartY = 0f
+    private var transformBase = Affine.IDENTITY
+
+    /** Tiles of the layer the live preview overwrote, as they were before the preview wrote them. */
+    private val previewRest = HashMap<TileKey, Tile?>()
+    private val previewKeys = HashSet<TileKey>()
+    private var lastPreviewMs = 0L
+
+    private val cornerHandles = arrayOf(Handle.TOP_LEFT, Handle.TOP_RIGHT, Handle.BOTTOM_RIGHT, Handle.BOTTOM_LEFT)
+
+    private val densityPx: Float get() = getApplication<Application>().resources.displayMetrics.density
+
+    /** Pick radius of the handles in document pixels (about 22 dp on screen). */
+    private fun handleTolerance(): Float = 22f * densityPx / _state.value.canvasTransform.zoom.coerceAtLeast(0.01f)
+
+    /**
+     * Starts a [TransformSession.Target.PIXELS] session on the active layer. The session itself lifts the
+     * selection when there is one (otherwise the whole layer) and leaves the rest in the layer for the
+     * preview. Falls back to [ToolUi.BRUSH] when there is nothing to transform.
+     */
+    private fun startTransform() {
+        finishTransform(apply = false)
+        val node = doc.activeId?.let { doc.findNode(it) } as? RasterLayer
+        if (node == null || node.locked) {
+            _state.update { it.copy(tool = ToolUi.BRUSH, transform = null) }
+            return
+        }
+        val session = TransformSession(doc, listOf(node.id), TransformSession.Target.PIXELS)
+        val cage = session.cage
+        if (session.layers.isEmpty() || cage == null) {
+            session.cancel()
+            _state.update { it.copy(tool = ToolUi.BRUSH, transform = null) }
+            return
+        }
+        transformSession = session
+        transformMap = Affine.IDENTITY
+        transformCage = FloatRect.of(cage)
+        transformDrag = TransformDrag.NONE
+        previewRest.clear()
+        previewKeys.clear()
+        publishTransformCage()
+        previewTransform(force = true)
+        canvas?.invalidate(node.id, null)
+    }
+
+    /** Publishes the 4 cage corners after [transformMap] for the overlay. */
+    private fun publishTransformCage() {
+        val cage = transformCage ?: return
+        val q = CageMath.quad(transformMap, cage)
+        val corners = List(4) { PointUi(q[it * 2], q[it * 2 + 1]) }
+        _state.update { it.copy(transform = TransformUi(corners)) }
+    }
+
+    /**
+     * Closes the session. [apply] commits the mapping (one undoable "Transform" step) and returns to
+     * [ToolUi.BRUSH]; otherwise the pixels are restored without a history entry.
+     */
+    private fun finishTransform(apply: Boolean) {
+        val session = transformSession ?: return
+        transformSession = null
+        if (apply) {
+            val cmd = session.commit(transformMap, Resample.BICUBIC)
+            if ((cmd as? CompoundCommand)?.commands?.isEmpty() != true) history.push(cmd)
+        } else {
+            session.cancel()
+        }
+        previewRest.clear()
+        previewKeys.clear()
+        transformDrag = TransformDrag.NONE
+        transformMap = Affine.IDENTITY
+        transformCage = null
+        _state.update {
+            it.copy(tool = ToolUi.BRUSH, transform = null, selectionDraft = null, selectionDraftPath = null)
+        }
+        canvas?.invalidate(null, null)
+        refreshLayers()
+    }
+
+    override fun transformApply() = finishTransform(apply = true)
+
+    override fun transformCancel() = finishTransform(apply = false)
+
+    /** Axis-aligned bounds of the 4 corners [q]. */
+    private fun quadRect(q: FloatArray) = FloatRect(
+        minOf(q[0], q[2], q[4], q[6]),
+        minOf(q[1], q[3], q[5], q[7]),
+        maxOf(q[0], q[2], q[4], q[6]),
+        maxOf(q[1], q[3], q[5], q[7]),
+    )
+
+    /** True when ([x], [y]) is inside the convex quad [q]. */
+    private fun insideQuad(q: FloatArray, x: Float, y: Float): Boolean {
+        var sign = 0
+        for (i in 0 until 4) {
+            val ax = q[i * 2]
+            val ay = q[i * 2 + 1]
+            val bx = q[((i + 1) % 4) * 2]
+            val by = q[((i + 1) % 4) * 2 + 1]
+            val cross = (bx - ax) * (y - ay) - (by - ay) * (x - ax)
+            if (kotlin.math.abs(cross) < 1e-4f) continue
+            val sg = if (cross > 0f) 1 else -1
+            if (sign == 0) sign = sg else if (sg != sign) return false
+        }
+        return true
+    }
+
+    /** Document-space position of the rotate handle above the middle of the top edge of [q]. */
+    private fun rotateHandlePos(q: FloatArray): Vec2 {
+        val zoom = _state.value.canvasTransform.zoom.coerceAtLeast(0.01f)
+        val mx = (q[0] + q[2]) / 2f
+        val my = (q[1] + q[3]) / 2f
+        val ex = q[2] - q[0]
+        val ey = q[3] - q[1]
+        val len = kotlin.math.hypot(ex, ey).coerceAtLeast(1e-4f)
+        var nx = -ey / len
+        var ny = ex / len
+        val cx = (q[0] + q[2] + q[4] + q[6]) / 4f
+        val cy = (q[1] + q[3] + q[5] + q[7]) / 4f
+        if ((mx - cx) * nx + (my - cy) * ny < 0f) {
+            nx = -nx
+            ny = -ny
+        }
+        val d = ROTATE_HANDLE_DP * densityPx / zoom
+        return Vec2(mx + nx * d, my + ny * d)
+    }
+
+    private fun transformDown(x: Float, y: Float) {
+        val cage = transformCage ?: return
+        if (transformSession == null) return
+        transformBase = transformMap
+        transformStartX = x
+        transformStartY = y
+        val q = CageMath.quad(transformMap, cage)
+        val tol = handleTolerance()
+        val rot = rotateHandlePos(q)
+        if (kotlin.math.hypot(x - rot.x, y - rot.y) <= tol) {
+            transformDrag = TransformDrag.ROTATE
+            return
+        }
+        var best = tol
+        var picked: Handle? = null
+        for (i in 0 until 4) {
+            val d = kotlin.math.hypot(x - q[i * 2], y - q[i * 2 + 1])
+            if (d <= best) {
+                best = d
+                picked = cornerHandles[i]
+            }
+        }
+        if (picked != null) {
+            transformHandle = picked
+            transformDrag = TransformDrag.SCALE
+            return
+        }
+        transformDrag = if (insideQuad(q, x, y)) TransformDrag.MOVE else TransformDrag.NONE
+    }
+
+    /**
+     * Recomputes the mapping of the drag in progress: inside the cage moves (snapped to the canvas edges and
+     * centre), a corner handle scales uniformly about the cage centre, the rotate handle turns about the cage
+     * centre (snapped to multiples of 90°).
+     */
+    private fun transformMoveTo(x: Float, y: Float) {
+        val cage = transformCage ?: return
+        if (transformSession == null || transformDrag == TransformDrag.NONE) return
+        val zoom = _state.value.canvasTransform.zoom.coerceAtLeast(0.01f)
+        val next = when (transformDrag) {
+            TransformDrag.MOVE -> {
+                val dx = x - transformStartX
+                val dy = y - transformStartY
+                val fix = Snap.move(quadRect(CageMath.quad(CageMath.move(transformBase, dx, dy), cage)), doc.width, doc.height, 8f * densityPx / zoom)
+                CageMath.move(transformBase, dx + fix.x, dy + fix.y)
+            }
+            TransformDrag.SCALE -> CageMath.scaleHandle(transformBase, cage, transformHandle, Vec2(x, y), uniform = true)
+            TransformDrag.ROTATE -> {
+                val p = FloatArray(2)
+                transformBase.forward(cage.centerX, cage.centerY, p)
+                val pivot = Vec2(p[0], p[1])
+                val deg = Snap.angle(CageMath.dragAngle(pivot, Vec2(transformStartX, transformStartY), Vec2(x, y)))
+                CageMath.rotate(transformBase, deg, pivot)
+            }
+            TransformDrag.NONE -> transformMap
+        }
+        if (!next.a.isFinite() || !next.d.isFinite() || kotlin.math.abs(next.det) < 1e-6f) return
+        transformMap = next
+        publishTransformCage()
+        previewTransform(force = false)
+    }
+
+    private fun transformUp() {
+        if (transformSession == null) return
+        previewTransform(force = true)
+        transformDrag = TransformDrag.NONE
+    }
+
+    /**
+     * Live preview: the layer holds the "rest" pixels while the session is open, so every preview tile is
+     * `rest OVER resampled floating`, written straight into the layer (outside history) and invalidated on
+     * the canvas. Throttled to about 30 fps during the drag and always redrawn on finger lift.
+     */
+    private fun previewTransform(force: Boolean) {
+        val session = transformSession ?: return
+        val layerId = session.layers.firstOrNull() ?: return
+        val layer = doc.findNode(layerId) as? RasterLayer ?: return
+        val now = SystemClock.uptimeMillis()
+        if (!force && now - lastPreviewMs < PREVIEW_FRAME_MS) return
+        lastPreviewMs = now
+        val res = session.render(session.floating.getValue(layerId), transformMap, Resample.BILINEAR, session.mips(layerId))
+        val grid = layer.pixels
+        val dirty = HashSet<TileKey>()
+        for (k in previewKeys.toList()) {
+            if (res.containsKey(k)) continue
+            previewKeys.remove(k)
+            grid.put(k, previewRest.remove(k))
+            dirty.add(k)
+        }
+        for ((k, t) in res) {
+            val base = if (k in previewKeys) {
+                previewRest[k]
+            } else {
+                grid.get(k)?.copy().also { previewRest[k] = it }
+            }
+            previewKeys.add(k)
+            grid.put(k, overTile(base, t))
+            dirty.add(k)
+        }
+        if (dirty.isNotEmpty()) canvas?.invalidate(layerId, dirty)
+    }
+
+    /** [src] composited over [dst] (premultiplied) as a new tile. */
+    private fun overTile(dst: Tile?, src: Tile?): Tile? {
+        if (src == null) return dst?.copy()
+        if (dst == null) return src.copy()
+        val out = dst.copy()
+        val s = FloatArray(4)
+        val d = FloatArray(4)
+        var i = 0
+        while (i < Tile.CHANNELS) {
+            src.read(i, s)
+            if (s[3] > 0f) {
+                dst.read(i, d)
+                val k = 1f - s[3]
+                out.write(i, s[0] + d[0] * k, s[1] + d[1] * k, s[2] + d[2] * k, s[3] + d[3] * k)
+            }
+            i += 4
+        }
+        return out
     }
 
     /** Magic wand settings (spec §2.2): 15 % tolerance, contiguous, over the active layer. */
@@ -483,11 +782,13 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
     // ---- history ----
 
     override fun undo() {
+        if (transformSession != null) return
         commitPendingOpacity()
         if (history.undo(doc)) canvas?.invalidate(null, null)
     }
 
     override fun redo() {
+        if (transformSession != null) return
         commitPendingOpacity()
         if (history.redo(doc)) canvas?.invalidate(null, null)
     }
@@ -610,6 +911,7 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
     }
 
     override fun selectLayer(id: String) {
+        finishTransform(apply = true)
         commitPendingOpacity()
         doc.activeId = id
         refreshLayers()
@@ -736,7 +1038,10 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
         homeRequest.value = true
     }
 
-    override fun save() = save(refreshList = true)
+    override fun save() {
+        finishTransform(apply = true)
+        save(refreshList = true)
+    }
 
     /**
      * Writes the document in the background if it changed. [refreshList] also reloads the project list
@@ -769,8 +1074,9 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
         autosaveJob?.cancel()
         autosaveJob = viewModelScope.launch {
             delay(AUTOSAVE_DELAY_MS)
-            // A stroke in progress may already have touched layer tiles; save after it ends.
-            while (stroke != null) delay(AUTOSAVE_DELAY_MS)
+            // A stroke in progress may already have touched layer tiles and an open transform session holds
+            // pixels outside history: save only once both are done.
+            while (stroke != null || transformSession != null) delay(AUTOSAVE_DELAY_MS)
             autosaveJob = null
             save(refreshList = false)
         }
@@ -797,6 +1103,7 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
     // ---- helpers ----
 
     private fun exec(cmd: Command) {
+        finishTransform(apply = true)
         commitPendingOpacity()
         history.execute(doc, cmd)
         canvas?.invalidate(null, null)
@@ -1058,6 +1365,12 @@ private fun StudioViewModel.defaultLayerName(n: Int): String =
     getApplication<android.app.Application>().getString(R.string.layer_default_name, n)
 
 private const val STUDIO_BRUSH_ID = "studio.round"
+
+/** Minimum delay between two live transform previews (about 30 fps). */
+private const val PREVIEW_FRAME_MS = 33L
+
+/** Distance of the transform rotate handle from the top edge, in dp on screen. */
+private const val ROTATE_HANDLE_DP = 26f
 
 /** Stroke worker threads: leave cores for UI and GL. */
 private val STROKE_THREADS = (Runtime.getRuntime().availableProcessors() - 2).coerceIn(1, 4)
