@@ -22,8 +22,8 @@ android {
         applicationId = "app.painter"
         minSdk = 29
         targetSdk = 34
-        versionCode = 102
-        versionName = "0.1.2"
+        versionCode = 103
+        versionName = "0.1.3"
         buildConfigField("String", "UPDATE_REPO", "\"IWatman/Painter\"")
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
