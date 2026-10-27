@@ -1,51 +1,51 @@
-# Статус
+# Status
 
-## M0–M1: готово (2026-10-26)
-- Сборка: `. .\tools\env.ps1; .\gradlew.bat :core:test :app:testDebugUnitTest :app:assembleDebug`.
-- Тесты: 88 JVM-тестов, все зелёные:
+## M0–M1: done (2026-10-26)
+- Build: `. .\tools\env.ps1; .\gradlew.bat :core:test :app:testDebugUnitTest :app:assembleDebug`.
+- Tests: 88 JVM tests, all green:
   - blend 10, compositor 8, color 9;
   - history 8 + 13;
   - io 8 + 5;
   - stroke 18;
   - view transform 9.
-- Проверено на эмуляторе (painter_tab, Android 14, GLES 3.1, RGBA16F). Скриншоты в `.tools/qa/`:
-  - Home → New canvas (пресеты, лимит слоёв) → Studio;
-  - мазок пальцем, превью мазка;
+- Verified on the emulator (painter_tab, Android 14, GLES 3.1, RGBA16F). Screenshots in `.tools/qa/`:
+  - Home → New canvas (presets, layer limit) → Studio;
+  - finger stroke, stroke preview;
   - undo;
-  - ластик;
-  - новый слой;
-  - цветовая панель (wheel), выбор цвета;
-  - рисование на втором слое;
-  - автосейв при Home;
-  - force-stop → повторное открытие из Recent: слои и пиксели на месте;
-  - экспорт PNG через системный пикер: файл корректный.
+  - eraser;
+  - new layer;
+  - color panel (wheel), color pick;
+  - drawing on the second layer;
+  - autosave when going Home;
+  - force-stop → reopen from Recent: layers and pixels intact;
+  - PNG export via the system picker: file is correct.
 
-## Проверка на устройстве (2026-10-26)
-XP-Pen Magic Drawing Pad (MDP1221), Android 15, 2160×1440, EMR-перо `tct_stylus`: давление 0..16383, TILT_X/Y ±127, BTN_STYLUS, BTN_STYLUS2, BTN_TOOL_RUBBER. Лог ввода: тег `PainterInput`, файл `.tools/logs/tablet-input.log`.
+## On-device check (2026-10-26)
+XP-Pen Magic Drawing Pad (MDP1221), Android 15, 2160×1440, EMR stylus `tct_stylus`: pressure 0..16383, TILT_X/Y ±127, BTN_STYLUS, BTN_STYLUS2, BTN_TOOL_RUBBER. Input log: tag `PainterInput`, file `.tools/logs/tablet-input.log`.
 
-Работает:
-- **Жесты пальцами.** Pan, zoom, rotate с привязкой к 0°. Быстрый щипок вписывает холст в экран. Тап двумя пальцами = undo, тремя = redo. Тап вторым пальцем отменяет мазок.
-- **Перо.** Распознаётся как stylus (tool=2), даёт давление и наклон (AXIS_TILT до 0.9 рад). Мазок начинается сразу при касании.
-- **Ладонь.** Система отменяет касание (ACTION_CANCEL), мазок откатывается.
+Works:
+- **Finger gestures.** Pan, zoom, rotate with snapping to 0°. A quick pinch fits the canvas to the screen. Two-finger tap = undo, three-finger = redo. A second-finger tap cancels the stroke.
+- **Stylus.** Recognized as stylus (tool=2), provides pressure and tilt (AXIS_TILT up to 0.9 rad). The stroke starts immediately on touch.
+- **Palm.** The system cancels the touch (ACTION_CANCEL), the stroke is rolled back.
 
-Найдено:
-- Микроконтакты пера при отрыве (2 сэмпла, давление 0) превращались в пустые мазки. **Исправлено:** stylus-мазок без давления отбрасывается.
-- Сильный нажим даёт максимум ≈0.78, обычный 0.3–0.5. Нужна кривая давления по умолчанию и калибровка (долг 11).
-- Кнопки пера и BTN_TOOL_RUBBER (ластик, tool=4) приложение не обрабатывает (долг 12). Проверить нажатия не успели.
+Found:
+- Micro-contacts of the stylus on lift-off (2 samples, pressure 0) turned into empty strokes. **Fixed:** a stylus stroke without pressure is discarded.
+- Strong pressure gives a maximum of ≈0.78, normal pressure 0.3–0.5. A default pressure curve and calibration are needed (debt 11).
+- Stylus buttons and BTN_TOOL_RUBBER (eraser, tool=4) are not handled by the app (debt 12). We did not have time to test the presses.
 
-## Известные проблемы и долги (в M2)
-| # | Проблема | План |
+## Known issues and debt (in M2)
+| # | Issue | Plan |
 |---|---|---|
-| 1 | ✅ CPU-тайлы слоёв в half (8 Б/px), буфер мазка float32, загрузка на GPU как GL_HALF_FLOAT. Осталось: формула лимита учитывает GPU-память (долг 6). Было: лимит слоёв консервативный (14 для 2048² на эмуляторе). Формула не учитывает разрежённость тайлов, а CPU-тайлы float32 = 16 Б/px | хранение CPU-тайлов в half (ShortArray), лимит по фактической памяти |
-| 4 | Цвет, кисть и палитра не сохраняются между сессиями | сохранить в настройки или manifest |
-| 5 | ✅ GPU↔CPU паритет: androidTest `BlendParityTest` (33 режима, 13 коррекций) зелёный на эмуляторе; исправлены ADD, INVERT, darker/lighter color. Было: формула ADD: шейдер и CPU могут расходиться на полупрозрачном фоне | общий тест-вектор GPU↔CPU |
-| 6 | GPU-память: композит-текстура с mip-уровнями на каждый тайл документа | атлас и LRU, ленивые mip |
-| 7 | ✅ `list()` только читает, восстановление в `recoverInterrupted()` при старте. Было: `ProjectStore.list()` может удалить `.tmp` параллельного сохранения | доступ сериализован через Mutex в ViewModel. Убрать уборку из list() |
-| 8 | Нет double-tap fit, светлого фона холста, gamma-correct | M2 |
-| 9 | Экспорт только PNG без опций (JPG и прозрачный фон есть в API, но не в UI) | диалог экспорта |
-| 10 | Сохранение снимает полную копию документа на главном потоке | инкрементальное сохранение dirty-тайлов |
-| 11 | Перо XP-Pen не доходит до 1.0 даже при сильном нажиме | кривая давления в настройках + авто-калибровка по max за сессию (как в IP) |
-| 12 | Кнопки пера (BUTTON_STYLUS_PRIMARY/SECONDARY) и обратная сторона-ластик (TOOL_TYPE_ERASER) не используются | настройки стилуса: назначение кнопок (пипетка, ластик, undo, свой инструмент), ластик → режим Erase. Проверить на устройстве |
-| 13 | Новый холст открывается с развёрнутой панелью слоёв, а имя «Layer 1» не локализовано | мелочь, M2 |
-| 14 | ✅ Автосейв через 2 с после последнего изменения (не во время мазка), проверено force-stop. Было: автосейв только при выходе из студии и в `onStop`: если процесс убит (adb install, падение, система), последние мазки теряются (найдено на эмуляторе 2026-10-27) | debounced-сохранение через ~2 с после каждого изменения истории |
-| 15 | Превью широкого холста в Recent показывает шахматку по краям вместо фона карточки | косметика |
+| 1 | ✅ CPU layer tiles in half (8 B/px), stroke buffer float32, upload to the GPU as GL_HALF_FLOAT. Remaining: the limit formula accounts for GPU memory (debt 6). Was: the layer limit was conservative (14 for 2048² on the emulator). The formula did not account for tile sparseness, and CPU tiles were float32 = 16 B/px | store CPU tiles in half (ShortArray), limit based on actual memory |
+| 4 | Color, brush and palette are not persisted between sessions | save to settings or manifest |
+| 5 | ✅ GPU↔CPU parity: androidTest `BlendParityTest` (33 modes, 13 adjustments) green on the emulator; ADD, INVERT, darker/lighter color fixed. Was: the ADD formula — shader and CPU could diverge on a semi-transparent background | a shared GPU↔CPU test vector |
+| 6 | GPU memory: a composite texture with mip levels for every document tile | atlas and LRU, lazy mips |
+| 7 | ✅ `list()` only reads, recovery happens in `recoverInterrupted()` on start. Was: `ProjectStore.list()` could delete the `.tmp` of a concurrent save | access serialized via a Mutex in the ViewModel. Remove the cleanup from list() |
+| 8 | No double-tap fit, no light canvas background, no gamma-correct | M2 |
+| 9 | Export is PNG only, without options (JPG and transparent background exist in the API but not in the UI) | export dialog |
+| 10 | Saving takes a full copy of the document on the main thread | incremental saving of dirty tiles |
+| 11 | The XP-Pen stylus does not reach 1.0 even with strong pressure | pressure curve in settings + auto-calibration by the max over the session (as in IP) |
+| 12 | Stylus buttons (BUTTON_STYLUS_PRIMARY/SECONDARY) and the eraser end (TOOL_TYPE_ERASER) are unused | stylus settings: assign buttons (eyedropper, eraser, undo, custom tool), eraser → Erase mode. Verify on the device |
+| 13 | A new canvas opens with the layers panel expanded, and the name "Layer 1" is not localized | minor, M2 |
+| 14 | ✅ Autosave 2 s after the last change (not during a stroke), verified with force-stop. Was: autosave only on leaving the studio and in `onStop`: if the process was killed (adb install, crash, system), the last strokes were lost (found on the emulator 2026-10-27) | debounced save ~2 s after each history change |
+| 15 | The preview of a wide canvas in Recent shows a checkerboard at the edges instead of the card background | cosmetic |

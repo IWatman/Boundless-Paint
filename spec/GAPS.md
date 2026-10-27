@@ -1,108 +1,108 @@
-# Пробелы → ответы
+# Gaps → answers
 
-Статус: **все пункты закрыты** (2026-10-26).
-- По разделу B оригиналы не измеряем: решение принимаем сами (см. DECISIONS.md «Раздел B»). Поэтому у каждого пункта стоит наш ответ, а не замер.
-- Где написано «в spec/X», ответ расписан там подробно.
+Status: **all items closed** (2026-10-26).
+- For section B we do not measure the originals: we make the decision ourselves (see DECISIONS.md "Section B"). Therefore every item has our answer instead of a measurement.
+- Where it says "in spec/X", the answer is written out there in detail.
 
-## A. Архитектурные решения
-| # | Вопрос | Ответ |
+## A. Architectural decisions
+| # | Question | Answer |
 |---|---|---|
-| A1 | Платформа и стек | Только Android. Kotlin + Jetpack Compose + OpenGL ES 3.2. minSdk 29. Другие платформы позже |
-| A2 | Рендер-конвейер | Тайлы 256² RGBA16F premultiplied, sRGB-кодировка, тоггл gamma-correct (деф. off). spec/blend-and-color.md |
-| A3 | Модель документа | Тайлы + command-undo со снапшотами тайлов, 100 шагов / 512 MB. Virtual transform. spec/document-model.md |
-| A4 | Векторный слой | Список path-объектов (точки + давление + ссылка на параметры кисти), рендер stamp-движком. В M4 |
-| A5 | Анимация | Кадр = свой стек слоёв + опциональный общий фон. В M4 |
-| A6 | Многостраничность | Нет. Одна страница = проект |
-| A7 | Свои форматы | ZIP-контейнеры + JSON. spec/file-formats.md |
-| A8 | Совместимость | PNG/JPG/WebP (M1), PSD in/out (M3), ORA (M5). ABR нет |
-| A9 | ИИ | После v1 |
-| A10 | Онлайн | Локально + синк с Google Drive (M4). Галереи и комьюнити нет |
-| A11 | Языки | RU + EN |
-| A12 | Монетизация | Нет. Всё бесплатно |
+| A1 | Platform and stack | Android only. Kotlin + Jetpack Compose + OpenGL ES 3.2. minSdk 29. Other platforms later |
+| A2 | Render pipeline | 256² RGBA16F premultiplied tiles, sRGB encoding, gamma-correct toggle (default off). spec/blend-and-color.md |
+| A3 | Document model | Tiles + command-undo with tile snapshots, 100 steps / 512 MB. Virtual transform. spec/document-model.md |
+| A4 | Vector layer | A list of path objects (points + pressure + reference to brush parameters), rendered by the stamp engine. In M4 |
+| A5 | Animation | A frame = its own layer stack + optional shared background. In M4 |
+| A6 | Multi-page | None. One page = project |
+| A7 | Own formats | ZIP containers + JSON. spec/file-formats.md |
+| A8 | Compatibility | PNG/JPG/WebP (M1), PSD in/out (M3), ORA (M5). No ABR |
+| A9 | AI | After v1 |
+| A10 | Online | Local + sync with Google Drive (M4). No galleries or community |
+| A11 | Languages | RU + EN |
+| A12 | Monetization | None. Everything free |
 
-## B. Числа и поведение (наши решения)
-### Кисти
-| Пункт | Ответ |
+## B. Numbers and behavior (our decisions)
+### Brushes
+| Item | Answer |
 |---|---|
-| Диапазоны и дефолты параметров | Таблицы в spec/brush-engine.md §2 |
-| Кривые динамики по умолчанию | pressure→size: линейная, min 20%. pressure→flow: выкл. velocity, tilt: выкл. Пресеты кистей переопределяют |
-| Tilt offset | Центр штампа смещается по азимуту на `tilt·offset·size/2` (offset −100..100) |
-| Texture gradation | Глубина текстуры умножается на линейный спад вдоль оси наклона: `1 − g·t`, t ∈ [0,1] от кончика к хвосту |
-| Adhesion | Буфер «загрузки» мазка L (0..1) накапливает покрытие штампов. Видимая альфа = `smoothstep(a, 1, L)`, a = adhesion |
-| Structure (импасто) | Нормаль из градиента маски штампа (и накопленной высоты мазка) × structure. Ламберт со светом сверху-слева, модуляция яркости ±25% |
-| Depth (щетина) | Маска как height-map: `α = sat((h − d·(1−p)) / (1 − d·(1−p)))`, d = depth, p = давление |
-| Wet edges | `α' = α·(1 − w·(1 − e))`, где `e = sat((α − blur₄(α))·4 + 0.5)`. Края плотнее середины |
-| Glaze strokes | Внутри мазка штампы объединяются по max (без накопления), сила = glaze |
-| Mix-in / Dilution / Pull / Blur | Резервуар цвета R. На штамп: S = среднее холста под штампом (радиус выборки = blur). `R = lerp(R, S, 1 − pull)`. `paint = lerp(paint, S, mix_in)` (постоянно). Нанесённый цвет = `lerp(paint, R, dilution)`. wet = переносить альфу S |
-| Watercolor | GPU-симуляция на wet-буфере (вода W, пигмент P), 30 Гц, пока W > 0. Диффузия P ∝ W·bleed, испарение W −= dryout. Потемнение края ∝ glaze. Подмешивание нижнего слоя ∝ mix_in |
-| Harmony | Своя реализация: на каждой точке соединяем её линиями с прошлыми точками в радиусе r, с вероятностью p и альфой ∝ (1 − dist/r). Варианты задаются набором (r, p, смещение, длина). Без чужого кода |
-| Particles | Аттракторы на пружине к точке пути со смещением radius. Частицы на пружине к аттракторам с затуханием, overshoot = коэффициент инерции |
-| ibis Water / Double / Color | Water → mix_in + dilution + pull. Double → special.double. Color → head_color + base_color hue-shift: `hue += hue(cur) − hue(base)`, S и V ≤ исходных |
-| Стабилизатор | Real-time: EMA, `α = 1 − 0.95·s/100`. Speed-based: `α /= 1 + k·speed`. After: сглаживание Гауссом по точкам, σ = after·0.5 px·N, затем перерисовка буфера. Lazy: rope radius |
-| Fill brush + shapes | Контур шейпа = полигон заливки, заливка по even-odd |
+| Parameter ranges and defaults | Tables in spec/brush-engine.md §2 |
+| Default dynamics curves | pressure→size: linear, min 20%. pressure→flow: off. velocity, tilt: off. Brush presets override |
+| Tilt offset | The dab center shifts along the azimuth by `tilt·offset·size/2` (offset −100..100) |
+| Texture gradation | Texture depth is multiplied by a linear falloff along the tilt axis: `1 − g·t`, t ∈ [0,1] from tip to tail |
+| Adhesion | A stroke "load" buffer L (0..1) accumulates dab coverage. Visible alpha = `smoothstep(a, 1, L)`, a = adhesion |
+| Structure (impasto) | Normal from the gradient of the dab mask (and the accumulated stroke height) × structure. Lambert with light from the upper left, brightness modulation ±25% |
+| Depth (bristle) | The mask as a height map: `α = sat((h − d·(1−p)) / (1 − d·(1−p)))`, d = depth, p = pressure |
+| Wet edges | `α' = α·(1 − w·(1 − e))`, where `e = sat((α − blur₄(α))·4 + 0.5)`. Edges are denser than the middle |
+| Glaze strokes | Within a stroke, dabs are combined by max (without accumulation), strength = glaze |
+| Mix-in / Dilution / Pull / Blur | Color reservoir R. Per dab: S = average of the canvas under the dab (sample radius = blur). `R = lerp(R, S, 1 − pull)`. `paint = lerp(paint, S, mix_in)` (constantly). Deposited color = `lerp(paint, R, dilution)`. wet = also transfer the alpha of S |
+| Watercolor | GPU simulation on a wet buffer (water W, pigment P), 30 Hz while W > 0. Diffusion of P ∝ W·bleed, evaporation W −= dryout. Edge darkening ∝ glaze. Mixing in of the lower layer ∝ mix_in |
+| Harmony | Our own implementation: at each point we connect it with lines to previous points within radius r, with probability p and alpha ∝ (1 − dist/r). Variants are defined by the set (r, p, offset, length). No third-party code |
+| Particles | Attractors on a spring to the path point with an offset of radius. Particles on a spring to the attractors with damping, overshoot = inertia coefficient |
+| ibis Water / Double / Color | Water → mix_in + dilution + pull. Double → special.double. Color → head_color + base_color hue-shift: `hue += hue(cur) − hue(base)`, S and V ≤ the originals |
+| Stabilizer | Real-time: EMA, `α = 1 − 0.95·s/100`. Speed-based: `α /= 1 + k·speed`. After: Gaussian smoothing over the points, σ = after·0.5 px·N, then redraw of the buffer. Lazy: rope radius |
+| Fill brush + shapes | The shape outline = the fill polygon, filled even-odd |
 
-### Слои и цвет
-| Пункт | Ответ |
+### Layers and color
+| Item | Answer |
 |---|---|
-| Negative, Invert | spec/blend-and-color.md: negative = `1−|1−Cb−Cs|`, invert = `1−Cb` с силой αs |
-| Trace mode | Нижние слои: множитель opacity `0.5^k` (k = 1 для соседнего), минимум 0.1. Верхние: 0.25. Paper без изменений |
-| Лимит слоёв | `max = floor(budget / (w·h·8·0.5))`, budget = 40% от `ActivityManager.memoryClass`·MB для GPU+CPU кэша. Показываем в New Project |
-| Adjustment layers | 11 типов: Brightness, Contrast, Exposure, Gamma, Saturation, Vibrance, Temperature, Tint, Hue, Curves, **Levels** + все фильтры с пометкой `live` в spec/filters.md |
-| Screentone-слой | Свои паттерны: dot (круг), line, cross, square, diamond, noise. LPI 20–120 (деф. 60), угол 0–180 (деф. 45). Размер в физических единицах от dpi, поэтому при ресайзе пересчитывается. Набор пресетов ≈ 40 |
+| Negative, Invert | spec/blend-and-color.md: negative = `1−|1−Cb−Cs|`, invert = `1−Cb` with strength αs |
+| Trace mode | Lower layers: opacity multiplier `0.5^k` (k = 1 for the adjacent one), minimum 0.1. Upper layers: 0.25. Paper unchanged |
+| Layer limit | `max = floor(budget / (w·h·8·0.5))`, budget = 40% of `ActivityManager.memoryClass`·MB for the GPU+CPU cache. Shown in New Project |
+| Adjustment layers | 11 types: Brightness, Contrast, Exposure, Gamma, Saturation, Vibrance, Temperature, Tint, Hue, Curves, **Levels** + all filters marked `live` in spec/filters.md |
+| Screentone layer | Our own patterns: dot (circle), line, cross, square, diamond, noise. LPI 20–120 (default 60), angle 0–180 (default 45). The size is in physical units from dpi, so it is recomputed on resize. A set of ≈ 40 presets |
 
-### Заливки и выделения
-| Пункт | Ответ |
+### Fills and selections
+| Item | Answer |
 |---|---|
-| Метрика tolerance | `max(|ΔR|,|ΔG|,|ΔB|,|ΔA|)` на unpremultiplied (как «chebyshev»). Порог = tolerance%. Режим boundary=opacity: только `|ΔA|` |
-| Gap recognition | Закрытие разрывов до N px (настройка 0–20, деф. 4): морфологическое закрытие маски границ перед flood fill, потом расширение результата обратно до линий |
-| Unpainted recognition | Пиксели с α линии < 0.5 считаются заливаемыми. Расширение под линию на expansion px |
-| Color range | range = жёсткий порог расстояния, fuzziness = ширина мягкого спада после порога. До 5 точек, объединение по max |
-| Expand / contract | Distance transform, 0–100 px (не 6) |
+| Tolerance metric | `max(|ΔR|,|ΔG|,|ΔB|,|ΔA|)` on unpremultiplied values (like "chebyshev"). Threshold = tolerance%. Mode boundary=opacity: only `|ΔA|` |
+| Gap recognition | Closing gaps up to N px (setting 0–20, default 4): morphological closing of the boundary mask before flood fill, then expansion of the result back to the lines |
+| Unpainted recognition | Pixels with line α < 0.5 are considered fillable. Expansion under the line by expansion px |
+| Color range | range = hard distance threshold, fuzziness = width of the soft falloff after the threshold. Up to 5 points, combined by max |
+| Expand / contract | Distance transform, 0–100 px (not 6) |
 
-### Трансформации и деформации
-| Пункт | Ответ |
+### Transforms and deformations
+| Item | Answer |
 |---|---|
-| Warp / Mesh | Одна модель: сетка B-spline N×M контрольных точек (Warp = 4×4 точки, 3×3 ячейки; Mesh = до 16×16). Рендер: тесселяция в треугольники на GPU |
-| Liquify | Falloff `(1 − r²)²`, strength 0–100 (деф. 50), давление умножает силу. Поле смещений на сетке 1/4 разрешения, билинейно |
-| Virtual transform | Держится через: affine, mesh, flip, rotate 45, resize/crop холста (как offset). Коммитится при любой пиксельной правке слоя, фильтре, merge, liquify |
+| Warp / Mesh | One model: a B-spline grid of N×M control points (Warp = 4×4 points, 3×3 cells; Mesh = up to 16×16). Rendering: tessellation into triangles on the GPU |
+| Liquify | Falloff `(1 − r²)²`, strength 0–100 (default 50), pressure multiplies the strength. Displacement field on a 1/4 resolution grid, bilinear |
+| Virtual transform | Kept through: affine, mesh, flip, rotate 45, canvas resize/crop (as offset). Committed on any pixel edit of the layer, filter, merge, liquify |
 
-### Фильтры
-- Полный список ~110 с нашими параметрами, диапазонами, дефолтами и пометкой `live`: **spec/filters.md**.
+### Filters
+- The full list of ~110 with our parameters, ranges, defaults and a `live` marker: **spec/filters.md**.
 
-### Шейпы и гайды
-| Пункт | Ответ |
+### Shapes and guides
+| Item | Answer |
 |---|---|
-| Распознавание | Удержание 0.6 с (настройка 0.1–5). Кандидаты: line, arc, polyline, smooth curve, triangle, rect, quad, ellipse, regular polygon. Первый = лучший по ошибке аппроксимации с весами приоритета. Остальные показываются иконками |
-| Pen / Path | Кубические Bézier. Smooth-узел = автоматические касательные (Catmull-Rom, tension 0.5), cusp = угол. Ручки редактируются (smooth / aligned / free как в ibis) |
+| Recognition | Hold for 0.6 s (setting 0.1–5). Candidates: line, arc, polyline, smooth curve, triangle, rect, quad, ellipse, regular polygon. The first = the best by approximation error with priority weights. The others are shown as icons |
+| Pen / Path | Cubic Bézier. Smooth node = automatic tangents (Catmull-Rom, tension 0.5), cusp = corner. Handles are editable (smooth / aligned / free as in ibis) |
 
-### Ввод
-| Пункт | Ответ |
+### Input
+| Item | Answer |
 |---|---|
-| Prediction | `androidx.input.motionprediction.MotionEventPredictor` (1 кадр), рисуется во временный буфер и заменяется реальными точками |
-| Palm rejection | None / Stylus draws only (палец = навигация) / Hover (при hover-событиях стилуса пальцы игнорируются целиком) / Strict (только стилус везде). Определение стилуса: `TOOL_TYPE_STYLUS` |
+| Prediction | `androidx.input.motionprediction.MotionEventPredictor` (1 frame), drawn into a temporary buffer and replaced by the real points |
+| Palm rejection | None / Stylus draws only (finger = navigation) / Hover (when there are stylus hover events, fingers are ignored entirely) / Strict (stylus only everywhere). Stylus detection: `TOOL_TYPE_STYLUS` |
 
-### Таймлапс и анимация
-| Пункт | Ответ |
+### Timelapse and animation
+| Item | Answer |
 |---|---|
-| Таймлапс | Захват кадра на команду, ≤ 30/с. Экспорт H.264 MP4 (MediaCodec), 30 fps, 8 Мбит/с @1080p, 20 @4K. Длительности: 15 / 30 / 60 с / полная. Качество: 720p / 1080p / 4K |
-| Лимиты анимации | Кадры ≤ 999, fps 1–60 (деф. 12), onion skin 0–5 в каждую сторону, play loop / pingpong / once |
+| Timelapse | Frame capture per command, ≤ 30/s. Export H.264 MP4 (MediaCodec), 30 fps, 8 Mbit/s @1080p, 20 @4K. Durations: 15 / 30 / 60 s / full. Quality: 720p / 1080p / 4K |
+| Animation limits | Frames ≤ 999, fps 1–60 (default 12), onion skin 0–5 in each direction, play loop / pingpong / once |
 
-## C. Ассеты
-| Пункт | Ответ |
+## C. Assets
+| Item | Answer |
 |---|---|
-| Кисти | Свои пресеты 16 категорий (spec/assets.md). Головы и текстуры процедурно генерируются скриптом `tools/gen_assets.py` (.venv: numpy + pillow) |
-| Бумаги, паттерны, тоны, палитры | Тот же генератор + несколько CC0. Палитры составляем сами |
-| Шрифты | Google Fonts с лицензией OFL/Apache, файлы лицензий рядом. Список в spec/assets.md |
-| Материалы | v1: свой минимальный набор (баллоны, ткани) векторно и процедурно |
-| Иконки | Material Symbols (Apache 2.0) + свои |
+| Brushes | Our own presets in 16 categories (spec/assets.md). Heads and textures are generated procedurally by the script `tools/gen_assets.py` (.venv: numpy + pillow) |
+| Papers, patterns, tones, palettes | The same generator + a few CC0. We compose the palettes ourselves |
+| Fonts | Google Fonts with an OFL/Apache license, license files next to them. The list is in spec/assets.md |
+| Materials | v1: our own minimal set (balloons, fabrics) as vectors and procedurally |
+| Icons | Material Symbols (Apache 2.0) + our own |
 
-## D. Документы
-| # | Документ | Статус |
+## D. Documents
+| # | Document | Status |
 |---|---|---|
 | 1 | spec/brush-engine.md | ✅ |
 | 2 | spec/document-model.md | ✅ |
 | 3 | spec/blend-and-color.md | ✅ |
-| 4 | spec/tools/*.md | ✅ M0–M1 инструменты. Спеки следующих вех пишутся **до** начала соответствующей вехи, это часть её плана |
+| 4 | spec/tools/*.md | ✅ M0–M1 tools. Specs for the following milestones are written **before** the corresponding milestone starts; this is part of its plan |
 | 5 | spec/file-formats.md | ✅ |
 | 6 | spec/ui-components.md | ✅ |
 | 7 | spec/test-corpus.md | ✅ |

@@ -1,39 +1,39 @@
-# Дорожная карта (Android)
+# Roadmap (Android)
 
-Каждая веха = рабочая сборка APK + зелёные JVM-тесты.
+Each milestone = a working APK build + green JVM tests.
 
-> M0 и M1 завершены 2026-10-26, детали и долги в spec/STATUS.md. План M2: spec/PLAN-M2.md (там же изменения объёма).
+> M0 and M1 were completed 2026-10-26, details and debt in spec/STATUS.md. Plan for M2: spec/PLAN-M2.md (scope changes are also recorded there).
 
-## M0: Каркас
-- [ ] Gradle-проект `app/` (Kotlin, Compose, minSdk 29, target 36), локальный GRADLE_USER_HOME.
-- [ ] Модули: `:app` (UI), `:core` (чистый Kotlin: модель документа, математика, undo, алгоритмы, тестируемо на JVM), `:render` (GLES 3 рендер). Для простоты на старте `:core` и `:app`, рендер внутри app.
-- [ ] Экраны Home / Studio (заглушки), навигация.
-- [ ] GL-холст: pan, zoom, rotate двумя пальцами, fit.
+## M0: Skeleton
+- [ ] Gradle project `app/` (Kotlin, Compose, minSdk 29, target 36), local GRADLE_USER_HOME.
+- [ ] Modules: `:app` (UI), `:core` (pure Kotlin: document model, math, undo, algorithms, testable on the JVM), `:render` (GLES 3 rendering). For simplicity at the start `:core` and `:app`, rendering inside app.
+- [ ] Home / Studio screens (stubs), navigation.
+- [ ] GL canvas: pan, zoom, rotate with two fingers, fit.
 
-## M1: Рисование (MVP ядро)
-- [ ] Тайловый растровый слой (CPU float16-буферы + GPU-текстуры).
-- [ ] Stamp-кисть: size, opacity, flow, spacing, hardness, pressure → size/flow, стабилизатор.
-- [ ] Erase, undo/redo (жесты 2/3 пальца), main toolbar (Paint/Blend/Erase, size, color, opacity virtual sliders).
-- [ ] Color panel: HSB wheel + sliders + hex + история.
-- [ ] Layer panel: add, delete, reorder, visibility, opacity, blend (12 базовых), alpha lock, clip, merge.
-- [ ] Сохранение и загрузка `.pnt`, галерея проектов, экспорт PNG/JPG.
+## M1: Drawing (MVP core)
+- [ ] Tiled raster layer (CPU float16 buffers + GPU textures).
+- [ ] Stamp brush: size, opacity, flow, spacing, hardness, pressure → size/flow, stabilizer.
+- [ ] Erase, undo/redo (2/3-finger gestures), main toolbar (Paint/Blend/Erase, size, color, opacity virtual sliders).
+- [ ] Color panel: HSB wheel + sliders + hex + history.
+- [ ] Layer panel: add, delete, reorder, visibility, opacity, blend (12 basic), alpha lock, clip, merge.
+- [ ] Saving and loading `.pnt`, project gallery, PNG/JPG export.
 
-## M2: Паритет с основой IP + полный стоковый набор кистей
-- **Полный движок кисти** (весь spec/brush-engine.md, включая watercolor, particles, harmony, double, color stamp, 3D, filter brushes, screentone snap). GPU-штампы.
-- **Стоковый каталог ≈236 кистей** (spec/brush-catalog.md), покрытие стока IP и ibis. Brush Editor UI, браузер кистей с папками, избранным и поиском. Clone-кисть. Настройки стилуса (кривая, калибровка, кнопки).
-- Пипетка (long-press), selection (lasso, rect, ellipse, wand, brush) + операции.
-- Transform (basic, anchor, distort, warp, мультислой), bucket (tolerance, gap, expand, reference layer), градиенты.
-- Группы, маски, все 33 blend mode, adjustment layers, коррекции, кривые.
-- Guides (lines, ellipse, lazy, pen, hatching), shapes (вкл. правильный многоугольник) + detection, symmetry, perspective grids (1/2/3 точки, изо, 2D).
+## M2: Parity with the IP foundation + the full stock brush set
+- **Full brush engine** (all of spec/brush-engine.md, including watercolor, particles, harmony, double, color stamp, 3D, filter brushes, screentone snap). GPU dabs.
+- **Stock catalog of ≈236 brushes** (spec/brush-catalog.md), covering the IP and ibis stock. Brush Editor UI, brush browser with folders, favorites and search. Clone brush. Stylus settings (curve, calibration, buttons).
+- Eyedropper (long-press), selection (lasso, rect, ellipse, wand, brush) + operations.
+- Transform (basic, anchor, distort, warp, multi-layer), bucket (tolerance, gap, expand, reference layer), gradients.
+- Groups, masks, all 33 blend modes, adjustment layers, adjustments, curves.
+- Guides (lines, ellipse, lazy, pen, hatching), shapes (incl. regular polygon) + detection, symmetry, perspective grids (1/2/3 point, iso, 2D).
 
-## M3: Расширение
-- Фильтры (P1-набор), filter layers, liquify, text, криволинейная перспектива, panels/frame divider, crop, resize, straighten.
-- PSD in/out, таймлапс, настройки, стилус (palm rejection, кнопки), шорткаты.
+## M3: Expansion
+- Filters (P1 set), filter layers, liquify, text, curvilinear perspective, panels/frame divider, crop, resize, straighten.
+- PSD in/out, timelapse, settings, stylus (palm rejection, buttons), shortcuts.
 
-## M4: Добавки ibis
-- Vector layer, линейки radial/array, rounded rect/polygon/arrow/balloon, lasso fill/eraser, surrounding fill.
-- Анимация с onion skin, manuscript-холст, screentone-слой, color mode документа, CMYK-экспорт.
-- Синхронизация с Google Drive.
+## M4: ibis additions
+- Vector layer, radial/array rulers, rounded rect/polygon/arrow/balloon, lasso fill/eraser, surrounding fill.
+- Animation with onion skin, manuscript canvas, screentone layer, document color mode, CMYK export.
+- Sync with Google Drive.
 
-## M5: Полировка
-- Остальные фильтры, pattern tools, материалы, video mode, локализация, производительность.
+## M5: Polish
+- Remaining filters, pattern tools, materials, video mode, localization, performance.

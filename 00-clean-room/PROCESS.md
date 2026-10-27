@@ -1,44 +1,44 @@
-# Clean-room процесс
+# Clean-room process
 
-Цель: независимая реализация растрового редактора. Функционал = объединение Infinite Painter (IP) и ibisPaint. UI по образцу IP. Без копирования кода, ассетов, текстов, бинарных форматов и торговых марок.
+Goal: an independent implementation of a bitmap editor. Functionality = the union of Infinite Painter (IP) and ibisPaint. UI modelled on IP. Without copying code, assets, texts, binary formats or trademarks.
 
-## Роли
-| Роль | Кто | Что делает | Что НЕ делает |
+## Roles
+| Role | Who | What they do | What they do NOT do |
 |---|---|---|---|
-| **Spec team** («грязная») | исследователи | читают публичную документацию, пользуются приложениями как пользователи, пишут функциональные спеки своими словами | не пишут код продукта |
-| **Reviewer / legal** | отдельный человек | проверяет спеки: нет ли скопированного текста, кода, ассетов, защищённых выражений | — |
-| **Impl team** («чистая») | разработчики | реализуют только по спекам из `features/` и `spec/` | не открывают оригинальные приложения, их APK/IPA, декомпиляцию, сетевые дампы |
+| **Spec team** ("dirty") | researchers | read public documentation, use the apps as users, write functional specs in their own words | do not write product code |
+| **Reviewer / legal** | a separate person | checks the specs: no copied text, code, assets or protected expressions | — |
+| **Impl team** ("clean") | developers | implement only from the specs in `features/` and `spec/` | do not open the original apps, their APK/IPA, decompilation or network dumps |
 
-Один человек может совмещать spec и impl только с документированной изоляцией. Для настоящего clean-room лучше разные люди.
+One person can combine spec and impl only with documented isolation. For a true clean-room, different people are better.
 
-## Разрешённые источники для spec team
-- Публичные мануалы: docs.infinitestudio.art, ibispaint.com/lecture, страницы в сторах.
-- Наблюдение поведения приложения как пользователь (black-box): скриншоты UI для себя, замеры, видео. В спеку идёт только описание поведения.
-- Публичные стандарты: W3C Compositing & Blending, PSD spec (Adobe File Format Specification), OpenRaster, ICC, ISO 216 (размеры бумаги).
-- Общеизвестные алгоритмы: flood fill, Gaussian, Lanczos, Voronoi, Bézier, MLS/mesh warp, LUT-кривые.
+## Allowed sources for the spec team
+- Public manuals: docs.infinitestudio.art, ibispaint.com/lecture, store pages.
+- Observing app behavior as a user (black-box): UI screenshots for ourselves, measurements, videos. Only a description of behavior goes into the spec.
+- Public standards: W3C Compositing & Blending, PSD spec (Adobe File Format Specification), OpenRaster, ICC, ISO 216 (paper sizes).
+- Well-known algorithms: flood fill, Gaussian, Lanczos, Voronoi, Bézier, MLS/mesh warp, LUT curves.
 
-## Запрещено
-- Декомпиляция и дизассемблирование APK/IPA/EXE, извлечение ресурсов.
-- Копирование встроенных кистей, текстур, бумаг, паттернов, палитр, шрифтов (кроме OFL-шрифтов из первоисточника Google Fonts), материалов, иконок.
-- Реверс проприетарных форматов (.pntr, .prbr, .przp, .clrs, .ipv, .ipvz, .ipcfg) ради совместимости. Делаем свои форматы.
-- Дословный перенос текстов доки или UI-строк. Пишем своими словами.
-- Имена брендов и продуктов в UI, имена встроенных кистей как есть.
-- Сетевые API ibis (облако, галерея, QR-формат кистей).
+## Forbidden
+- Decompiling and disassembling APK/IPA/EXE, extracting resources.
+- Copying built-in brushes, textures, papers, patterns, palettes, fonts (except OFL fonts from the original source, Google Fonts), materials, icons.
+- Reverse engineering proprietary formats (.pntr, .prbr, .przp, .clrs, .ipv, .ipvz, .ipcfg) for compatibility. We make our own formats.
+- Verbatim transfer of doc texts or UI strings. We write in our own words.
+- Brand and product names in the UI, built-in brush names as they are.
+- ibis network APIs (cloud, gallery, QR brush format).
 
-## UI как у IP: где граница
-- Функциональная компоновка (тулбар режимов кисти, меню Creative/Editing, mini-toolbars, жесты) — это идея и workflow, её можно воспроизвести.
-- Нельзя копировать: иконки, точные графические стили, цвета бренда, логотипы, тексты.
-- Делаем свой визуальный язык в той же структуре.
-- Перед релизом юр. консультация по trade dress в целевых юрисдикциях.
+## UI like IP: where the boundary is
+- Functional layout (brush mode toolbar, Creative/Editing menus, mini-toolbars, gestures) is an idea and a workflow, and it can be reproduced.
+- Cannot be copied: icons, exact graphic styles, brand colors, logos, texts.
+- We build our own visual language within the same structure.
+- Before release, legal consultation on trade dress in the target jurisdictions.
 
-## Артефакты
-1. `features/<NN-area>/infinite-painter.md` и `ibispaint.md`: сырой функционал по источникам (spec team).
-2. `spec/`: объединённая функциональная спецификация для impl team.
-3. `00-clean-room/SOURCES.md`: журнал источников.
-4. Журнал ревью: кто и когда проверил какой документ.
+## Artifacts
+1. `features/<NN-area>/infinite-painter.md` and `ibispaint.md`: raw functionality by source (spec team).
+2. `spec/`: the combined functional specification for the impl team.
+3. `00-clean-room/SOURCES.md`: source log.
+4. Review log: who checked which document and when.
 
-## Чек-лист перед передачей спеки в impl
-- [ ] Нет дословных цитат длиннее нескольких слов.
-- [ ] Нет имён встроенных ассетов и брендов в требованиях (только в справочных разделах с пометкой).
-- [ ] Числа и диапазоны помечены: из доки или из наблюдения.
-- [ ] Неизвестное помечено как `TBD / measure`.
+## Checklist before handing a spec to impl
+- [ ] No verbatim quotes longer than a few words.
+- [ ] No built-in asset or brand names in the requirements (only in reference sections, marked as such).
+- [ ] Numbers and ranges are marked: from docs or from observation.
+- [ ] Unknowns are marked as `TBD / measure`.

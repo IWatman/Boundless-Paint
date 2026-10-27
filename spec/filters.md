@@ -1,16 +1,16 @@
-# Фильтры (объединённый список, наши параметры)
+# Filters (combined list, our parameters)
 
-- Общие контролы: Strength (если не указано: 0–100%, деф. 50), quick mask (none / focus / tilt-shift / highlights / midtones / shadows / saturation), invert mask, hide effect, variant.
-- `live` = доступен как Filter layer (детерминированный, без пикселей вне радиуса > 64 px).
-- Веха: M3 = базовые, M5 = остальные.
-- Параметры: `имя диапазон (деф.)`.
+- Common controls: Strength (unless stated otherwise: 0–100%, default 50), quick mask (none / focus / tilt-shift / highlights / midtones / shadows / saturation), invert mask, hide effect, variant.
+- `live` = available as a Filter layer (deterministic, no pixels outside a radius > 64 px).
+- Milestone: M3 = basic, M5 = the rest.
+- Parameters: `name range (default)`.
 
-## Цвет и тон (Adjust)
-| Фильтр | Параметры | live | Веха |
+## Color and tone (Adjust)
+| Filter | Parameters | live | Milestone |
 |---|---|---|---|
 | Brightness | −100–100 (0) | ✓ | M2 |
 | Contrast | −100–100 (0) | ✓ | M2 |
-| Brightness & Contrast | оба | ✓ | M2 |
+| Brightness & Contrast | both | ✓ | M2 |
 | Exposure | −5–5 EV (0) | ✓ | M2 |
 | Gamma | 0.2–5 (1) | ✓ | M2 |
 | Saturation | −100–100 (0) | ✓ | M2 |
@@ -20,25 +20,25 @@
 | Hue | −180–180° (0) | ✓ | M2 |
 | HSL | H ±180, S ±100, L ±100 | ✓ | M2 |
 | Color Balance | shadows/mid/highlights × (C-R, M-G, Y-B) ±100, preserve luminosity | ✓ | M3 |
-| Curves | RGB, R, G, B, A кривые | ✓ | M2 |
-| Levels | in black 0–253, gamma 0.1–9.99, in white 2–255, out black/white; канал RGB/R/G/B; Auto | ✓ | M3 |
-| Gradient map | стопы (цвет, позиция), reverse | ✓ | M3 |
-| Replace color | до 5 точек: цвет-ключ, range, fuzziness, сдвиг H/S/L | ✓ | M3 |
-| Posterize | уровни 2–64 (8) | ✓ | M3 |
-| Palette (posterize по изображению) | цветов 2–48 (8) | — | M5 |
+| Curves | RGB, R, G, B, A curves | ✓ | M2 |
+| Levels | in black 0–253, gamma 0.1–9.99, in white 2–255, out black/white; channel RGB/R/G/B; Auto | ✓ | M3 |
+| Gradient map | stops (color, position), reverse | ✓ | M3 |
+| Replace color | up to 5 points: key color, range, fuzziness, H/S/L shift | ✓ | M3 |
+| Posterize | levels 2–64 (8) | ✓ | M3 |
+| Palette (posterize to an image) | colors 2–48 (8) | — | M5 |
 | Grayscale | — | ✓ | M2 |
-| Black & White | порог 0–255 (128), сглаживание | ✓ | M3 |
-| Mono color | цвет | ✓ | M3 |
+| Black & White | threshold 0–255 (128), smoothing | ✓ | M3 |
+| Mono color | color | ✓ | M3 |
 | Sepia | strength | ✓ | M3 |
 | Warm | −100–100 | ✓ | M3 |
 | Fade | 0–100 | ✓ | M3 |
-| Invert | вариант RGB / Chroma / Luminance / Alpha, strength −100–100 | ✓ | M2 |
-| Change line color | цвет, strength (перекрасить непрозрачное, сохранив альфу) | ✓ | M3 |
-| Extract line art | white 0–255 (220), black 0–255 (40), mid 0–100 (50) → лайнарт на прозрачном | — | M3 |
+| Invert | variant RGB / Chroma / Luminance / Alpha, strength −100–100 | ✓ | M2 |
+| Change line color | color, strength (recolor the opaque part, keeping alpha) | ✓ | M3 |
+| Extract line art | white 0–255 (220), black 0–255 (40), mid 0–100 (50) → line art on transparent | — | M3 |
 | Clear white | gray / color | — | M2 |
 
-## Размытие и резкость
-| Фильтр | Параметры | live | Веха |
+## Blur and sharpness
+| Filter | Parameters | live | Milestone |
 |---|---|---|---|
 | Gaussian blur | radius 0–250 px (5) | ✓ | M3 |
 | Smooth (edge-preserving) | strength, radius | ✓ | M5 |
@@ -52,31 +52,31 @@
 | High-pass (detail) | strength, radius | ✓ | M5 |
 | Frosted glass / Scatter | distance 1–50 | — | M5 |
 | Noise | amount, mono/color, alpha | — | M3 |
-| Grain | вариант mono / rgb / alpha, size | — | M5 |
+| Grain | variant mono / rgb / alpha, size | — | M5 |
 | Local contrast | strength, radius | ✓ | M5 |
 
-## Свет
-| Фильтр | Параметры | live | Веха |
+## Light
+| Filter | Parameters | live | Milestone |
 |---|---|---|---|
 | Glow / Bloom | threshold, radius, strength | ✓ | M3 |
 | Gloom | threshold, radius | ✓ | M5 |
 | Bokeh | strength, size | — | M5 |
 | Lens flare | center, size, strength | — | M5 |
 | God rays | center, length, strength, threshold | — | M5 |
-| Cross filter (звёзды) | threshold, length, angle, rays 2–8 | — | M5 |
+| Cross filter (stars) | threshold, length, angle, rays 2–8 | — | M5 |
 
-## Морфология и края
-| Фильтр | Параметры | live | Веха |
+## Morphology and edges
+| Filter | Parameters | live | Milestone |
 |---|---|---|---|
 | Dilate | radius 1–20 | — | M3 |
 | Erode | radius 1–20 | — | M3 |
 | Find edges | algorithm (sobel / canny), smoothness, black, white, mid | — | M3 |
 | Find edges (sketch) | thickness, amount of lines, sensitivity | — | M5 |
-| Edges (на прозрачном) | strength | — | M3 |
-| Trace (края поверх) | strength | — | M5 |
+| Edges (on transparent) | strength | — | M3 |
+| Trace (edges on top) | strength | — | M5 |
 
-## Стиль слоя (растрово)
-| Фильтр | Параметры | live | Веха |
+## Layer style (raster)
+| Filter | Parameters | live | Milestone |
 |---|---|---|---|
 | Stroke outer / inner / both | width 1–100, color, opacity | ✓ | M3 |
 | Drop shadow | angle, distance, blur, color, opacity | ✓ | M3 |
@@ -89,21 +89,21 @@
 | Waterdrop | height, gloss | — | M5 |
 | Extrude | angle, length, color, shading | — | M5 |
 
-## Генераторы (Draw)
-| Фильтр | Параметры | live | Веха |
+## Generators (Draw)
+| Filter | Parameters | live | Milestone |
 |---|---|---|---|
-| Linear / Radial / Angle gradation | точки, стопы (= градиенты Fill) | ✓ | M3 |
+| Linear / Radial / Angle gradation | points, stops (= Fill gradients) | ✓ | M3 |
 | Radial lines | center (drag), count 10–500, length random, inner radius, thickness, color | — | M3 |
 | Speed lines | angle, count, length, thickness, spacing jitter, color | — | M3 |
-| Clouds | scale, detail, seed, 2 цвета | — | M5 |
-| QR code | текст, size, margin, color | — | M5 |
-| Halftone | вариант gray / bw / cmyk / alpha, cell size, angle | ✓ | M3 |
-| Manga (тон из изображения) | brightness, edge, tone size | — | M5 |
+| Clouds | scale, detail, seed, 2 colors | — | M5 |
+| QR code | text, size, margin, color | — | M5 |
+| Halftone | variant gray / bw / cmyk / alpha, cell size, angle | ✓ | M3 |
+| Manga (tone from an image) | brightness, edge, tone size | — | M5 |
 | Manga background | contrast, edge darkness, tone size | — | M5 |
 | Anime background | brightness, contrast, saturation, posterize | — | M5 |
 
-## Художественные
-| Фильтр | Параметры | live | Веха |
+## Artistic
+| Filter | Parameters | live | Milestone |
 |---|---|---|---|
 | Stained glass (voronoi) | cell size, border width, border color | — | M5 |
 | Hexagon pixelate | size | ✓ | M5 |
@@ -124,8 +124,8 @@
 | Pencil sketch | strength, line length | — | M5 |
 | Oil paint | radius, levels | — | M5 |
 
-## Деформации
-| Фильтр | Параметры | live | Веха |
+## Deformations
+| Filter | Parameters | live | Milestone |
 |---|---|---|---|
 | Fisheye / pinch | −100–100, center | — | M3 |
 | Sphere lens | radius, strength, center | — | M5 |
@@ -135,9 +135,9 @@
 | Polar coordinates | rect→polar / polar→rect | — | M5 |
 | Expansion (bulge rect) | strength | — | M5 |
 
-## Рамки и прочее
-| Фильтр | Параметры | live | Веха |
+## Frames and misc
+| Filter | Parameters | live | Milestone |
 |---|---|---|---|
-| Blur frame (виньетка) | width, blur | ✓ | M5 |
+| Blur frame (vignette) | width, blur | ✓ | M5 |
 | Table frame | width, color, corner radius | — | M5 |
 | Rain | density, angle, length, opacity, seed | — | M5 |

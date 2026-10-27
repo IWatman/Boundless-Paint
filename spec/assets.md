@@ -1,36 +1,36 @@
-# Ассеты v1
+# Assets v1
 
-## Встроенные кисти (свои пресеты, свои имена)
-> Обновлено: цель M2 = полный стоковый каталог ≈236 кистей (spec/brush-catalog.md). Таблица ниже = ядро первой очереди внутри M2.
+## Built-in brushes (our own presets, our own names)
+> Updated: the M2 goal = a full stock catalog of ≈236 brushes (spec/brush-catalog.md). The table below = the first-wave core inside M2.
 
-| Категория | Пресеты (первая очередь) |
+| Category | Presets (first wave) |
 |---|---|
-| Карандаши | Графит HB, Графит 4B, Тех. карандаш, Штриховка |
-| Ручки и тушь | Ровная ручка, Мягкая ручка, Тушь с нажимом, Лайнер, Пиксель 1 px |
-| Каллиграфия | Плоское перо, Круглое перо |
-| Маркеры | Маркер, Скошенный маркер, Хайлайтер, Блендер-маркер |
-| Краски | Масло плоская, Масло круглая, Гуашь, Мастихин, Сухая кисть |
-| Акварель | Мокрая заливка, Акварель лёгкая, Акварель плотная, Вода (блендер) |
-| Аэрограф | Мягкий, Средний, Жёсткий, Брызги |
-| Мел и пастель | Мел, Пастель, Уголь |
-| Дизайн | Пунктир, Точки, Стрелка |
-| Заливочные | Сплошная, Шум, Скринтон |
-| Свечение | Неон, Мягкий свет, Искры |
-| Скринтон | Точки 45°, Линии, Полутон |
-| Текстуры | Кирпич, Дерево, Сетка |
-| Процедурные | Скетч, Мех, Паутина, Ленты |
-| Ластики | Мягкий, Жёсткий, Текстурный |
-| Смешивание | Палец, Размытие, Мягкое смешивание |
+| Pencils | Graphite HB, Graphite 4B, Technical pencil, Hatching |
+| Pens and ink | Even pen, Soft pen, Pressure ink, Liner, Pixel 1 px |
+| Calligraphy | Flat nib, Round nib |
+| Markers | Marker, Chisel marker, Highlighter, Blender marker |
+| Paints | Flat oil, Round oil, Gouache, Palette knife, Dry brush |
+| Watercolor | Wet wash, Light watercolor, Dense watercolor, Water (blender) |
+| Airbrush | Soft, Medium, Hard, Splatter |
+| Chalk and pastel | Chalk, Pastel, Charcoal |
+| Design | Dashed, Dots, Arrow |
+| Fill | Solid, Noise, Screentone |
+| Glow | Neon, Soft light, Sparks |
+| Screentone | Dots 45°, Lines, Halftone |
+| Textures | Brick, Wood, Mesh |
+| Procedural | Sketch, Fur, Cobweb, Ribbons |
+| Erasers | Soft, Hard, Textured |
+| Blending | Finger, Blur, Soft blend |
 
-## Генерируемые ресурсы (`tools/gen_assets.py`)
-- Головы: круг (AA), квадрат, щетина (N штрихов шумом), губка (Ворли-шум), мел (шум + порог), брызги.
-- Текстуры: бумага (perlin fbm), холст (переплетение), зерно, мел.
-- Бумаги для Paper (≈ 12): гладкая, акварельная, крафт, холст, рисовая…
-- Паттерны (≈ 20): клетка, горох, полосы, кирпич, ёлочка…
-- Скринтоны: см. GAPS «Screentone-слой».
+## Generated resources (`tools/gen_assets.py`)
+- Heads: circle (AA), square, bristle (N noisy strokes), sponge (Worley noise), chalk (noise + threshold), splatter.
+- Textures: paper (perlin fbm), canvas (weave), grain, chalk.
+- Papers for Paper (≈ 12): smooth, watercolor, kraft, canvas, rice…
+- Patterns (≈ 20): check, dots, stripes, brick, herringbone…
+- Screentones: see GAPS "Screentone layer".
 
-## Шрифты (OFL / Apache, из Google Fonts)
-Inter, Noto Sans (+ Cyrillic), Noto Sans JP (вертикальный текст), Noto Serif, Caveat, Bangers, Comic Neue, Permanent Marker, Roboto Mono. Лицензии в `app/src/main/assets/fonts/LICENSES/`.
+## Fonts (OFL / Apache, from Google Fonts)
+Inter, Noto Sans (+ Cyrillic), Noto Sans JP (vertical text), Noto Serif, Caveat, Bangers, Comic Neue, Permanent Marker, Roboto Mono. Licenses in `app/src/main/assets/fonts/LICENSES/`.
 
-## Палитры
-Своя «Базовая 24», «Тона кожи 12», «Серые 10», «Пастель 16».
+## Palettes
+Our own "Basic 24", "Skin tones 12", "Grays 10", "Pastel 16".

@@ -1,28 +1,28 @@
-# План реализации M2
+# M2 implementation plan
 
-Цель M2: паритет с основой IP и полный стоковый набор кистей. Спеки инструментов:
-- [tools/m2-brush.md](tools/m2-brush.md): движок кисти, каталог ≈236, браузер, редактор, стилус, состояние инструментов;
-- [tools/m2-select-transform-fill.md](tools/m2-select-transform-fill.md): пипетка, выделение, трансформация, ведро, градиент;
-- [tools/m2-layers-adjust.md](tools/m2-layers-adjust.md): группы, мультивыбор, маски, 33 режима, adjustment-слои, коррекции;
-- [tools/m2-guides-shapes.md](tools/m2-guides-shapes.md): гайды, шейпы и распознавание, симметрия, перспектива.
+Goal of M2: parity with the IP foundation and the full stock brush set. Tool specs:
+- [tools/m2-brush.md](tools/m2-brush.md): brush engine, catalog of ≈236, browser, editor, stylus, tool state;
+- [tools/m2-select-transform-fill.md](tools/m2-select-transform-fill.md): eyedropper, selection, transform, bucket, gradient;
+- [tools/m2-layers-adjust.md](tools/m2-layers-adjust.md): groups, multi-select, masks, 33 modes, adjustment layers, adjustments;
+- [tools/m2-guides-shapes.md](tools/m2-guides-shapes.md): guides, shapes and detection, symmetry, perspective.
 
-При расхождении спек действует этот файл.
+If the specs diverge, this file wins.
 
-## 1. Архитектурные решения M2
-| # | Решение | Почему |
+## 1. M2 architecture decisions
+| # | Decision | Why |
 |---|---|---|
-| A1 | Штампы и растровые операции считаются на CPU в `:core`, тайл-параллельно. GPU только композит и превью. GPU-штампы делаем только если не пройден бенчмарк (m2-brush §6) | детерминизм, JVM-тесты, одна реализация. Отступление от ROADMAP «GPU-штампы» |
-| A2 | Тайлы слоёв хранятся в half (8 Б/px), буферы мазка во float32 (`Tile(precise = true)`). На GPU тайлы грузятся как `GL_HALF_FLOAT` | ✅ сделано |
-| A3 | `MaskGrid(width, height, defaultValue)` — единый тип для выделения (default 0) и масок слоёв (0 или 255) | ✅ сделано |
-| A4 | Симметрия размножает **штампы**, а не точки | одинаковые spacing и рандом у копий, один патч |
-| A5 | Правки гайдов, симметрии и сеток не попадают в History | это состояние вида |
-| A6 | Мультивыбор слоёв — состояние UI. Команды принимают списки id | |
-| A7 | Неразрушающие adjustment-слои; сила задаётся opacity слоя | как ibis |
-| A8 | Акварель — CPU-симуляция в половинном разрешении (m2-brush §1.9) | вместо GPU-симуляции из GAPS |
+| A1 | Dabs and raster operations are computed on the CPU in `:core`, tile-parallel. The GPU only composites and previews. GPU dabs are done only if the benchmark fails (m2-brush §6) | determinism, JVM tests, a single implementation. Deviation from ROADMAP "GPU dabs" |
+| A2 | Layer tiles are stored in half (8 B/px), stroke buffers in float32 (`Tile(precise = true)`). Tiles are uploaded to the GPU as `GL_HALF_FLOAT` | ✅ done |
+| A3 | `MaskGrid(width, height, defaultValue)` — a single type for the selection (default 0) and layer masks (0 or 255) | ✅ done |
+| A4 | Symmetry replicates **dabs**, not points | identical spacing and random values for the copies, one patch |
+| A5 | Edits of guides, symmetry and grids do not go into History | this is view state |
+| A6 | Layer multi-select is UI state. Commands accept lists of ids | |
+| A7 | Non-destructive adjustment layers; strength is set by the layer opacity | like ibis |
+| A8 | Watercolor — CPU simulation at half resolution (m2-brush §1.9) | instead of the GPU simulation from GAPS |
 
-## 2. Единый контракт мазка (сводит четыре спеки)
+## 2. Unified stroke contract (reconciles the four specs)
 ```kotlin
-// core/stroke/Pipeline.kt (✅ есть): PointSink, PointStage, Interpolation, SymmetryCopies, FillSpec,
+// core/stroke/Pipeline.kt (✅ exists): PointSink, PointStage, Interpolation, SymmetryCopies, FillSpec,
 // StrokeOptions(stabilize, stages, interpolation, closed, copies, fill, clip), StrokeTarget(Layer | Mask | Selection)
 class StrokeEngine(
     doc: Document,
@@ -35,56 +35,56 @@ class StrokeEngine(
     options: StrokeOptions = StrokeOptions(),
 ) {
     fun begin(p: InputPoint); fun add(points: List<InputPoint>); fun cancel()
-    fun end(): StrokeCommit?       // Pixels(TilePatch) | Mask(MaskPatch); применён к документу
+    fun end(): StrokeCommit?       // Pixels(TilePatch) | Mask(MaskPatch); applied to the document
     val buffer: TileGrid; fun takeDirty(): Set<TileKey>; val previewOpacity: Float
 }
-// Совместимость M1: StrokeEngine(doc, layerId, params, color, mode) остаётся обёрткой, end() даёт TilePatch?.
+// M1 compatibility: StrokeEngine(doc, layerId, params, color, mode) stays as a wrapper, end() gives TilePatch?.
 ```
-- `InputPoint` получил `twist` (✅). `Dab` несёт `angle` и `flipX` для зеркальных копий.
-- Порядок стадий: stabilizer → `options.stages` (lazy, snap, hatching) → resampler (`interpolation`, `closed`) → dab generator → symmetry copies → kernels → buffer → композит (cap, blend mode кисти, alpha lock, `clip`).
-- Цель Mask/Selection: значение маски = покрытие мазка × яркость цвета; ластик уменьшает.
-- `core/geom/Affine2`, `Vec2` (✅ есть).
+- `InputPoint` got `twist` (✅). `Dab` carries `angle` and `flipX` for mirrored copies.
+- Stage order: stabilizer → `options.stages` (lazy, snap, hatching) → resampler (`interpolation`, `closed`) → dab generator → symmetry copies → kernels → buffer → composite (cap, brush blend mode, alpha lock, `clip`).
+- Mask/Selection target: the mask value = stroke coverage × color brightness; the eraser decreases it.
+- `core/geom/Affine2`, `Vec2` (✅ exist).
 
-## 3. Общие типы, готовые до старта фаз (✅)
+## 3. Shared types ready before the phases start (✅)
 - `core/raster`: `Tile` (half/precise, `t[i]`, `read/write`, `scale`, `toFloats`, `copyHalvesTo`, `ofHalves`, `contentEquals`), `TileGrid(precise)`, `MaskTile` (`isUniform/isEmpty/isFull/fill`), `MaskGrid`, `IntRect`, `MaskPatch(targetId)`, `BitPlane`.
 - `core/doc`: `Selection` (`Document.selection`), `LayerMask` (`Node.mask`), `ColorTag` (`Node.colorTag`), `Node.reference`, `EditTarget` (`Document.activeTarget`), `Document.referenceNode`.
 - `core/blend/Compositor.flattenTile(doc, key, includePaper)`.
 
-## 4. Фазы и владельцы пакетов
-Агенты пишут только в свои пакеты и тесты к ним. Общие типы из §3 меняет только координатор.
+## 4. Phases and package owners
+Agents write only to their own packages and their tests. Only the coordinator changes the shared types from §3.
 
-### Фаза 1: ядро (параллельно, 4 потока)
-| Поток | Владеет | Содержание |
+### Phase 1: core (parallel, 4 streams)
+| Stream | Owns | Content |
 |---|---|---|
-| K (кисть) | `core/stroke` (кроме Pipeline.kt), `core/io/BrushIO.kt` | m2-brush S0 + S1: `LayerWorkingSet`, `TilePool`, `TileScheduler`, hash-RNG, `PathWalker`, `DabGenerator`, `Brush` + codec, re-render на pen-up, lazy rope, after-smoothing, бенчмарк; bitmap-головы, rotation, jitter, dynamics, taper, профили. Контракт §2, включая `options` и цели Mask/Selection |
-| L (слои) | `core/doc` (кроме Masks.kt), `core/adjust`, `core/history` (кроме SelectionCommands.kt), `core/blend`, `core/io/ProjectIO.kt` | m2-layers S1: `AdjustmentLayer`, `AdjustParams`, `AdjustMath`, `AdjustLut`, новые команды, маски и adjustment в Compositor, manifest schema 2 (маски, adjust, colorTag, reference, activeTarget, **selection**, **guides** как непрозрачный JSON-блок), тест-векторы blend/adjust |
-| S (выделение и заливки) | `core/pick`, `core/select`, `core/transform`, `core/fill`, `core/raster/MaskedEdit.kt`, `core/history/SelectionCommands.kt` | m2-select: всё ядро §1–§4 (пипетка, операции выделения, палочка, трансформации и ресэмплинг, ведро, градиенты) |
-| G (гайды) | `core/guide`, `core/symmetry`, `core/shape`, `core/perspective` | m2-guides: `SnapStage`, `LazyRopeStage`, `HatchingStage`, гайды Lines/Ellipse/Pen, `SymmetryMath`, перспективные сетки, генерация шейпов, распознавание, `GuideState` + сериализация (kotlinx) |
+| K (brush) | `core/stroke` (except Pipeline.kt), `core/io/BrushIO.kt` | m2-brush S0 + S1: `LayerWorkingSet`, `TilePool`, `TileScheduler`, hash-RNG, `PathWalker`, `DabGenerator`, `Brush` + codec, re-render on pen-up, lazy rope, after-smoothing, benchmark; bitmap heads, rotation, jitter, dynamics, taper, profiles. Contract §2, including `options` and the Mask/Selection targets |
+| L (layers) | `core/doc` (except Masks.kt), `core/adjust`, `core/history` (except SelectionCommands.kt), `core/blend`, `core/io/ProjectIO.kt` | m2-layers S1: `AdjustmentLayer`, `AdjustParams`, `AdjustMath`, `AdjustLut`, new commands, masks and adjustments in Compositor, manifest schema 2 (masks, adjust, colorTag, reference, activeTarget, **selection**, **guides** as an opaque JSON block), blend/adjust test vectors |
+| S (selection and fills) | `core/pick`, `core/select`, `core/transform`, `core/fill`, `core/raster/MaskedEdit.kt`, `core/history/SelectionCommands.kt` | m2-select: the whole core of §1–§4 (eyedropper, selection operations, wand, transforms and resampling, bucket, gradients) |
+| G (guides) | `core/guide`, `core/symmetry`, `core/shape`, `core/perspective` | m2-guides: `SnapStage`, `LazyRopeStage`, `HatchingStage`, Lines/Ellipse/Pen guides, `SymmetryMath`, perspective grids, shape generation, detection, `GuideState` + serialization (kotlinx) |
 
-### Фаза 2: рендер и связка (после фазы 1)
-| Поток | Владеет | Содержание |
+### Phase 2: rendering and wiring (after phase 1)
+| Stream | Owns | Content |
 |---|---|---|
-| R (рендер) | `app/render` | маски (R8), adjustment-шейдер, фиксы ADD и клипа к passthrough, выделение (marching ants), floating-превью трансформации, превью градиента и региона, превью мазка в маску, parity-тесты (androidTest) |
-| V (связка) | `app/studio`, `MainActivity` | координатор: ViewModel под новые API, ввод инструментов (`ToolInput`), workspaces |
+| R (rendering) | `app/render` | masks (R8), adjustment shader, fixes for ADD and clipping to passthrough, selection (marching ants), floating transform preview, gradient and region preview, stroke preview into a mask, parity tests (androidTest) |
+| V (wiring) | `app/studio`, `MainActivity` | coordinator: ViewModel for the new APIs, tool input (`ToolInput`), workspaces |
 
-### Фаза 3: UI (после фазы 2, параллельно по экранам)
-| Поток | Владеет | Содержание |
+### Phase 3: UI (after phase 2, parallel by screen)
+| Stream | Owns | Content |
 |---|---|---|
-| UB | `app/ui/brush` | браузер, редактор, стилус-настройки |
-| UL | `app/ui/studio/LayerPanel*`, `app/ui/adjust` | группы, мультивыбор, маски, режимы с превью, adjustment, кривые, Levels |
-| US | `app/ui/tools` | контекстные тулбары выделения, трансформации, заливки, градиента, лупа |
-| UG | `app/ui/guides` | overlay гайдов и ручек (Compose), мини-тулбары, симметрия, перспектива |
+| UB | `app/ui/brush` | browser, editor, stylus settings |
+| UL | `app/ui/studio/LayerPanel*`, `app/ui/adjust` | groups, multi-select, masks, modes with previews, adjustment, curves, Levels |
+| US | `app/ui/tools` | context toolbars for selection, transform, fill, gradient, magnifier |
+| UG | `app/ui/guides` | overlay of guides and handles (Compose), mini-toolbars, symmetry, perspective |
 
-### Фаза 4: движок до конца и каталог
-- K: S2–S9 (S2 ∥ S3 ∥ S4 ∥ S7 параллельно, разными агентами по kernel-файлам).
-- Каталог S10: `tools/gen_assets.py` + `tools/catalog/*.py` → `app/src/main/assets/brushes/`. Категории подключаются по мере готовности фич.
+### Phase 4: finish the engine and the catalog
+- K: S2–S9 (S2 ∥ S3 ∥ S4 ∥ S7 in parallel, by different agents per kernel file).
+- Catalog S10: `tools/gen_assets.py` + `tools/catalog/*.py` → `app/src/main/assets/brushes/`. Categories are connected as their features become ready.
 
-### Фаза 5: приёмка M2
-- Все JVM-тесты, бенчмарк кисти, parity-тесты на эмуляторе.
-- Ручной чек-лист из «Приёмки» каждой спеки на эмуляторе, стилус — на XP-Pen, когда будет доступ.
-- Долги STATUS.md 4, 5, 6, 8, 9, 10, 11, 12, 13 закрываются в фазах 2–4.
+### Phase 5: M2 acceptance
+- All JVM tests, brush benchmark, parity tests on the emulator.
+- Manual checklist from the "Acceptance" section of each spec on the emulator, stylus — on the XP-Pen when available.
+- STATUS.md debts 4, 5, 6, 8, 9, 10, 11, 12, 13 are closed in phases 2–4.
 
-## 5. Изменения объёма относительно ROADMAP
-- В M2 переносятся: Clone (кисть), правильный многоугольник, Hatching, Color Balance, Levels, Gradient map, Posterize, Black & White.
-- В M3 уходят: криволинейная перспектива (5 точек и fisheye), Lanczos, сохранение исходника трансформации между сессиями.
-- В M4 остаются: radial и array линейки, rounded rect, стрелка, баллон, звезда, lasso fill по всем слоям, surrounding fill.
+## 5. Scope changes relative to ROADMAP
+- Moved into M2: Clone (brush), regular polygon, Hatching, Color Balance, Levels, Gradient map, Posterize, Black & White.
+- Moved to M3: curvilinear perspective (5 points and fisheye), Lanczos, keeping the transform source between sessions.
+- Remaining in M4: radial and array rulers, rounded rect, arrow, balloon, star, lasso fill across all layers, surrounding fill.

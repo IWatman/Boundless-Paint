@@ -1,63 +1,63 @@
-# План реализации M0–M1
+# M0–M1 implementation plan
 
-Цель M1: на Android-планшете можно создать холст, рисовать кистью и ластиком со стилусом (давление), работать со слоями, менять цвет, делать undo, сохранять, открывать из галереи и экспортировать PNG/JPG.
+Goal of M1: on an Android tablet you can create a canvas, draw with a brush and an eraser with a stylus (pressure), work with layers, change color, undo, save, open from the gallery and export PNG/JPG.
 
-## 0. Окружение (всё внутри `Painter/`)
-| Шаг | Действие | Размер |
+## 0. Environment (everything inside `Painter/`)
+| Step | Action | Size |
 |---|---|---|
-| 0.1 | `.venv` (готово) | — |
-| 0.2 | Gradle 8.11.1 → `.tools/gradle-8.11.1/`, `GRADLE_USER_HOME=.tools/gradle` | ~140 MB + кэш ~1.5 GB |
-| 0.3 | Android SDK для сборки: используем существующий `%LOCALAPPDATA%\Android\Sdk` (platform 34, build-tools 35) только на чтение. Путь в `local.properties` | 0 |
-| 0.4 | Эмулятор: отдельный SDK root `.tools/android-sdk` (cmdline-tools → emulator + system-images;android-34;google_apis;x86_64), AVD в `.tools/avd` (`ANDROID_AVD_HOME`). Планшетный профиль 2560×1600 | ~4 GB |
-| 0.5 | Скрипт `tools/env.ps1`: выставляет переменные окружения для сессии | — |
-| 0.6 | `git init` + `.gitignore` (.venv, .tools, build). Коммиты только по твоей команде | — |
-- Альтернатива 0.4: твой Android-планшет по USB или Wi-Fi debugging, тогда эмулятор не нужен.
+| 0.1 | `.venv` (done) | — |
+| 0.2 | Gradle 8.11.1 → `.tools/gradle-8.11.1/`, `GRADLE_USER_HOME=.tools/gradle` | ~140 MB + cache ~1.5 GB |
+| 0.3 | Android SDK for building: we use the existing `%LOCALAPPDATA%\Android\Sdk` (platform 34, build-tools 35) read-only. Path in `local.properties` | 0 |
+| 0.4 | Emulator: a separate SDK root `.tools/android-sdk` (cmdline-tools → emulator + system-images;android-34;google_apis;x86_64), AVD in `.tools/avd` (`ANDROID_AVD_HOME`). Tablet profile 2560×1600 | ~4 GB |
+| 0.5 | Script `tools/env.ps1`: sets the environment variables for the session | — |
+| 0.6 | `git init` + `.gitignore` (.venv, .tools, build). Commits only on your command | — |
+- Alternative to 0.4: your Android tablet over USB or Wi-Fi debugging, then the emulator is not needed.
 
-## 1. Каркас (M0)
-| Шаг | Результат | Проверка |
+## 1. Skeleton (M0)
+| Step | Result | Check |
 |---|---|---|
-| 1.1 | `settings.gradle.kts`, version catalog, модули `:core` (kotlin-jvm), `:app` (android). AGP 8.7.3, Kotlin 2.0.21, Compose BOM 2024.12.01, compileSdk/targetSdk 34, minSdk 29 | `gradlew :core:test`, `:app:assembleDebug` зелёные |
-| 1.2 | `:app`: MainActivity, Compose-навигация Home ↔ Studio, тема (ui-components.md) | APK запускается |
-| 1.3 | Studio-каркас: top bar (Home, Tools ×2, Layers, Options), main toolbar, undo/redo, пустая layer panel | визуальная проверка |
-| 1.4 | `CanvasView : GLSurfaceView` (GLES 3.0+), рендер шахматки и прямоугольника холста, матрица вида (pan, zoom, rotate, fit) | жесты работают, 60 fps |
+| 1.1 | `settings.gradle.kts`, version catalog, modules `:core` (kotlin-jvm), `:app` (android). AGP 8.7.3, Kotlin 2.0.21, Compose BOM 2024.12.01, compileSdk/targetSdk 34, minSdk 29 | `gradlew :core:test`, `:app:assembleDebug` green |
+| 1.2 | `:app`: MainActivity, Compose navigation Home ↔ Studio, theme (ui-components.md) | APK launches |
+| 1.3 | Studio skeleton: top bar (Home, Tools ×2, Layers, Options), main toolbar, undo/redo, empty layer panel | visual check |
+| 1.4 | `CanvasView : GLSurfaceView` (GLES 3.0+), rendering of the checkerboard and the canvas rectangle, view matrix (pan, zoom, rotate, fit) | gestures work, 60 fps |
 
-## 2. Ядро (`:core`, JVM-тестируемо)
-| Шаг | Компонент | Тесты |
+## 2. Core (`:core`, JVM-testable)
+| Step | Component | Tests |
 |---|---|---|
-| 2.1 | `Half` (float16 ↔ float), `Tile` (256², FloatArray RGBA premult на CPU), `TileGrid` (sparse map) | round-trip, границы |
-| 2.2 | `Document`, `RasterLayer`, `GroupNode` (только root), Paper | структура |
-| 2.3 | `BlendModes` CPU-референс (12 режимов M1, все 33 в M2) | таблица формул |
-| 2.4 | `Command`, `History` (снапшоты тайлов, лимит) | undo/redo хэши |
-| 2.5 | `InputPoint`, `Stabilizer` (EMA), `StrokeResampler` (spacing, taper) | spacing ±1%, шум ↓ |
-| 2.6 | `BrushParams` (подмножество M1), `DabGenerator` (size/flow от давления) | значения кривых |
-| 2.7 | `CpuDabRenderer` (референс: штамп в tile-буфер) + `StrokeCompositor` (cap opacity, erase) | golden-PNG мазка |
-| 2.8 | `ProjectIO` (директория проекта: manifest.json + tiles LZ4), экспорт PNG через абстракцию encoder | save→load хэши |
-| 2.9 | Цвет: HSB/RGB/hex конверсии | round-trip |
+| 2.1 | `Half` (float16 ↔ float), `Tile` (256², FloatArray RGBA premult on the CPU), `TileGrid` (sparse map) | round-trip, bounds |
+| 2.2 | `Document`, `RasterLayer`, `GroupNode` (root only), Paper | structure |
+| 2.3 | `BlendModes` CPU reference (12 M1 modes, all 33 in M2) | formula table |
+| 2.4 | `Command`, `History` (tile snapshots, limit) | undo/redo hashes |
+| 2.5 | `InputPoint`, `Stabilizer` (EMA), `StrokeResampler` (spacing, taper) | spacing ±1%, noise ↓ |
+| 2.6 | `BrushParams` (M1 subset), `DabGenerator` (size/flow from pressure) | curve values |
+| 2.7 | `CpuDabRenderer` (reference: dab into a tile buffer) + `StrokeCompositor` (cap opacity, erase) | golden PNG of the stroke |
+| 2.8 | `ProjectIO` (project directory: manifest.json + tiles LZ4), PNG export via an encoder abstraction | save→load hashes |
+| 2.9 | Color: HSB/RGB/hex conversions | round-trip |
 
-## 3. GPU-рендер (`:app/render`)
-| Шаг | Результат |
+## 3. GPU rendering (`:app/render`)
+| Step | Result |
 |---|---|
-| 3.1 | Пул текстур RGBA16F 256², загрузка dirty-тайлов из `:core` |
-| 3.2 | Композит стека слоёв (шейдер blend 12 режимов, opacity, clip, alpha lock) во framebuffer холста → экран с матрицей вида |
-| 3.3 | Рендер штампов на GPU (instanced quads) в stroke buffer. Композит stroke buffer поверх активного слоя в превью. Pen-up: запекание в тайлы и readback в `:core` для истории |
-| 3.4 | Обработка `MotionEvent`: stylus/finger, история точек, pressure, predicted (androidx.input), жесты 2/3 пальца |
+| 3.1 | Pool of RGBA16F 256² textures, upload of dirty tiles from `:core` |
+| 3.2 | Compositing of the layer stack (blend shader for 12 modes, opacity, clip, alpha lock) into the canvas framebuffer → screen with the view matrix |
+| 3.3 | Rendering of dabs on the GPU (instanced quads) into the stroke buffer. Compositing of the stroke buffer over the active layer in the preview. Pen-up: baking into tiles and readback into `:core` for history |
+| 3.4 | `MotionEvent` handling: stylus/finger, point history, pressure, predicted (androidx.input), 2/3-finger gestures |
 
 ## 4. UI M1
-| Шаг | Результат |
+| Step | Result |
 |---|---|
-| 4.1 | Main toolbar: режимы, virtual sliders size и opacity, попапы, HUD |
-| 4.2 | Color panel (wheel, sliders, hex, палитра, recent) |
+| 4.1 | Main toolbar: modes, size and opacity virtual sliders, popups, HUD |
+| 4.2 | Color panel (wheel, sliders, hex, palette, recent) |
 | 4.3 | Layer panel (T8) |
 | 4.4 | Home / New canvas / Projects gallery (T9) |
-| 4.5 | Options: Save, Export PNG/JPG (T10), Settings-заглушка (pressure curve, palm mode) |
+| 4.5 | Options: Save, Export PNG/JPG (T10), Settings stub (pressure curve, palm mode) |
 
-## 5. Приёмка M1
-- Все JVM-тесты зелёные.
-- APK собирается и ставится на эмулятор или устройство.
-- Ручной чек-лист из tools/m0-m1-tools.md: каждый пункт «Приёмка».
-- Отчёт тебе: что работает, что нет, скриншоты с эмулятора.
+## 5. M1 acceptance
+- All JVM tests green.
+- The APK builds and installs on an emulator or device.
+- Manual checklist from tools/m0-m1-tools.md: every "Acceptance" item.
+- Report to you: what works, what does not, screenshots from the emulator.
 
-## Риски
-- Эмулятор плохо держит GLES 3 + RGBA16F рендер-таргеты. Fallback: RGBA8 + dithering на эмуляторе, half-float на устройстве.
-- Стилус и давление на эмуляторе не проверить, нужно реальное устройство.
-- Производительность readback тайлов после мазка: делаем асинхронно (PBO).
+## Risks
+- The emulator handles GLES 3 + RGBA16F render targets poorly. Fallback: RGBA8 + dithering on the emulator, half-float on the device.
+- Stylus and pressure cannot be tested on the emulator; a real device is needed.
+- Tile readback performance after a stroke: we do it asynchronously (PBO).
