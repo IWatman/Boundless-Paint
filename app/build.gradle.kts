@@ -6,8 +6,16 @@ plugins {
     alias(libs.plugins.kotlin.compose)
 }
 
-// Release signing lives outside the repository sources: .tools/signing/keystore.properties.
-val keystorePropertiesFile = rootProject.file(".tools/signing/keystore.properties")
+// Single version source; CI passes -PappVersion=<tag without v>.
+val appVersion = (findProperty("appVersion") as String?) ?: "0.1.3"
+val appVersionCode = appVersion.split(".").map { it.toInt() }.let { (major, minor, patch) ->
+    major * 10000 + minor * 100 + patch
+}
+
+// Release signing lives outside the repository: PAINTER_KEYSTORE_PROPERTIES, else ~/.painter/keystore.properties.
+val keystorePropertiesFile = file(
+    System.getenv("PAINTER_KEYSTORE_PROPERTIES") ?: "${System.getProperty("user.home")}/.painter/keystore.properties",
+)
 val keystoreProperties: Properties? = if (keystorePropertiesFile.isFile) {
     Properties().apply { keystorePropertiesFile.inputStream().use { load(it) } }
 } else {
@@ -22,8 +30,8 @@ android {
         applicationId = "app.painter"
         minSdk = 29
         targetSdk = 34
-        versionCode = 103
-        versionName = "0.1.3"
+        versionCode = appVersionCode
+        versionName = appVersion
         buildConfigField("String", "UPDATE_REPO", "\"IWatman/Painter\"")
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -46,7 +54,7 @@ android {
         }
         release {
             isMinifyEnabled = false
-            // Falls back to an unsigned build when .tools/signing/keystore.properties is absent.
+            // Falls back to an unsigned build when the keystore properties are absent.
             signingConfig = signingConfigs.findByName("release")
         }
     }

@@ -12,3 +12,8 @@ captures/
 .claude/
 Microsoft/
 liblz4-java-*.so
+
+# Signing material never goes into git
+*.jks
+*.keystore
+keystore.properties

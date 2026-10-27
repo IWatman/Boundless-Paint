@@ -6,7 +6,9 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import app.painter.BuildConfig
 import java.io.File
+import android.os.SystemClock
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -58,11 +60,19 @@ class UpdateViewModel(app: Application) : AndroidViewModel(app) {
     private var available: UpdateInfo? = null
     private var apk: File? = null
 
+    // The install handshake is tracked in memory only: a new process always starts Idle.
+    private var sessionId = -1
+    private var installStartedMs = 0L
+    private var confirmShown = false
+
     init {
         viewModelScope.launch {
             UpdateInstallBus.status.collect { status ->
                 when (status) {
                     null -> Unit
+                    InstallStatus.ConfirmShown -> confirmShown = true
+                    // The user cancelled the system dialog: offer the update again, no error.
+                    InstallStatus.Aborted -> backToAvailable()
                     // Delivered to the freshly installed version, so the install is already done.
                     InstallStatus.Success -> _state.value = UpdateUiState.Updated(currentVersion)
                     is InstallStatus.Failure -> _state.value = UpdateUiState.Error(
@@ -106,7 +116,9 @@ class UpdateViewModel(app: Application) : AndroidViewModel(app) {
                 val file = apk?.takeIf { it.length() == info.apkSize } ?: download(info)
                 apk = file
                 _state.value = UpdateUiState.Installing
-                installer.install(file)
+                confirmShown = false
+                installStartedMs = SystemClock.elapsedRealtime()
+                sessionId = installer.install(file)
             } catch (t: Throwable) {
                 if (t is CancellationException) throw t
                 apk = null
@@ -118,6 +130,27 @@ class UpdateViewModel(app: Application) : AndroidViewModel(app) {
     /** Continues the update when the user comes back from granting the install permission. */
     fun onResume() {
         if (_state.value is UpdateUiState.NeedsPermission && installer.canInstall()) update()
+        if (_state.value !is UpdateUiState.Installing) return
+        val stale = SystemClock.elapsedRealtime() - installStartedMs > INSTALL_TIMEOUT_MS
+        if (stale || (sessionId >= 0 && !installer.isSessionAlive(sessionId))) {
+            backToAvailable()
+            return
+        }
+        // Some Android versions report nothing when the confirm dialog is closed with Back.
+        if (confirmShown) {
+            val session = sessionId
+            viewModelScope.launch {
+                delay(DIALOG_GONE_RESET_MS)
+                if (_state.value is UpdateUiState.Installing && sessionId == session) backToAvailable()
+            }
+        }
+    }
+
+    /** Leaves the install state and offers the pending update again (or goes Idle when there is none). */
+    private fun backToAvailable() {
+        sessionId = -1
+        confirmShown = false
+        _state.value = available?.let { UpdateUiState.Available(it) } ?: UpdateUiState.Idle
     }
 
     /** Resets the dialog; an already downloaded APK is kept for a later install. */
@@ -138,4 +171,12 @@ class UpdateViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun Throwable.readableMessage(): String =
         message?.takeIf { it.isNotBlank() } ?: this::class.simpleName ?: "Unknown error"
+
+    private companion object {
+        /** An install with no answer for this long is considered lost. */
+        const val INSTALL_TIMEOUT_MS = 2 * 60_000L
+
+        /** Grace period after returning from the confirm dialog before an unanswered install is reset. */
+        const val DIALOG_GONE_RESET_MS = 5_000L
+    }
 }

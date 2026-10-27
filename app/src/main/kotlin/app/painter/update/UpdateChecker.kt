@@ -44,6 +44,8 @@ class UpdateChecker(private val repo: String) {
             connection.setRequestProperty("Accept", "application/vnd.github+json")
             connection.setRequestProperty("User-Agent", USER_AGENT)
             val code = connection.responseCode
+            // 404 means the repository has no releases yet, not a network problem.
+            if (code == HttpURLConnection.HTTP_NOT_FOUND) return "[]"
             if (code !in 200..299) {
                 val detail = connection.errorStream?.bufferedReader()?.use { it.readText() }.orEmpty()
                 throw IOException("GitHub API HTTP $code ${detail.take(160)}".trim())

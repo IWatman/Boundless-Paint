@@ -54,7 +54,7 @@ Windows, JDK 21 and the Android SDK (platform 34) are required. All other tools 
 .\.venv\Scripts\python tools\gen_assets.py --check  # check the procedural brush assets
 ```
 
-Releasing a signed APK with publication on GitHub is done by one command: `.\tools\release.ps1 -Version 0.2.0 -Notes notes.md -Prerelease`. It needs a signing key in `.tools/signing/`, which never enters the repository.
+Releases are built by GitHub Actions: bump the default `appVersion` in `app/build.gradle.kts`, commit, then `git tag vX.Y.Z && git push origin vX.Y.Z`. The release workflow signs the APK with the key from the repository secrets and publishes it on GitHub Releases, where the in-app updater finds it. Local release builds read the key from `~/.painter/keystore.properties` (or the path in `PAINTER_KEYSTORE_PROPERTIES`); it never enters the repository.
 
 ## Project layout
 

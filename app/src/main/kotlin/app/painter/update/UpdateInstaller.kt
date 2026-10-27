@@ -24,7 +24,13 @@ sealed interface InstallStatus {
     /** The package was installed; Android usually restarts the app afterwards. */
     data object Success : InstallStatus
 
-    /** Installation failed or was aborted. */
+    /** The user cancelled the system install dialog. */
+    data object Aborted : InstallStatus
+
+    /** The system install dialog was opened; the final status follows (or never comes, see the view model). */
+    data object ConfirmShown : InstallStatus
+
+    /** Installation failed. */
     data class Failure(val message: String) : InstallStatus
 }
 
@@ -106,8 +112,12 @@ class UpdateInstaller(context: Context) {
             target
         }
 
-    /** Commits [apk] to a full install session; the result arrives through [UpdateInstallBus]. */
-    fun install(apk: File) {
+    /** True while the install session [sessionId] still exists. */
+    fun isSessionAlive(sessionId: Int): Boolean =
+        runCatching { appContext.packageManager.packageInstaller.getSessionInfo(sessionId) != null }.getOrDefault(false)
+
+    /** Commits [apk] to a full install session and returns its id; the result arrives through [UpdateInstallBus]. */
+    fun install(apk: File): Int {
         val installer = appContext.packageManager.packageInstaller
         val sessionId = installer.createSession(
             PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL),
@@ -119,6 +129,7 @@ class UpdateInstaller(context: Context) {
             }
             session.commit(confirmationIntent(sessionId).intentSender)
         }
+        return sessionId
     }
 
     private fun confirmationIntent(sessionId: Int): PendingIntent {
@@ -150,9 +161,11 @@ class UpdateInstallReceiver : BroadcastReceiver() {
                     UpdateInstallBus.publish(InstallStatus.Failure("Install confirmation missing"))
                 } else {
                     context.startActivity(confirmation.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                    UpdateInstallBus.publish(InstallStatus.ConfirmShown)
                 }
             }
             PackageInstaller.STATUS_SUCCESS -> UpdateInstallBus.publish(InstallStatus.Success)
+            PackageInstaller.STATUS_FAILURE_ABORTED -> UpdateInstallBus.publish(InstallStatus.Aborted)
             else -> {
                 val message = intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE)
                 UpdateInstallBus.publish(
