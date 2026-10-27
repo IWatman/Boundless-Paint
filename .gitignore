@@ -9,6 +9,6 @@ local.properties
 captures/
 *.apk
 *.aab
-.claude/worktrees/
+.claude/
 Microsoft/
 liblz4-java-*.so
