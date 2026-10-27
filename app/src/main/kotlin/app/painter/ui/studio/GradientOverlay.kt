@@ -9,13 +9,15 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.unit.dp
 import app.painter.core.fill.GradientType
+import app.painter.ui.components.toColor
 import kotlin.math.cos
 import kotlin.math.hypot
 import kotlin.math.sin
 
 /**
  * Compose layer above the GL canvas: draws the axis of [StudioUiState.gradient] with a round handle on each
- * end, plus the end circle around p0 for [GradientType.RADIAL]. Consumes no input.
+ * end, a small circle per stop filled with its own color, and the end circle around p0 for
+ * [GradientType.RADIAL]. Consumes no input.
  */
 @Composable
 fun GradientOverlay(state: StudioUiState, modifier: Modifier = Modifier) {
@@ -34,6 +36,12 @@ fun GradientOverlay(state: StudioUiState, modifier: Modifier = Modifier) {
         }
         drawLine(Color.White, p0, p1, strokeWidth = outer)
         drawLine(accent, p0, p1, strokeWidth = inner)
+        val stopR = 4.5.dp.toPx()
+        for (s in g.stops) {
+            val p = Offset(p0.x + (p1.x - p0.x) * s.pos, p0.y + (p1.y - p0.y) * s.pos)
+            drawCircle(s.color.toColor(), radius = stopR, center = p)
+            drawCircle(Color.White, radius = stopR, center = p, style = Stroke(width = inner))
+        }
         val r = 6.dp.toPx()
         for (p in listOf(p0, p1)) {
             drawCircle(Color.White, radius = r, center = p)

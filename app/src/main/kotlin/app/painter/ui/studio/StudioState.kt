@@ -8,6 +8,7 @@ import app.painter.core.color.Rgba
 import app.painter.core.doc.ColorTag
 import app.painter.core.doc.EditTarget
 import app.painter.core.fill.GradientType
+import app.painter.core.fill.Spread
 import app.painter.core.history.MaskInit
 
 /** Brush mode of the main toolbar. */
@@ -156,9 +157,27 @@ data class StudioUiState(
 @Immutable
 data class TransformUi(val corners: List<PointUi>)
 
-/** Gradient tool state: the two document-space ends [p0] → [p1] and the gradient [type] to draw between them. */
+/** One color stop of the gradient tool: [pos] 0..1 along the axis, [color] straight sRGB with alpha. */
 @Immutable
-data class GradientUi(val p0: PointUi, val p1: PointUi, val type: GradientType)
+data class GradientStopUi(val pos: Float, val color: Rgba)
+
+/**
+ * Gradient tool state: the two document-space ends [p0] → [p1], the gradient [type] to draw between them and
+ * the editable session [stops] (position 0..1 along the axis; unsorted while a stop is dragged). [spread]
+ * applies past the ends, [reverse] mirrors the stops, [opacity] is the opacity of the result 0..1 and
+ * [repetitions] (1..100) repeats [GradientType.ANGULAR] gradients only.
+ */
+@Immutable
+data class GradientUi(
+    val p0: PointUi,
+    val p1: PointUi,
+    val type: GradientType,
+    val stops: List<GradientStopUi> = emptyList(),
+    val spread: Spread = Spread.PAD,
+    val reverse: Boolean = false,
+    val opacity: Float = 1f,
+    val repetitions: Int = 1,
+)
 
 /** All user intents raised by [StudioScreen]. Display indices refer to [StudioUiState.layers]. */
 interface StudioActions {
@@ -181,6 +200,18 @@ interface StudioActions {
 
     /** Picks the [app.painter.core.fill.GradientType] of the gradient tool and redraws an open gradient. */
     fun setGradientType(type: GradientType) {}
+
+    /** Spread of the gradient past its ends; kept for the next gradient of the session. */
+    fun setGradientSpread(spread: Spread) {}
+
+    /** Mirrors the gradient stops ([reverse] true keeps the first stop at the far end). */
+    fun setGradientReverse(reverse: Boolean) {}
+
+    /** Opacity of the gradient applied to the layer, 0..1. */
+    fun setGradientOpacity(opacity: Float) {}
+
+    /** Repetitions of an [app.painter.core.fill.GradientType.ANGULAR] gradient, clamped to 1..100. */
+    fun setGradientRepetitions(n: Int) {}
 
     /** Clears the selection. */
     fun deselect()

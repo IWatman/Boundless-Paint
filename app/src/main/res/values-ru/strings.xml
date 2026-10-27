@@ -132,6 +132,10 @@
     <string name="gradient_radial">Радиальный</string>
     <string name="gradient_symmetric">Симметричный</string>
     <string name="gradient_angular">Угловой</string>
+    <string name="gradient_spread_pad">Как есть</string>
+    <string name="gradient_spread_repeat">Повтор</string>
+    <string name="gradient_spread_reflect">Отражение</string>
+    <string name="gradient_reverse">Обратить</string>
     <string name="action_apply">Применить</string>
     <string name="deselect">Снять выделение</string>
     <string name="select_all">Выделить всё</string>

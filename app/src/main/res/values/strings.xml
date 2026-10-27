@@ -133,6 +133,10 @@
     <string name="gradient_radial">Radial</string>
     <string name="gradient_symmetric">Symmetric</string>
     <string name="gradient_angular">Angular</string>
+    <string name="gradient_spread_pad">Pad</string>
+    <string name="gradient_spread_repeat">Repeat</string>
+    <string name="gradient_spread_reflect">Reflect</string>
+    <string name="gradient_reverse">Reverse</string>
     <string name="action_apply">Apply</string>
     <string name="deselect">Deselect</string>
     <string name="select_all">Select all</string>

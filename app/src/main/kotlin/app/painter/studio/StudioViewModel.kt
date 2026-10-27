@@ -31,6 +31,7 @@ import app.painter.core.fill.GradientType
 import app.painter.core.fill.RefSource
 import app.painter.core.fill.Region
 import app.painter.core.fill.RegionParams
+import app.painter.core.fill.Spread
 import app.painter.core.history.AddAdjustmentLayer
 import app.painter.core.history.AddLayer
 import app.painter.core.history.AddMask
@@ -93,6 +94,7 @@ import app.painter.ui.home.ProjectCardUi
 import app.painter.ui.studio.AdjustEditorUi
 import app.painter.ui.studio.BrushModeUi
 import app.painter.ui.studio.CanvasTransformUi
+import app.painter.ui.studio.GradientStopUi
 import app.painter.ui.studio.GradientUi
 import app.painter.ui.studio.HudUi
 import app.painter.ui.studio.PointUi
@@ -435,7 +437,7 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
             return
         }
         if (_state.value.tool == ToolUi.GRADIENT) {
-            gradientMove(x, y, force = true)
+            gradientUp(x, y)
             return
         }
         if (_state.value.tool == ToolUi.FILL) {
@@ -477,8 +479,13 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
             transformDrag = TransformDrag.NONE
             return
         }
-        // A cancelled gesture only stops moving the end: the gradient session stays open.
-        if (_state.value.tool == ToolUi.GRADIENT) return
+        // A cancelled gesture only stops moving the end or the stop: the gradient session stays open.
+        if (_state.value.tool == ToolUi.GRADIENT) {
+            gradientDragStop = -1
+            gradientTapCandidate = false
+            gradientDragP1 = true
+            return
+        }
         lassoPoints.clear()
         _state.update { it.copy(selectionDraft = null, selectionDraftPath = null) }
     }
@@ -757,49 +764,175 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
     private var gradientP1 = PointUi(0f, 0f)
     private var gradientDragP1 = true
 
+    /** Stops of the open gradient in the order they were added; only core sorts them by position. */
+    private val gradientStopList = ArrayList<GradientStopUi>()
+
+    /** Index of the stop the current drag grabbed, -1 while it moves an end instead. */
+    private var gradientDragStop = -1
+
+    /** Finger position of the current gradient touch and whether the gesture may still become a tap. */
+    private var gradientDownX = 0f
+    private var gradientDownY = 0f
+    private var gradientTapCandidate = false
+
     /** Patch the preview has already written into the layer (outside history), null before the first draw. */
     private var gradientPatch: TilePatch? = null
 
-    /** Type of the open gradient and of the next one. */
+    /** Type of the open gradient and of the next one; the options below are kept for the next gradient too. */
     private var gradientType = GradientType.LINEAR
+    private var gradientSpread = Spread.PAD
+    private var gradientReverse = false
+    private var gradientOpacity = 1f
+    private var gradientRepetitions = 1
     private var gradientLastPreviewMs = 0L
 
     /** Active, unlocked raster layer the gradient can be drawn on. */
     private fun gradientTarget(): RasterLayer? =
         (doc.activeId?.let { doc.findNode(it) } as? RasterLayer)?.takeIf { !it.locked }
 
-    /** Stops of the current color: opaque at p0, fully transparent at p1. */
-    private fun gradientStops(): List<GradientStop> {
+    /** Resets the stops of a new gradient: the current color, opaque at 0 and fully transparent at 1. */
+    private fun resetGradientStops() {
         val c = _state.value.color
-        return listOf(GradientStop(0f, c), GradientStop(1f, c.copy(a = 0f)))
+        gradientStopList.clear()
+        gradientStopList.add(GradientStopUi(0f, c))
+        gradientStopList.add(GradientStopUi(1f, c.copy(a = 0f)))
     }
 
-    /** Publishes the open gradient so the overlay can draw its ends; null when the session is closed. */
+    /** The session stops as core stops of the current spec. */
+    private fun gradientStops(): List<GradientStop> = gradientStopList.map { GradientStop(it.pos, it.color) }
+
+    /** Document point of the axis at [pos] (0..1). */
+    private fun gradientPointAt(pos: Float): PointUi = PointUi(
+        gradientP0.x + (gradientP1.x - gradientP0.x) * pos,
+        gradientP0.y + (gradientP1.y - gradientP0.y) * pos,
+    )
+
+    /** Position 0..1 of ([x], [y]) projected on the axis and clamped to the segment. */
+    private fun gradientProject(x: Float, y: Float): Float {
+        val dx = gradientP1.x - gradientP0.x
+        val dy = gradientP1.y - gradientP0.y
+        val len2 = dx * dx + dy * dy
+        if (len2 < 1e-6f) return 0f
+        return (((x - gradientP0.x) * dx + (y - gradientP0.y) * dy) / len2).coerceIn(0f, 1f)
+    }
+
+    /** Distance of ([x], [y]) from the axis segment in document pixels. */
+    private fun gradientAxisDistance(x: Float, y: Float): Float {
+        val dx = gradientP1.x - gradientP0.x
+        val dy = gradientP1.y - gradientP0.y
+        val len2 = dx * dx + dy * dy
+        val t = if (len2 < 1e-6f) 0f else
+            (((x - gradientP0.x) * dx + (y - gradientP0.y) * dy) / len2).coerceIn(0f, 1f)
+        return kotlin.math.hypot(x - (gradientP0.x + dx * t), y - (gradientP0.y + dy * t))
+    }
+
+    /** Index of the stop drawn under ([x], [y]) within [tol] document pixels, -1 when there is none. */
+    private fun gradientStopAt(x: Float, y: Float, tol: Float): Int {
+        var best = -1
+        var bestD = tol
+        for ((i, s) in gradientStopList.withIndex()) {
+            val p = gradientPointAt(s.pos)
+            val d = kotlin.math.hypot(x - p.x, y - p.y)
+            if (d <= bestD) {
+                bestD = d
+                best = i
+            }
+        }
+        return best
+    }
+
+    /** Inserts a stop of the current color at [pos], keeping the list ordered, and returns its index. */
+    private fun addGradientStop(pos: Float): Int {
+        val index = gradientStopList.indexOfFirst { it.pos > pos }.let { if (it < 0) gradientStopList.size else it }
+        gradientStopList.add(index, GradientStopUi(pos, _state.value.color))
+        return index
+    }
+
+    /** Drop distance of a stop in document pixels (48 dp on screen, converted like [handleTolerance]). */
+    private fun stopDropDistance(): Float = 48f * densityPx / _state.value.canvasTransform.zoom.coerceAtLeast(0.01f)
+
+    /** Publishes the open gradient so the overlay can draw its axis and stops; null when the session is closed. */
     private fun publishGradient() {
         val layerId = gradientLayerId
-        _state.update {
-            it.copy(gradient = if (layerId == null) null else GradientUi(gradientP0, gradientP1, gradientType))
-        }
+        val ui = GradientUi(
+            p0 = gradientP0,
+            p1 = gradientP1,
+            type = gradientType,
+            stops = gradientStopList.toList(),
+            spread = gradientSpread,
+            reverse = gradientReverse,
+            opacity = gradientOpacity,
+            repetitions = gradientRepetitions,
+        )
+        _state.update { it.copy(gradient = if (layerId == null) null else ui) }
     }
 
     override fun setGradientType(type: GradientType) {
+        val previous = gradientType
         gradientType = type
+        // Spec §4.4: reflect is the default spread of angular gradients.
+        if (type == GradientType.ANGULAR && previous != GradientType.ANGULAR) gradientSpread = Spread.REFLECT
+        publishGradient()
+        renderGradient(force = true)
+    }
+
+    override fun setGradientSpread(spread: Spread) {
+        gradientSpread = spread
+        publishGradient()
+        renderGradient(force = true)
+    }
+
+    override fun setGradientReverse(reverse: Boolean) {
+        gradientReverse = reverse
+        publishGradient()
+        renderGradient(force = true)
+    }
+
+    override fun setGradientOpacity(opacity: Float) {
+        gradientOpacity = opacity.coerceIn(0f, 1f)
+        publishGradient()
+        renderGradient(force = true)
+    }
+
+    override fun setGradientRepetitions(n: Int) {
+        gradientRepetitions = n.coerceIn(1, 100)
         publishGradient()
         renderGradient(force = true)
     }
 
     /**
-     * Starts a gradient at ([x], [y]) on the active raster layer, or grabs the nearer end when the touch lands
-     * on an end of the open one. An uncommitted gradient is discarded (reverted), never applied.
+     * Touch down of the gradient tool: the nearer end of the open gradient keeps priority, then one of its
+     * stops, then the axis itself (which adds a stop there); anything else starts a new gradient on the active
+     * raster layer. An uncommitted gradient is discarded (reverted), never applied.
      */
+    /** True while the current gesture holds an end handle; a tap on an end recolors the stop there. */
+    private var gradientEndGrab = false
+
     private fun gradientDown(x: Float, y: Float) {
         val layer = gradientTarget() ?: return
+        gradientDownX = x
+        gradientDownY = y
+        gradientTapCandidate = true
+        gradientDragStop = -1
+        gradientEndGrab = false
         if (layer.id == gradientLayerId) {
             val tol = handleTolerance()
             val d0 = kotlin.math.hypot(x - gradientP0.x, y - gradientP0.y)
             val d1 = kotlin.math.hypot(x - gradientP1.x, y - gradientP1.y)
             if (minOf(d0, d1) <= tol) {
                 gradientDragP1 = d1 <= d0
+                gradientEndGrab = true
+                return
+            }
+            val stop = gradientStopAt(x, y, tol)
+            if (stop >= 0) {
+                gradientDragStop = stop
+                return
+            }
+            if (gradientAxisDistance(x, y) <= tol) {
+                gradientDragStop = addGradientStop(gradientProject(x, y))
+                publishGradient()
+                renderGradient(force = true)
                 return
             }
         }
@@ -808,14 +941,29 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
         gradientP0 = PointUi(clampX(x), clampY(y))
         gradientP1 = gradientP0
         gradientDragP1 = true
+        resetGradientStops()
         gradientPatch = null
         gradientLastPreviewMs = 0L
         publishGradient()
     }
 
-    /** Moves the grabbed end of the open gradient to ([x], [y]) and redraws the preview. */
+    /**
+     * Moves the grabbed end of the open gradient to ([x], [y]) and redraws the preview. A grabbed stop slides
+     * along the axis instead; how far the finger is from the axis only matters on lift in [gradientUp].
+     */
     private fun gradientMove(x: Float, y: Float, force: Boolean) {
         if (gradientLayerId == null) return
+        if (gradientTapCandidate && kotlin.math.hypot(x - gradientDownX, y - gradientDownY) > handleTolerance()) {
+            gradientTapCandidate = false
+        }
+        val stop = gradientDragStop
+        if (stop >= 0) {
+            val s = gradientStopList.getOrNull(stop) ?: return
+            gradientStopList[stop] = s.copy(pos = gradientProject(x, y))
+            publishGradient()
+            renderGradient(force)
+            return
+        }
         val p = PointUi(clampX(x), clampY(y))
         if (gradientDragP1) gradientP1 = p else gradientP0 = p
         publishGradient()
@@ -823,9 +971,44 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
     }
 
     /**
-     * Live preview: reverts the tiles of the previous preview and draws the gradient again with the current
-     * color and type straight into the layer (outside history). Throttled to about 30 fps while dragging and
-     * always redrawn on finger lift.
+     * Finger lift of the gradient tool: a tap on a stop takes the current color, and a stop that ends more than
+     * 48 dp off the axis is dropped, but at least two of them always remain.
+     */
+    private fun gradientUp(x: Float, y: Float) {
+        if (gradientLayerId == null) {
+            gradientDragStop = -1
+            gradientTapCandidate = false
+            return
+        }
+        val stop = gradientDragStop
+        val tap = gradientTapCandidate && kotlin.math.hypot(x - gradientDownX, y - gradientDownY) <= handleTolerance()
+        gradientMove(x, y, force = true)
+        if (stop in gradientStopList.indices) {
+            val far = gradientAxisDistance(x, y) > stopDropDistance()
+            when {
+                tap -> gradientStopList[stop] = gradientStopList[stop].copy(color = _state.value.color)
+                far && gradientStopList.size > 2 -> gradientStopList.removeAt(stop)
+            }
+        }
+        if (tap && gradientEndGrab && gradientStopList.isNotEmpty()) {
+            // A tap on an end recolors the outermost stop on that side.
+            val i = gradientStopList.indices.let { ids ->
+                if (gradientDragP1) ids.maxBy { gradientStopList[it].pos } else ids.minBy { gradientStopList[it].pos }
+            }
+            gradientStopList[i] = gradientStopList[i].copy(color = _state.value.color)
+        }
+        gradientEndGrab = false
+        gradientDragStop = -1
+        gradientTapCandidate = false
+        gradientDragP1 = true
+        publishGradient()
+        renderGradient(force = true)
+    }
+
+    /**
+     * Live preview: reverts the tiles of the previous preview and draws the gradient again with the session
+     * stops, type and options straight into the layer (outside history). Throttled to about 30 fps while
+     * dragging, and always redrawn on finger lift.
      */
     private fun renderGradient(force: Boolean) {
         val layerId = gradientLayerId ?: return
@@ -841,8 +1024,18 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
         if (kotlin.math.hypot(gradientP1.x - gradientP0.x, gradientP1.y - gradientP0.y) < 1f) return
         val old = gradientPatch
         if (old != null) applyTiles(layer.pixels, old.before)
-        val spec = GradientSpec(gradientType, gradientP0.x, gradientP0.y, gradientP1.x, gradientP1.y, gradientStops())
-        val patch = Gradient.apply(doc, layerId, spec, 1f, null)
+        val spec = GradientSpec(
+            type = gradientType,
+            x0 = gradientP0.x,
+            y0 = gradientP0.y,
+            x1 = gradientP1.x,
+            y1 = gradientP1.y,
+            stops = gradientStops(),
+            spread = gradientSpread,
+            reverse = gradientReverse,
+            repetitions = gradientRepetitions,
+        )
+        val patch = Gradient.apply(doc, layerId, spec, gradientOpacity, null)
         gradientPatch = patch
         val dirty = HashSet<TileKey>()
         old?.let { dirty.addAll(it.before.keys); dirty.addAll(it.after.keys) }
@@ -860,6 +1053,9 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
         gradientLayerId = null
         gradientPatch = null
         gradientDragP1 = true
+        gradientDragStop = -1
+        gradientTapCandidate = false
+        gradientStopList.clear()
         gradientLastPreviewMs = 0L
         if (patch != null) {
             if (apply) history.push(TilePatchCommand(patch, "Gradient"))
@@ -963,7 +1159,6 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
             canvas?.invalidate(fill.layerId, null)
             markDirty()
         }
-        if (gradientLayerId != null) renderGradient(force = true)
     }
 
     override fun addColorToPalette(color: Rgba) = _state.update {
