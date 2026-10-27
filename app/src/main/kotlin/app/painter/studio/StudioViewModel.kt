@@ -12,19 +12,32 @@ import app.painter.core.blend.BlendMode
 import app.painter.core.blend.Compositor
 import app.painter.core.color.Rgba
 import app.painter.core.doc.Document
+import app.painter.core.doc.AdjustmentLayer
+import app.painter.core.doc.ColorTag
+import app.painter.core.doc.EditTarget
 import app.painter.core.doc.GroupNode
 import app.painter.core.doc.Node
 import app.painter.core.doc.RasterLayer
+import app.painter.core.doc.effectivelyLocked
 import app.painter.core.history.AddLayer
+import app.painter.core.history.AddMask
+import app.painter.core.history.ApplyMask
 import app.painter.core.history.ClearLayer
 import app.painter.core.history.Command
+import app.painter.core.history.DeleteMask
 import app.painter.core.history.DeleteNode
 import app.painter.core.history.DuplicateNode
+import app.painter.core.history.GroupNodes
 import app.painter.core.history.History
+import app.painter.core.history.InvertMask
+import app.painter.core.history.MaskInit
+import app.painter.core.history.MaskPatchCommand
 import app.painter.core.history.MergeDown
 import app.painter.core.history.MoveNode
+import app.painter.core.history.SetMaskProps
 import app.painter.core.history.SetNodeProps
 import app.painter.core.history.TilePatchCommand
+import app.painter.core.history.Ungroup
 import app.painter.core.io.ProjectIO
 import app.painter.core.io.ProjectStore
 import app.painter.core.pick.Eyedropper
@@ -72,6 +85,7 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
     private var dirtySinceSave = false
     private var autosaveJob: Job? = null
     private var strokeCounter = 0L
+    private var strokeOnMask = false
 
     private var paintParams = BrushParams()
     private var eraseParams = BrushParams(size = 40f)
@@ -160,8 +174,10 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
     }
 
     override fun onStrokeBegin(p: InputPoint) {
-        val layer = doc.activeRaster ?: return
-        if (!layer.visible || layer.locked) return
+        val node = doc.activeNode ?: return
+        if (!node.visible || node.effectivelyLocked) return
+        val maskTarget = doc.activeTarget == EditTarget.MASK && node.mask != null
+        val layer = if (maskTarget) null else doc.activeRaster ?: return
         val s = _state.value
         val mode = if (s.mode == BrushModeUi.ERASE) StrokeMode.ERASE else StrokeMode.PAINT
         val brush = Brush.of(currentParams(), STUDIO_BRUSH_ID)
@@ -172,9 +188,12 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
             seed = HashRng.strokeSeed(strokeCounter++, STUDIO_BRUSH_ID),
             threads = STROKE_THREADS,
         )
-        val engine = StrokeEngine(doc, StrokeTarget.Layer(layer.id), brush, BrushResources.EMPTY, s.color, mode, ctx)
+        val target = if (layer == null) StrokeTarget.Mask(node.id) else StrokeTarget.Layer(layer.id)
+        val engine = StrokeEngine(doc, target, brush, BrushResources.EMPTY, s.color, mode, ctx)
         stroke = engine
+        strokeOnMask = layer == null
         engine.begin(p)
+        if (layer == null) return // no live mask preview yet: the canvas refreshes when the stroke ends
         if (engine.directToLayer) {
             canvas?.invalidate(layer.id, engine.takeDirty())
         } else {
@@ -194,6 +213,11 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
         stroke = null
         val layerId = doc.activeId ?: return
         val commit = engine.end()
+        if (strokeOnMask) {
+            (commit as? StrokeCommit.Mask)?.let { history.push(MaskPatchCommand(it.patch)) }
+            canvas?.invalidate(null, null)
+            return
+        }
         if (!engine.directToLayer) canvas?.setStrokePreview(layerId, null, false, 1f)
         val patch = (commit as? StrokeCommit.Pixels)?.patch
         if (patch != null) {
@@ -213,6 +237,7 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
     }
 
     private fun flushStroke(engine: StrokeEngine) {
+        if (strokeOnMask) return
         val dirty = engine.takeDirty()
         if (dirty.isEmpty()) return
         if (engine.directToLayer) canvas?.invalidate(doc.activeId, dirty) else canvas?.invalidateStroke(dirty)
@@ -345,6 +370,58 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
     override fun setLayerAlphaLock(id: String, locked: Boolean) = props(id, alphaLock = locked)
     override fun renameLayer(id: String, name: String) = props(id, newName = name)
 
+    override fun setLayerColorTag(id: String, tag: ColorTag) = exec(SetNodeProps(id, colorTag = tag))
+    override fun setLayerLocked(id: String, locked: Boolean) = exec(SetNodeProps(id, locked = locked))
+    override fun setLayerReference(id: String, reference: Boolean) = exec(SetNodeProps(id, reference = reference))
+
+    override fun toggleGroupExpanded(id: String) {
+        val g = doc.findNode(id) as? GroupNode ?: return
+        g.expanded = !g.expanded
+        markDirty()
+        refreshLayers()
+    }
+
+    override fun groupLayer(id: String) {
+        val n = doc.findNode(id) ?: return
+        exec(GroupNodes(listOf(n.id), getApplication<Application>().getString(R.string.group_default_name, groupCount() + 1)))
+    }
+
+    private fun groupCount(): Int { var n = 0; doc.root.walk { if (it is GroupNode) n++ }; return n }
+
+    override fun ungroupLayer(id: String) {
+        if (doc.findNode(id) is GroupNode) exec(Ungroup(id))
+    }
+
+    override fun addMask(id: String, init: MaskInit) {
+        if (doc.findNode(id)?.mask != null) return
+        exec(AddMask(id, init, Compositor))
+        selectEditTarget(id, EditTarget.MASK)
+    }
+
+    override fun deleteMask(id: String) {
+        if (doc.findNode(id)?.mask == null) return
+        exec(DeleteMask(id))
+        if (doc.activeId == id) doc.activeTarget = EditTarget.LAYER
+        refreshLayers()
+    }
+
+    override fun applyMask(id: String) {
+        if (doc.findNode(id)?.mask == null) return
+        exec(ApplyMask(id))
+        if (doc.activeId == id) doc.activeTarget = EditTarget.LAYER
+        refreshLayers()
+    }
+
+    override fun setMaskEnabled(id: String, enabled: Boolean) = exec(SetMaskProps(id, enabled = enabled))
+    override fun invertMask(id: String) = exec(InvertMask(id))
+
+    override fun selectEditTarget(id: String, target: EditTarget) {
+        val n = doc.findNode(id) ?: return
+        doc.activeId = n.id
+        doc.activeTarget = if (target == EditTarget.MASK && n.mask != null) EditTarget.MASK else EditTarget.LAYER
+        refreshLayers()
+    }
+
     /** Live drag: applied immediately, recorded as one undo step after the drag settles. */
     override fun setLayerOpacity(id: String, opacity: Float) {
         val node = doc.findNode(id) ?: return
@@ -406,7 +483,11 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
         autosaveJob?.cancel()
         autosaveJob = null
         commitPendingOpacity()
-        if (!dirtySinceSave) return
+        if (!dirtySinceSave) {
+            // Autosave may already have written the latest state; Home still needs fresh thumbnails.
+            if (refreshList) refreshProjects()
+            return
+        }
         dirtySinceSave = false
         val snapshot = snapshotDocument(doc)
         viewModelScope.launch(Dispatchers.IO) {
@@ -530,6 +611,14 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
         alphaLock = (this as? RasterLayer)?.alphaLock ?: false,
         thumbnail = (this as? RasterLayer)?.let(::thumbnailOf),
         depth = depth,
+        isGroup = this is GroupNode,
+        expanded = (this as? GroupNode)?.expanded ?: false,
+        hasMask = mask != null,
+        maskEnabled = mask?.enabled ?: true,
+        colorTag = colorTag,
+        locked = locked,
+        reference = reference,
+        isActiveTargetMask = id == doc.activeId && doc.activeTarget == EditTarget.MASK && mask != null,
     )
 
     private fun thumbnailOf(layer: RasterLayer): ImageBitmap? {
