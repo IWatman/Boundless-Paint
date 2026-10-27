@@ -57,6 +57,8 @@ import app.painter.core.stroke.StrokeEngine
 import app.painter.core.stroke.StrokeMode
 import app.painter.core.stroke.StrokeOptions
 import app.painter.core.stroke.StrokeTarget
+import app.painter.core.select.EllipseShape
+import app.painter.core.select.PolyShape
 import app.painter.core.select.RectShape
 import app.painter.core.select.SelectMode
 import app.painter.core.select.SelectionEdits
@@ -66,9 +68,11 @@ import app.painter.ui.home.ProjectCardUi
 import app.painter.ui.studio.AdjustEditorUi
 import app.painter.ui.studio.BrushModeUi
 import app.painter.ui.studio.CanvasTransformUi
+import app.painter.ui.studio.HudUi
+import app.painter.ui.studio.PointUi
 import app.painter.ui.studio.RectUi
 import app.painter.ui.studio.ToolUi
-import app.painter.ui.studio.HudUi
+import app.painter.ui.studio.isSelectionTool
 import app.painter.ui.studio.adjustTitleRes
 import app.painter.ui.studio.LayerUi
 import app.painter.ui.studio.StudioActions
@@ -283,7 +287,7 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
     // ---- brush ----
 
     override fun setMode(mode: BrushModeUi) {
-        _state.update { it.copy(mode = mode, tool = ToolUi.BRUSH, selectionDraft = null) }
+        _state.update { it.copy(mode = mode, tool = ToolUi.BRUSH, selectionDraft = null, selectionDraftPath = null) }
         syncBrushState()
     }
 
@@ -293,42 +297,105 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
     private var toolStartX = 0f
     private var toolStartY = 0f
 
-    override val toolActive: Boolean get() = _state.value.tool == ToolUi.SELECT_RECT
+    /** Lasso trail in document pixels while dragging (points closer than 2 px are merged). */
+    private val lassoPoints = ArrayList<PointUi>()
 
-    override fun selectTool(tool: ToolUi) = _state.update { it.copy(tool = tool, selectionDraft = null) }
+    override val toolActive: Boolean get() = _state.value.tool.isSelectionTool
+
+    override fun selectTool(tool: ToolUi) = _state.update {
+        it.copy(tool = tool, selectionDraft = null, selectionDraftPath = null)
+    }
 
     private fun clampX(x: Float) = x.coerceIn(0f, doc.width.toFloat())
     private fun clampY(y: Float) = y.coerceIn(0f, doc.height.toFloat())
+
+    /** Outline of the ellipse inscribed in the bounding box of two document-space corners. */
+    private fun ellipseOutline(x0: Float, y0: Float, x1: Float, y1: Float): List<PointUi> {
+        val poly = EllipseShape(
+            (x0 + x1) / 2f,
+            (y0 + y1) / 2f,
+            if (x1 > x0) (x1 - x0) / 2f else (x0 - x1) / 2f,
+            if (y1 > y0) (y1 - y0) / 2f else (y0 - y1) / 2f,
+        ).toPolygon()
+        return List(poly.size / 2) { PointUi(poly[it * 2], poly[it * 2 + 1]) }
+    }
 
     override fun onToolDown(x: Float, y: Float) {
         if (!toolActive) return
         toolStartX = clampX(x)
         toolStartY = clampY(y)
-        _state.update { it.copy(selectionDraft = RectUi(toolStartX, toolStartY, toolStartX, toolStartY)) }
+        lassoPoints.clear()
+        when (_state.value.tool) {
+            ToolUi.SELECT_ELLIPSE -> {
+                val outline = ellipseOutline(toolStartX, toolStartY, toolStartX, toolStartY)
+                _state.update { it.copy(selectionDraftPath = outline) }
+            }
+            ToolUi.SELECT_LASSO -> {
+                lassoPoints.add(PointUi(toolStartX, toolStartY))
+                val trail = lassoPoints.toList()
+                _state.update { it.copy(selectionDraftPath = trail) }
+            }
+            else -> _state.update { it.copy(selectionDraft = RectUi(toolStartX, toolStartY, toolStartX, toolStartY)) }
+        }
     }
 
     override fun onToolMove(x: Float, y: Float) {
         if (!toolActive) return
         val cx = clampX(x)
         val cy = clampY(y)
-        _state.update {
-            it.copy(
-                selectionDraft = RectUi(minOf(toolStartX, cx), minOf(toolStartY, cy), maxOf(toolStartX, cx), maxOf(toolStartY, cy)),
-            )
+        when (_state.value.tool) {
+            ToolUi.SELECT_ELLIPSE -> {
+                val outline = ellipseOutline(toolStartX, toolStartY, cx, cy)
+                _state.update { it.copy(selectionDraftPath = outline) }
+            }
+            ToolUi.SELECT_LASSO -> {
+                val last = lassoPoints.lastOrNull()
+                if (last == null || (cx - last.x) * (cx - last.x) + (cy - last.y) * (cy - last.y) >= 4f) {
+                    lassoPoints.add(PointUi(cx, cy))
+                    val trail = lassoPoints.toList()
+                    _state.update { it.copy(selectionDraftPath = trail) }
+                }
+            }
+            else -> _state.update {
+                it.copy(
+                    selectionDraft = RectUi(minOf(toolStartX, cx), minOf(toolStartY, cy), maxOf(toolStartX, cx), maxOf(toolStartY, cy)),
+                )
+            }
         }
     }
 
     override fun onToolUp(x: Float, y: Float) {
         if (!toolActive) return
+        val tool = _state.value.tool
         onToolMove(x, y)
         val draft = _state.value.selectionDraft
-        _state.update { it.copy(selectionDraft = null) }
-        val rect = draft?.let { RectUi.between(it.left, it.top, it.right, it.bottom) } ?: return
-        val shape = RectShape(rect.left + rect.width / 2f, rect.top + rect.height / 2f, rect.width, rect.height)
-        SelectionEdits.shape(doc, shape, SelectMode.NEW, aa = true)?.let { exec(it) }
+        val trail = lassoPoints.toList()
+        _state.update { it.copy(selectionDraft = null, selectionDraftPath = null) }
+        lassoPoints.clear()
+        when (tool) {
+            ToolUi.SELECT_ELLIPSE -> {
+                val rect = RectUi.between(toolStartX, toolStartY, clampX(x), clampY(y)) ?: return
+                val shape = EllipseShape(rect.left + rect.width / 2f, rect.top + rect.height / 2f, rect.width / 2f, rect.height / 2f)
+                SelectionEdits.shape(doc, shape, SelectMode.NEW, aa = true)?.let { exec(it) }
+            }
+            ToolUi.SELECT_LASSO -> {
+                if (trail.size < 3) return
+                val poly = FloatArray(trail.size * 2)
+                trail.forEachIndexed { i, p -> poly[i * 2] = p.x; poly[i * 2 + 1] = p.y }
+                SelectionEdits.shape(doc, PolyShape(poly), SelectMode.NEW, aa = true)?.let { exec(it) }
+            }
+            else -> {
+                val rect = draft?.let { RectUi.between(it.left, it.top, it.right, it.bottom) } ?: return
+                val shape = RectShape(rect.left + rect.width / 2f, rect.top + rect.height / 2f, rect.width, rect.height)
+                SelectionEdits.shape(doc, shape, SelectMode.NEW, aa = true)?.let { exec(it) }
+            }
+        }
     }
 
-    override fun onToolCancel() = _state.update { it.copy(selectionDraft = null) }
+    override fun onToolCancel() {
+        lassoPoints.clear()
+        _state.update { it.copy(selectionDraft = null, selectionDraftPath = null) }
+    }
 
     override fun deselect() {
         SelectionEdits.deselect(doc)?.let { exec(it) }

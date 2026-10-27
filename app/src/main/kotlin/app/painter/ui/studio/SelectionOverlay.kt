@@ -15,7 +15,7 @@ import kotlin.math.cos
 import kotlin.math.sin
 
 /**
- * Compose layer above the GL canvas: draws the live selection rectangle while dragging and the
+ * Compose layer above the GL canvas: draws the live selection draft (rectangle, ellipse or lasso) and the
  * bounds of the current selection as a dashed black/white outline. Consumes no input.
  *
  * The mapping to screen pixels comes from [StudioUiState.canvasTransform], which the canvas
@@ -24,12 +24,14 @@ import kotlin.math.sin
 @Composable
 fun SelectionOverlay(state: StudioUiState, modifier: Modifier = Modifier) {
     val draft = state.selectionDraft
+    val draftPath = state.selectionDraftPath
     val bounds = state.selectionBounds
-    if (draft == null && bounds == null) return
+    if (draft == null && draftPath == null && bounds == null) return
     val transform = state.canvasTransform
     val accent = MaterialTheme.colorScheme.primary
     Canvas(modifier) {
         draft?.let { drawMarquee(transform, it, accent, solid = true) }
+        draftPath?.let { drawDraftPath(transform, it, accent) }
         bounds?.let { drawMarquee(transform, it, Color.White, solid = false) }
     }
 }
@@ -40,6 +42,22 @@ private fun docToScreen(t: CanvasTransformUi, x: Float, y: Float): Offset {
     val a = (t.zoom * cos(rad)).toFloat()
     val b = (t.zoom * sin(rad)).toFloat()
     return Offset(a * x - b * y + t.tx, b * x + a * y + t.ty)
+}
+
+/** Polyline through document-space [pts] mapped to view pixels; left open. */
+private fun polyPath(t: CanvasTransformUi, pts: List<PointUi>): Path {
+    val p = Path()
+    pts.forEachIndexed { i, pt ->
+        val o = docToScreen(t, pt.x, pt.y)
+        if (i == 0) p.moveTo(o.x, o.y) else p.lineTo(o.x, o.y)
+    }
+    return p
+}
+
+/** Draws the live ellipse/lasso draft outline. */
+private fun DrawScope.drawDraftPath(t: CanvasTransformUi, pts: List<PointUi>, color: Color) {
+    if (pts.isEmpty()) return
+    drawPath(polyPath(t, pts), color, style = Stroke(width = 1.5.dp.toPx()))
 }
 
 private fun rectPath(t: CanvasTransformUi, r: RectUi): Path {

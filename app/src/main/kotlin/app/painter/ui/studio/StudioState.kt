@@ -10,8 +10,19 @@ import app.painter.core.doc.EditTarget
 import app.painter.core.history.MaskInit
 
 /** Brush mode of the main toolbar. */
-/** Active canvas tool. [BRUSH] paints with the current brush mode; [SELECT_RECT] drags a selection. */
-enum class ToolUi { BRUSH, SELECT_RECT }
+/**
+ * Active canvas tool. [BRUSH] paints with the current brush mode; [SELECT_RECT], [SELECT_ELLIPSE] and
+ * [SELECT_LASSO] drag a selection (rectangle, ellipse or freehand outline).
+ */
+enum class ToolUi { BRUSH, SELECT_RECT, SELECT_ELLIPSE, SELECT_LASSO }
+
+/** True for the tools that build a selection instead of painting. */
+val ToolUi.isSelectionTool: Boolean
+    get() = this != ToolUi.BRUSH
+
+/** A document-space point (selection draft vertices, in document pixels). */
+@Immutable
+data class PointUi(val x: Float, val y: Float)
 
 /** Axis-aligned document-space rectangle (selection draft and selection bounds). */
 @Immutable
@@ -107,10 +118,12 @@ data class StudioUiState(
     val paperColor: Rgba = Rgba.WHITE,
     val paperVisible: Boolean = true,
     val viewZoom: Float = 1f,
-    /** Active tool; [ToolUi.BRUSH] paints, [ToolUi.SELECT_RECT] drags a selection rectangle. */
+    /** Active tool; [ToolUi.BRUSH] paints, the SELECT_* tools drag a selection. */
     val tool: ToolUi = ToolUi.BRUSH,
-    /** Live selection rectangle while dragging (document pixels), null when idle. */
+    /** Live selection rectangle while dragging a rectangle selection (document pixels), null when idle. */
     val selectionDraft: RectUi? = null,
+    /** Live outline of an ellipse (bounding box) or lasso (trail) selection draft, null when idle. */
+    val selectionDraftPath: List<PointUi>? = null,
     /** A selection is in effect (non-empty and active mask). */
     val hasSelection: Boolean = false,
     /** Bounding box of the current selection in document pixels. */

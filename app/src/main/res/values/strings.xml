@@ -123,6 +123,8 @@
     <string name="mode_blend">Blend</string>
     <string name="mode_erase">Erase</string>
     <string name="tool_rect_select">Rectangle selection</string>
+    <string name="tool_ellipse_select">Ellipse selection</string>
+    <string name="tool_lasso_select">Lasso selection</string>
     <string name="deselect">Deselect</string>
     <string name="name">Name</string>
     <string name="new_canvas">New canvas</string>

@@ -171,6 +171,20 @@ private fun StudioTopBar(state: StudioUiState, actions: StudioActions, modifier:
                                 actions.selectTool(ToolUi.SELECT_RECT)
                             },
                         )
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.tool_ellipse_select)) },
+                            onClick = {
+                                toolsMenu = false
+                                actions.selectTool(ToolUi.SELECT_ELLIPSE)
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.tool_lasso_select)) },
+                            onClick = {
+                                toolsMenu = false
+                                actions.selectTool(ToolUi.SELECT_LASSO)
+                            },
+                        )
                         if (state.hasSelection) {
                             DropdownMenuItem(
                                 text = { Text(stringResource(R.string.deselect)) },

@@ -122,6 +122,8 @@
     <string name="mode_blend">Растушёвка</string>
     <string name="mode_erase">Ластик</string>
     <string name="tool_rect_select">Прямоугольное выделение</string>
+    <string name="tool_ellipse_select">Эллиптическое выделение</string>
+    <string name="tool_lasso_select">Лассо</string>
     <string name="deselect">Снять выделение</string>
     <string name="name">Название</string>
     <string name="new_canvas">Новый холст</string>
