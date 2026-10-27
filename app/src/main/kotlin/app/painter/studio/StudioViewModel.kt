@@ -32,8 +32,12 @@ import app.painter.core.fill.RefSource
 import app.painter.core.fill.Region
 import app.painter.core.fill.RegionParams
 import app.painter.core.fill.Spread
+import app.painter.core.guide.DocRect
 import app.painter.core.guide.GuideJson
 import app.painter.core.guide.GuideState
+import app.painter.core.guide.LazyConfig
+import app.painter.core.guide.LinesConfig
+import app.painter.core.guide.SnapContext
 import app.painter.core.history.AddAdjustmentLayer
 import app.painter.core.history.AddLayer
 import app.painter.core.history.AddMask
@@ -105,10 +109,12 @@ import app.painter.ui.studio.GradientUi
 import app.painter.ui.studio.HudUi
 import app.painter.ui.studio.PointUi
 import app.painter.ui.studio.RectUi
+import app.painter.ui.studio.RulerUi
 import app.painter.ui.studio.ToolUi
 import app.painter.ui.studio.isSelectionTool
 import app.painter.ui.studio.adjustTitleRes
 import app.painter.ui.studio.LayerUi
+import app.painter.ui.studio.LazyUi
 import app.painter.ui.studio.StudioActions
 import app.painter.ui.studio.StudioUiState
 import app.painter.ui.studio.SymmetryUi
@@ -224,6 +230,8 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
                 paperVisible = d.paper.visible,
                 adjustmentEditor = null,
                 symmetry = symmetryUi(),
+                ruler = rulerUi(),
+                lazy = lazyUi(),
             )
         }
         adjustSession = null
@@ -270,8 +278,9 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
         val mode = if (s.mode == BrushModeUi.ERASE) StrokeMode.ERASE else StrokeMode.PAINT
         val brush = Brush.of(currentParams(), STUDIO_BRUSH_ID)
         val vs = canvas?.viewState?.value
+        val zoom = vs?.zoom ?: 1f
         val ctx = StrokeContext(
-            zoom = vs?.zoom ?: 1f,
+            zoom = zoom,
             viewRotation = Math.toRadians((vs?.rotationDeg ?: 0f).toDouble()).toFloat(),
             seed = HashRng.strokeSeed(strokeCounter++, STUDIO_BRUSH_ID),
             threads = STROKE_THREADS,
@@ -279,9 +288,11 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
         val target = if (layer == null) StrokeTarget.Mask(node.id) else StrokeTarget.Layer(layer.id)
         // Symmetry copies are fixed at stroke start (spec G4); symmetry itself is view state.
         val copies = if (guides.symmetry.on) guides.copies(Vec2(p.x, p.y)) else SymmetryCopies.NONE
+        // Guides and the lazy rope are snapshotted per stroke too (spec G1.1): they never change mid-stroke.
+        val stages = guides.buildStages(SnapContext(screenToDoc = 1f / zoom, brushSize = s.brushSize))
         val engine = StrokeEngine(
             doc, target, brush, BrushResources.EMPTY, s.color, mode, ctx,
-            StrokeOptions(copies = copies, clip = doc.selection.coverageOrNull()),
+            StrokeOptions(stages = stages, copies = copies, clip = doc.selection.coverageOrNull()),
         )
         stroke = engine
         strokeOnMask = layer == null
@@ -1445,7 +1456,7 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
         canvas?.invalidate(null, null)
     }
 
-    // ---- symmetry ----
+    // ---- guides ----
 
     /** Symmetry published to the overlay, null while it is off. */
     private fun symmetryUi(): SymmetryUi? = guides.symmetry.toUi()
@@ -1454,41 +1465,55 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
     private fun SymmetryConfig.toUi(): SymmetryUi? =
         if (!on) null else SymmetryUi(type, axes, center.x, center.y, angleDeg, effectivePlanes, crop, locked)
 
+    /** Ruler published to the overlay, null while it is off. */
+    private fun rulerUi(): RulerUi? = guides.lines.toUi()
+
+    /** View state of a ruler config; null when the ruler is off. */
+    private fun LinesConfig.toUi(): RulerUi? =
+        if (!on) null else RulerUi(a.x, a.y, b.x, b.y, perpendicular, magnet, locked)
+
+    /** Lazy rope published to the bar, null while it is off. */
+    private fun lazyUi(): LazyUi? = guides.lazy.toUi()
+
+    /** View state of a lazy rope config; null when the lazy rope is off. */
+    private fun LazyConfig.toUi(): LazyUi? = if (!on) null else LazyUi(radius)
+
     /**
-     * Applies [symmetry] as view state: symmetry is not undoable, so it goes straight into [guides], the
+     * Applies [newGuides] as view state: guides are not undoable, so they go straight into [guides], the
      * manifest block of [doc] and the published state.
      */
-    private fun applySymmetry(symmetry: SymmetryConfig) {
-        guides = guides.copy(symmetry = symmetry)
+    private fun applyGuides(newGuides: GuideState) {
+        guides = newGuides
         doc.guides = GuideJson.toElement(guides) as JsonObject
         markDirty()
-        _state.update { it.copy(symmetry = symmetryUi()) }
+        _state.update { it.copy(symmetry = symmetryUi(), ruler = rulerUi(), lazy = lazyUi()) }
     }
 
     override fun setSymmetry(type: SymmetryType?, axes: MirrorAxes) {
         val current = guides.symmetry
-        applySymmetry(current.copy(on = type != null, type = type ?: current.type, axes = axes))
+        applyGuides(guides.copy(symmetry = current.copy(on = type != null, type = type ?: current.type, axes = axes)))
     }
 
     override fun setSymmetryPlanes(n: Int) {
         val current = guides.symmetry
         if (current.type == SymmetryType.MIRROR) return
         val clamped = current.copy(planes = n.coerceIn(2, SymmetryConfig.MAX_COPIES))
-        applySymmetry(clamped.copy(planes = clamped.effectivePlanes))
+        applyGuides(guides.copy(symmetry = clamped.copy(planes = clamped.effectivePlanes)))
     }
 
-    override fun setSymmetryLocked(locked: Boolean) = applySymmetry(guides.symmetry.copy(locked = locked))
+    override fun setSymmetryLocked(locked: Boolean) =
+        applyGuides(guides.copy(symmetry = guides.symmetry.copy(locked = locked)))
 
-    override fun setSymmetryCrop(crop: Boolean) = applySymmetry(guides.symmetry.copy(crop = crop))
+    override fun setSymmetryCrop(crop: Boolean) = applyGuides(guides.copy(symmetry = guides.symmetry.copy(crop = crop)))
 
     override fun moveSymmetryCenter(x: Float, y: Float) {
         if (!guides.symmetry.on) return
-        applySymmetry(guides.symmetry.copy(center = Vec2(clampX(x), clampY(y))))
+        applyGuides(guides.copy(symmetry = guides.symmetry.copy(center = Vec2(clampX(x), clampY(y)))))
     }
 
     override fun setSymmetryAngle(deg: Float) {
         if (!guides.symmetry.on) return
-        applySymmetry(guides.symmetry.copy(angleDeg = snapAngle(deg)))
+        applyGuides(guides.copy(symmetry = guides.symmetry.copy(angleDeg = snapAngle(deg))))
     }
 
     /** Normalizes [deg] to 0–360 and snaps it to a multiple of 45° when it is within 3° of one. */
@@ -1497,6 +1522,43 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
         val snapped = (Math.round(norm / 45f) * 45f).toFloat()
         return if (kotlin.math.abs(snapped - norm) <= 3f) snapped % 360f else norm
     }
+
+    // ---- ruler and lazy rope ----
+
+    override fun setLazy(on: Boolean) = applyGuides(guides.copy(lazy = guides.lazy.copy(on = on)))
+
+    override fun setLazyRadius(radius: Float) =
+        applyGuides(guides.copy(lazy = guides.lazy.copy(radius = radius.coerceIn(0f, MAX_LAZY_RADIUS))))
+
+    override fun setRuler(on: Boolean) {
+        var lines = guides.lines
+        // A ruler that was never placed starts as a horizontal segment across the canvas (spec G2.1).
+        if (on && lines.a == LinesConfig().a && lines.b == LinesConfig().b) {
+            lines = LinesConfig.defaultFor(DocRect(0f, 0f, doc.width.toFloat(), doc.height.toFloat()))
+        }
+        applyGuides(guides.copy(lines = lines.copy(on = on)))
+    }
+
+    override fun moveRulerEnd(end: Int, x: Float, y: Float) {
+        val lines = guides.lines
+        if (!lines.on) return
+        val p = Vec2(clampX(x), clampY(y))
+        applyGuides(guides.copy(lines = if (end == 0) lines.copy(a = p) else lines.copy(b = p)))
+    }
+
+    override fun moveRuler(dx: Float, dy: Float) {
+        val lines = guides.lines
+        if (!lines.on) return
+        val moved = lines.copy(a = Vec2(lines.a.x + dx, lines.a.y + dy), b = Vec2(lines.b.x + dx, lines.b.y + dy))
+        applyGuides(guides.copy(lines = moved))
+    }
+
+    override fun setRulerPerpendicular(on: Boolean) =
+        applyGuides(guides.copy(lines = guides.lines.copy(perpendicular = on)))
+
+    override fun setRulerMagnet(on: Boolean) = applyGuides(guides.copy(lines = guides.lines.copy(magnet = on)))
+
+    override fun setRulerLocked(on: Boolean) = applyGuides(guides.copy(lines = guides.lines.copy(locked = on)))
 
     // ---- options ----
 
@@ -1833,6 +1895,9 @@ private fun StudioViewModel.defaultLayerName(n: Int): String =
     getApplication<android.app.Application>().getString(R.string.layer_default_name, n)
 
 private const val STUDIO_BRUSH_ID = "studio.round"
+
+/** Longest lazy rope radius, in screen px (spec G2.4). */
+private const val MAX_LAZY_RADIUS = 200f
 
 /** Minimum delay between two live transform previews (about 30 fps). */
 private const val PREVIEW_FRAME_MS = 33L

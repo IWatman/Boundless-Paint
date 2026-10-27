@@ -19,6 +19,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.Redo
 import androidx.compose.material.icons.automirrored.outlined.Undo
 import androidx.compose.material.icons.outlined.AutoAwesome
+import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Layers
 import androidx.compose.material.icons.outlined.MoreVert
@@ -26,6 +27,7 @@ import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -71,6 +73,7 @@ fun StudioScreen(
         TransformOverlay(state = state, modifier = Modifier.fillMaxSize())
         GradientOverlay(state = state, modifier = Modifier.fillMaxSize())
         SymmetryOverlay(state = state, actions = actions, modifier = Modifier.fillMaxSize())
+        GuidesOverlay(state = state, actions = actions, modifier = Modifier.fillMaxSize())
 
         Box(
             Modifier
@@ -138,6 +141,18 @@ fun StudioScreen(
                         .padding(top = 64.dp),
                 )
             }
+            val ruler = state.ruler
+            val lazy = state.lazy
+            if (ruler != null || lazy != null) {
+                GuidesBar(
+                    ruler = ruler,
+                    lazy = lazy,
+                    actions = actions,
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(top = if (state.symmetry != null) 128.dp else 64.dp, end = 16.dp),
+                )
+            }
             val symmetry = state.symmetry
             if (symmetry != null) {
                 SymmetryBar(
@@ -181,6 +196,12 @@ fun StudioScreen(
     }
 }
 
+/** Leading icon of a checkable menu item: a check mark while [on], nothing otherwise. */
+private fun menuCheck(on: Boolean): (@Composable () -> Unit)? =
+    if (on) {
+        { Icon(Icons.Outlined.Check, contentDescription = null) }
+    } else null
+
 @Composable
 private fun StudioTopBar(state: StudioUiState, actions: StudioActions, modifier: Modifier = Modifier) {
     Row(modifier, verticalAlignment = Alignment.CenterVertically) {
@@ -193,7 +214,11 @@ private fun StudioTopBar(state: StudioUiState, actions: StudioActions, modifier:
                         Icons.Outlined.AutoAwesome,
                         stringResource(R.string.creative_tools),
                         { creativeMenu = true },
-                        tint = if (state.symmetry == null) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.primary,
+                        tint = if (state.symmetry == null && state.ruler == null && state.lazy == null) {
+                            MaterialTheme.colorScheme.onSurface
+                        } else {
+                            MaterialTheme.colorScheme.primary
+                        },
                     )
                     DropdownMenu(expanded = creativeMenu, onDismissRequest = { creativeMenu = false }) {
                         DropdownMenuItem(
@@ -236,6 +261,23 @@ private fun StudioTopBar(state: StudioUiState, actions: StudioActions, modifier:
                             onClick = {
                                 creativeMenu = false
                                 actions.setSymmetry(SymmetryType.KALEIDO)
+                            },
+                        )
+                        HorizontalDivider()
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.guide_ruler)) },
+                            leadingIcon = menuCheck(state.ruler != null),
+                            onClick = {
+                                creativeMenu = false
+                                actions.setRuler(state.ruler == null)
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.guide_lazy)) },
+                            leadingIcon = menuCheck(state.lazy != null),
+                            onClick = {
+                                creativeMenu = false
+                                actions.setLazy(state.lazy == null)
                             },
                         )
                     }

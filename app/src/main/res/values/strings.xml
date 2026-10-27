@@ -146,6 +146,13 @@
     <string name="symmetry_kaleido">Kaleidoscope</string>
     <string name="symmetry_lock">Lock</string>
     <string name="symmetry_crop">Crop at axis</string>
+    <!-- Guides -->
+    <string name="guide_ruler">Ruler</string>
+    <string name="guide_lazy">Lazy stroke</string>
+    <string name="guide_perpendicular">Perpendicular</string>
+    <string name="guide_magnet">Magnet</string>
+    <string name="guide_lock">Lock</string>
+    <string name="guide_lazy_radius">Radius</string>
     <string name="action_apply">Apply</string>
     <string name="deselect">Deselect</string>
     <string name="select_all">Select all</string>

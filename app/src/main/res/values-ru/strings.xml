@@ -145,6 +145,13 @@
     <string name="symmetry_kaleido">Калейдоскоп</string>
     <string name="symmetry_lock">Закрепить</string>
     <string name="symmetry_crop">Обрезать по оси</string>
+    <!-- Guides -->
+    <string name="guide_ruler">Линейка</string>
+    <string name="guide_lazy">Ленивая кисть</string>
+    <string name="guide_perpendicular">Перпендикуляр</string>
+    <string name="guide_magnet">Магнит</string>
+    <string name="guide_lock">Закрепить</string>
+    <string name="guide_lazy_radius">Радиус</string>
     <string name="action_apply">Применить</string>
     <string name="deselect">Снять выделение</string>
     <string name="select_all">Выделить всё</string>

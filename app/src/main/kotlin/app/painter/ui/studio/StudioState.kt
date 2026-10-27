@@ -150,6 +150,10 @@ data class StudioUiState(
     val transform: TransformUi? = null,
     /** Gradient ends and type while a gradient is open, null otherwise. */
     val gradient: GradientUi? = null,
+    /** Ruler guide of the open document, null while the ruler is off. */
+    val ruler: RulerUi? = null,
+    /** Lazy rope stabilizer of the open document, null while it is off. */
+    val lazy: LazyUi? = null,
     /** Symmetry settings of the open document, null while symmetry is off. */
     val symmetry: SymmetryUi? = null,
 )
@@ -195,6 +199,22 @@ data class SymmetryUi(
     val crop: Boolean,
     val locked: Boolean,
 )
+
+/** Ruler guide: the segment ([ax], [ay])–([bx], [by]) in document pixels plus its snapping flags. */
+@Immutable
+data class RulerUi(
+    val ax: Float,
+    val ay: Float,
+    val bx: Float,
+    val by: Float,
+    val perpendicular: Boolean,
+    val magnet: Boolean,
+    val locked: Boolean,
+)
+
+/** Lazy rope stabilizer: [radius] in screen pixels. */
+@Immutable
+data class LazyUi(val radius: Float)
 
 /** All user intents raised by [StudioScreen]. Display indices refer to [StudioUiState.layers]. */
 interface StudioActions {
@@ -329,6 +349,30 @@ interface StudioActions {
 
     /** Moves the symmetry centre to ([x], [y]) document pixels, clamped to the canvas. */
     fun moveSymmetryCenter(x: Float, y: Float) {}
+
+    /** Turns the lazy rope stabilizer on or off; the radius is kept. */
+    fun setLazy(on: Boolean) {}
+
+    /** Lazy rope radius in screen pixels, clamped to 0..200. */
+    fun setLazyRadius(radius: Float) {}
+
+    /** Turns the ruler on or off; turning it on the first time places a default segment across the canvas. */
+    fun setRuler(on: Boolean) {}
+
+    /** Moves end [end] (0 = a, 1 = b) of the ruler to ([x], [y]) document pixels, clamped to the canvas. */
+    fun moveRulerEnd(end: Int, x: Float, y: Float) {}
+
+    /** Moves both ends of the ruler by ([dx], [dy]) document pixels. */
+    fun moveRuler(dx: Float, dy: Float) {}
+
+    /** Adds a track perpendicular to the ruler axis to every stroke. */
+    fun setRulerPerpendicular(on: Boolean) {}
+
+    /** Keeps strokes started within 32 screen px of the ruler axis on the axis. */
+    fun setRulerMagnet(on: Boolean) {}
+
+    /** Locks the ruler: a locked ruler cannot be moved by its handles. */
+    fun setRulerLocked(on: Boolean) {}
 
     /** Sets the main axis angle in degrees, snapped to multiples of 45° within ±3°. */
     fun setSymmetryAngle(deg: Float) {}
