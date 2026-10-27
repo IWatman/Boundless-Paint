@@ -2,6 +2,7 @@ package app.painter.ui.studio
 
 import androidx.compose.runtime.Immutable
 import androidx.compose.ui.graphics.ImageBitmap
+import app.painter.core.adjust.AdjustParams
 import app.painter.core.blend.BlendMode
 import app.painter.core.color.Rgba
 import app.painter.core.doc.ColorTag
@@ -46,6 +47,10 @@ data class LayerUi(
     val reference: Boolean = false,
     /** The active node is this row and painting edits its mask. */
     val isActiveTargetMask: Boolean = false,
+    /** Node is an adjustment layer: it has no pixels, its thumbnail is a kind badge. */
+    val isAdjustment: Boolean = false,
+    /** [app.painter.core.adjust.AdjustKind] id when [isAdjustment]. */
+    val adjustKind: String? = null,
 )
 
 /**
@@ -77,6 +82,8 @@ data class StudioUiState(
     val paperColor: Rgba = Rgba.WHITE,
     val paperVisible: Boolean = true,
     val viewZoom: Float = 1f,
+    /** Open adjustment editor, null when closed. */
+    val adjustmentEditor: AdjustEditorUi? = null,
 )
 
 /** All user intents raised by [StudioScreen]. Display indices refer to [StudioUiState.layers]. */
@@ -95,6 +102,24 @@ interface StudioActions {
     fun toggleLayerPanel()
     fun toggleColorPanel()
     fun addLayer()
+
+    /**
+     * Inserts an adjustment layer of [kind] (one of [app.painter.core.adjust.AdjustKind.ALL]) above the
+     * active node and opens its editor.
+     */
+    fun addAdjustmentLayer(kind: String)
+
+    /** Opens the parameter editor of adjustment layer [id]. */
+    fun editAdjustment(id: String)
+
+    /**
+     * Updates the parameters of adjustment layer [id]: live while dragging ([commit] false), and with
+     * [commit] true records the whole session as one [app.painter.core.history.SetAdjustParams] step.
+     */
+    fun updateAdjustment(id: String, params: AdjustParams, commit: Boolean)
+
+    /** Closes the editor, keeping the current parameters as one undone-able step. */
+    fun closeAdjustmentEditor()
     fun deleteLayer(id: String)
     fun duplicateLayer(id: String)
     fun clearLayer(id: String)
@@ -147,6 +172,14 @@ interface StudioActions {
     fun addColorToPalette(color: Rgba)
 }
 
+/** Adjustment editor session: node [nodeId] of [kind] showing [params]. */
+@Immutable
+data class AdjustEditorUi(
+    val nodeId: String,
+    val kind: String,
+    val params: AdjustParams,
+)
+
 /** No-op base for previews and partial implementations. */
 open class NoOpStudioActions : StudioActions {
     override fun setMode(mode: BrushModeUi) {}
@@ -161,6 +194,10 @@ open class NoOpStudioActions : StudioActions {
     override fun toggleLayerPanel() {}
     override fun toggleColorPanel() {}
     override fun addLayer() {}
+    override fun addAdjustmentLayer(kind: String) {}
+    override fun editAdjustment(id: String) {}
+    override fun updateAdjustment(id: String, params: AdjustParams, commit: Boolean) {}
+    override fun closeAdjustmentEditor() {}
     override fun deleteLayer(id: String) {}
     override fun duplicateLayer(id: String) {}
     override fun clearLayer(id: String) {}

@@ -121,6 +121,17 @@ fun StudioScreen(
                 LayerPanel(state = state, actions = actions)
             }
 
+            val adjustmentEditor = state.adjustmentEditor
+            if (adjustmentEditor != null) {
+                AdjustmentEditor(
+                    editor = adjustmentEditor,
+                    actions = actions,
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(start = 8.dp, end = 8.dp, bottom = 64.dp),
+                )
+            }
+
             if (state.colorPanelOpen) {
                 val offsetX = with(LocalDensity.current) { 72.dp.roundToPx() }
                 Popup(

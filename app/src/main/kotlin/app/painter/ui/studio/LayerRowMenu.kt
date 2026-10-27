@@ -26,6 +26,10 @@ fun LayerRowMenu(
     actions: StudioActions,
 ) {
     DropdownMenu(expanded = true, onDismissRequest = onDismiss) {
+        if (layer.isAdjustment) {
+            MenuItem(stringResource(R.string.adjust), onDismiss, { actions.editAdjustment(layer.id) })
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+        }
         MenuItem(stringResource(R.string.rename), onDismiss, onRename)
         MenuItem(stringResource(R.string.duplicate), onDismiss, {
             actions.duplicateLayer(layer.id)

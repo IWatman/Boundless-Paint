@@ -9,6 +9,8 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import app.painter.R
 import app.painter.core.blend.BlendMode
+import app.painter.core.adjust.AdjustKind
+import app.painter.core.adjust.AdjustParams
 import app.painter.core.blend.Compositor
 import app.painter.core.color.Rgba
 import app.painter.core.doc.Document
@@ -19,6 +21,7 @@ import app.painter.core.doc.GroupNode
 import app.painter.core.doc.Node
 import app.painter.core.doc.RasterLayer
 import app.painter.core.doc.effectivelyLocked
+import app.painter.core.history.AddAdjustmentLayer
 import app.painter.core.history.AddLayer
 import app.painter.core.history.AddMask
 import app.painter.core.history.ApplyMask
@@ -34,6 +37,7 @@ import app.painter.core.history.MaskInit
 import app.painter.core.history.MaskPatchCommand
 import app.painter.core.history.MergeDown
 import app.painter.core.history.MoveNode
+import app.painter.core.history.SetAdjustParams
 import app.painter.core.history.SetMaskProps
 import app.painter.core.history.SetNodeProps
 import app.painter.core.history.TilePatchCommand
@@ -55,8 +59,10 @@ import app.painter.core.stroke.StrokeTarget
 import app.painter.render.CanvasInputListener
 import app.painter.render.CanvasView
 import app.painter.ui.home.ProjectCardUi
+import app.painter.ui.studio.AdjustEditorUi
 import app.painter.ui.studio.BrushModeUi
 import app.painter.ui.studio.HudUi
+import app.painter.ui.studio.adjustTitleRes
 import app.painter.ui.studio.LayerUi
 import app.painter.ui.studio.StudioActions
 import app.painter.ui.studio.StudioUiState
@@ -146,7 +152,10 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
         dirtySinceSave = false
         stroke = null
         canvas?.setDocument(doc)
-        _state.update { it.copy(paperColor = d.paper.color, paperVisible = d.paper.visible) }
+        _state.update {
+            it.copy(paperColor = d.paper.color, paperVisible = d.paper.visible, adjustmentEditor = null)
+        }
+        adjustSession = null
         refreshLayers()
     }
 
@@ -177,6 +186,7 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
         val node = doc.activeNode ?: return
         if (!node.visible || node.effectivelyLocked) return
         val maskTarget = doc.activeTarget == EditTarget.MASK && node.mask != null
+        if (!maskTarget && node !is RasterLayer) return // groups and adjustment layers have no pixels to paint
         val layer = if (maskTarget) null else doc.activeRaster ?: return
         val s = _state.value
         val mode = if (s.mode == BrushModeUi.ERASE) StrokeMode.ERASE else StrokeMode.PAINT
@@ -317,6 +327,79 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
         it.copy(colorPanelOpen = !it.colorPanelOpen, previousColor = if (!it.colorPanelOpen) it.color else it.previousColor)
     }
 
+    // ---- adjustment layers ----
+
+    /** Adjustment node being edited and the parameters it had when the editor opened. */
+    private var adjustSession: Pair<String, AdjustParams>? = null
+
+    override fun addAdjustmentLayer(kind: String) {
+        val params = AdjustKind.defaults(kind) ?: return
+        val active = doc.activeNode
+        val parent = active?.parent ?: doc.root
+        val index = if (active != null) parent.indexOf(active) + 1 else parent.children.size
+        val created = AddAdjustmentLayer(params, parent.id, index, layerName = adjustTitle(kind))
+        exec(created)
+        editAdjustment(created.nodeId)
+    }
+
+    override fun editAdjustment(id: String) {
+        val node = doc.findNode(id) as? AdjustmentLayer ?: return
+        commitPendingOpacity()
+        adjustSession?.let { if (it.first != id) commitAdjust(it.first) }
+        doc.activeId = node.id
+        doc.activeTarget = EditTarget.LAYER
+        adjustSession = id to node.params
+        _state.update { it.copy(adjustmentEditor = AdjustEditorUi(id, node.params.kind, node.params)) }
+        refreshLayers()
+    }
+
+    override fun updateAdjustment(id: String, params: AdjustParams, commit: Boolean) {
+        val node = doc.findNode(id) as? AdjustmentLayer ?: return
+        if (commit) {
+            // Record what the node holds (live edits already reached it); take the given value only when the
+            // caller changed nothing live since the session started (e.g. Reset from a fresh editor).
+            val start = adjustSession?.takeIf { it.first == id }?.second
+            if (start != null && node.params == start) node.params = params
+            commitAdjust(id)
+            return
+        }
+        // Live preview: the node is the single source of truth, the canvas re-reads it on invalidate.
+        node.params = params
+        canvas?.invalidate(null, null)
+        _state.update { s ->
+            val ed = s.adjustmentEditor
+            if (ed == null || ed.nodeId != id) s
+            else s.copy(adjustmentEditor = ed.copy(kind = params.kind, params = params))
+        }
+    }
+
+    override fun closeAdjustmentEditor() {
+        adjustSession?.let { commitAdjust(it.first) }
+        adjustSession = null
+        _state.update { it.copy(adjustmentEditor = null) }
+    }
+
+    /**
+     * Records the parameters currently on the node as one [SetAdjustParams] step from the value the node had
+     * when the editor was opened (or since the last commit of this session).
+     */
+    private fun commitAdjust(id: String) {
+        val session = adjustSession ?: return
+        if (session.first != id) return
+        val node = doc.findNode(id) as? AdjustmentLayer ?: return
+        val before = session.second
+        val after = node.params
+        adjustSession = id to after
+        if (after == before) return
+        commitPendingOpacity()
+        node.params = before
+        history.execute(doc, SetAdjustParams(id, before, after))
+        canvas?.invalidate(null, null)
+    }
+
+    private fun adjustTitle(kind: String): String =
+        getApplication<Application>().getString(adjustTitleRes(kind))
+
     override fun addLayer() {
         if (doc.layerCount() >= _state.value.layerLimit) return
         val active = doc.activeNode
@@ -372,7 +455,10 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
 
     override fun setLayerColorTag(id: String, tag: ColorTag) = exec(SetNodeProps(id, colorTag = tag))
     override fun setLayerLocked(id: String, locked: Boolean) = exec(SetNodeProps(id, locked = locked))
-    override fun setLayerReference(id: String, reference: Boolean) = exec(SetNodeProps(id, reference = reference))
+    override fun setLayerReference(id: String, reference: Boolean) =
+        // Adjustment layers cannot be the document reference (core rejects it).
+        if (reference && doc.findNode(id) is AdjustmentLayer) Unit
+        else exec(SetNodeProps(id, reference = reference))
 
     override fun toggleGroupExpanded(id: String) {
         val g = doc.findNode(id) as? GroupNode ?: return
@@ -597,6 +683,12 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
                 canRedo = history.canRedo,
                 projectName = doc.name,
                 layerLimit = layerLimitFor(doc.width, doc.height),
+                // Drop the editor when its node was deleted or undone away; otherwise keep it in sync.
+                adjustmentEditor = it.adjustmentEditor?.let { ed ->
+                    (doc.findNode(ed.nodeId) as? AdjustmentLayer)?.let { n ->
+                        ed.copy(kind = n.params.kind, params = n.params)
+                    }
+                },
             )
         }
     }
@@ -619,6 +711,9 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
         locked = locked,
         reference = reference,
         isActiveTargetMask = id == doc.activeId && doc.activeTarget == EditTarget.MASK && mask != null,
+        // Adjustment layers have no pixels: the row shows a kind badge instead of a thumbnail.
+        isAdjustment = this is AdjustmentLayer,
+        adjustKind = (this as? AdjustmentLayer)?.params?.kind,
     )
 
     private fun thumbnailOf(layer: RasterLayer): ImageBitmap? {

@@ -79,9 +79,49 @@ fun GroupExpandArrow(layer: LayerUi, size: Dp, actions: StudioActions) {
     }
 }
 
+/**
+ * Badge shown instead of the pixel thumbnail of an adjustment layer: the kind letters
+ * ([adjustBadge]) on the surface colour, since the node holds no pixels.
+ */
+@Composable
+fun AdjustmentThumbnail(layer: LayerUi, size: Dp, active: Boolean) {
+    val shape = MaterialTheme.shapes.small
+    Box(
+        Modifier
+            .size(size)
+            .clip(shape)
+            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .border(
+                if (active) 2.dp else 1.dp,
+                if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,
+                shape,
+            ),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            adjustBadge(layer.adjustKind),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+        )
+        if (!layer.visible) {
+            Box(
+                Modifier.matchParentSize().background(Color.Black.copy(alpha = 0.45f)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(Icons.Outlined.VisibilityOff, null, tint = Color.White, modifier = Modifier.size(18.dp))
+            }
+        }
+    }
+}
+
 /** Layer pixel thumbnail; [active] draws the accent border when painting targets the layer. */
 @Composable
 fun LayerThumbnail(layer: LayerUi, size: Dp, active: Boolean) {
+    if (layer.isAdjustment) {
+        AdjustmentThumbnail(layer, size, active)
+        return
+    }
     val shape = MaterialTheme.shapes.small
     Box(
         Modifier

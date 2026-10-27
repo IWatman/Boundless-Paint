@@ -116,6 +116,7 @@ internal fun LayerPanel(state: StudioUiState, actions: StudioActions, modifier: 
                     modifier = Modifier.size(36.dp),
                 )
             }
+            AdjustmentAddEntry(actions = actions, expanded = expanded, modifier = Modifier.padding(horizontal = 4.dp))
             if (expanded && active != null) {
                 LayerProperties(active, actions)
             }
@@ -356,7 +357,11 @@ private fun ExpandedLayerRow(
             Spacer(Modifier.width(4.dp))
         } else {
             Box(
-                Modifier.clickable { actions.selectEditTarget(layer.id, EditTarget.LAYER) },
+                Modifier.clickable {
+                    // Adjustment layers have no pixels: their badge opens the parameter editor.
+                    if (layer.isAdjustment) actions.editAdjustment(layer.id)
+                    else actions.selectEditTarget(layer.id, EditTarget.LAYER)
+                },
             ) {
                 LayerThumbnail(layer, 46.dp, active && !layer.isActiveTargetMask)
             }

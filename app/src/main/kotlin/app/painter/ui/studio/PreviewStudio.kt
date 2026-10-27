@@ -14,6 +14,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import app.painter.core.blend.BlendMode
+import app.painter.core.adjust.AdjustKind
+import app.painter.core.adjust.AdjustParams
 import app.painter.core.color.Rgba
 import app.painter.ui.components.HsvUi
 import app.painter.ui.components.sameAs
@@ -72,6 +74,45 @@ class FakeStudioController(projectName: String = "Demo") {
         override fun redo() = update { it.copy(canUndo = true, canRedo = false) }
         override fun toggleLayerPanel() = update { it.copy(layerPanelOpen = !it.layerPanelOpen) }
         override fun toggleColorPanel() = update { it.copy(colorPanelOpen = !it.colorPanelOpen) }
+        override fun addAdjustmentLayer(kind: String) {
+            val params = AdjustKind.defaults(kind) ?: return
+            val id = (nextId++).toString()
+            val s = state
+            val idx = s.layers.indexOfFirst { it.id == s.activeLayerId }.coerceAtLeast(0)
+            val layer = LayerUi(
+                id = id,
+                name = AdjustKind.title(kind),
+                visible = true,
+                opacity = 1f,
+                blendMode = BlendMode.NORMAL,
+                clipped = false,
+                alphaLock = false,
+                thumbnail = null,
+                isAdjustment = true,
+                adjustKind = kind,
+            )
+            update {
+                it.copy(
+                    layers = it.layers.toMutableList().apply { add(idx, layer) },
+                    activeLayerId = id,
+                    canUndo = true,
+                    adjustmentEditor = AdjustEditorUi(id, kind, params),
+                )
+            }
+        }
+        override fun editAdjustment(id: String) {
+            val kind = state.layers.firstOrNull { it.id == id }?.adjustKind ?: return
+            val params = AdjustKind.defaults(kind) ?: return
+            update { it.copy(activeLayerId = id, adjustmentEditor = AdjustEditorUi(id, kind, params)) }
+        }
+        override fun updateAdjustment(id: String, params: AdjustParams, commit: Boolean) = update { s ->
+            val editor = s.adjustmentEditor
+            s.copy(
+                adjustmentEditor = if (editor != null && editor.nodeId == id) editor.copy(kind = params.kind, params = params) else editor,
+                layers = s.layers.map { if (it.id == id) it.copy(adjustKind = params.kind) else it },
+            )
+        }
+        override fun closeAdjustmentEditor() = update { it.copy(adjustmentEditor = null) }
         override fun addLayer() = update { s ->
             val id = (nextId++).toString()
             val idx = s.layers.indexOfFirst { it.id == s.activeLayerId }.coerceAtLeast(0)
