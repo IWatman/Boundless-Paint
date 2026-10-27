@@ -21,6 +21,8 @@ import app.painter.core.doc.GroupNode
 import app.painter.core.doc.Node
 import app.painter.core.doc.RasterLayer
 import app.painter.core.doc.effectivelyLocked
+import app.painter.core.fill.RefSource
+import app.painter.core.fill.RegionParams
 import app.painter.core.history.AddAdjustmentLayer
 import app.painter.core.history.AddLayer
 import app.painter.core.history.AddMask
@@ -335,6 +337,7 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
                 val trail = lassoPoints.toList()
                 _state.update { it.copy(selectionDraftPath = trail) }
             }
+            ToolUi.SELECT_WAND -> Unit
             else -> _state.update { it.copy(selectionDraft = RectUi(toolStartX, toolStartY, toolStartX, toolStartY)) }
         }
     }
@@ -343,6 +346,7 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
         if (!toolActive) return
         val cx = clampX(x)
         val cy = clampY(y)
+        if (_state.value.tool == ToolUi.SELECT_WAND) return
         when (_state.value.tool) {
             ToolUi.SELECT_ELLIPSE -> {
                 val outline = ellipseOutline(toolStartX, toolStartY, cx, cy)
@@ -373,6 +377,10 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
         _state.update { it.copy(selectionDraft = null, selectionDraftPath = null) }
         lassoPoints.clear()
         when (tool) {
+            ToolUi.SELECT_WAND -> {
+                wandAt(clampX(x), clampY(y))
+                return
+            }
             ToolUi.SELECT_ELLIPSE -> {
                 val rect = RectUi.between(toolStartX, toolStartY, clampX(x), clampY(y)) ?: return
                 val shape = EllipseShape(rect.left + rect.width / 2f, rect.top + rect.height / 2f, rect.width / 2f, rect.height / 2f)
@@ -395,6 +403,38 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
     override fun onToolCancel() {
         lassoPoints.clear()
         _state.update { it.copy(selectionDraft = null, selectionDraftPath = null) }
+    }
+
+    /** Magic wand settings (spec §2.2): 15 % tolerance, contiguous, over the active layer. */
+    private val wandParams = RegionParams(tolerance = 0.15f, contiguous = true)
+
+    /** Runs the wand at ([x], [y]) of the active layer; the region is computed off the main thread. */
+    private fun wandAt(x: Float, y: Float) {
+        val d = doc
+        val px = x.toInt().coerceIn(0, d.width - 1)
+        val py = y.toInt().coerceIn(0, d.height - 1)
+        viewModelScope.launch {
+            val cmd = withContext(Dispatchers.Default) {
+                SelectionEdits.wand(d, px, py, wandParams, RefSource.Current, SelectMode.NEW)
+            }
+            if (d === doc) cmd?.let { exec(it) }
+        }
+    }
+
+    override fun selectAll() {
+        SelectionEdits.selectAll(doc)?.let { exec(it) }
+    }
+
+    override fun invertSelection() {
+        SelectionEdits.invert(doc)?.let { exec(it) }
+    }
+
+    override fun expandSelection(px: Float) {
+        SelectionEdits.expand(doc, px.coerceIn(-100f, 100f), aa = true)?.let { exec(it) }
+    }
+
+    override fun featherSelection(radius: Float) {
+        SelectionEdits.feather(doc, radius.coerceIn(0f, 250f))?.let { exec(it) }
     }
 
     override fun deselect() {

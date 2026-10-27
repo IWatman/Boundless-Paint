@@ -12,9 +12,10 @@ import app.painter.core.history.MaskInit
 /** Brush mode of the main toolbar. */
 /**
  * Active canvas tool. [BRUSH] paints with the current brush mode; [SELECT_RECT], [SELECT_ELLIPSE] and
- * [SELECT_LASSO] drag a selection (rectangle, ellipse or freehand outline).
+ * [SELECT_LASSO] drag a selection (rectangle, ellipse or freehand outline); [SELECT_WAND] taps a region
+ * of the layer and adds it to the selection.
  */
-enum class ToolUi { BRUSH, SELECT_RECT, SELECT_ELLIPSE, SELECT_LASSO }
+enum class ToolUi { BRUSH, SELECT_RECT, SELECT_ELLIPSE, SELECT_LASSO, SELECT_WAND }
 
 /** True for the tools that build a selection instead of painting. */
 val ToolUi.isSelectionTool: Boolean
@@ -143,6 +144,18 @@ interface StudioActions {
 
     /** Clears the selection. */
     fun deselect()
+
+    /** Selects the whole canvas (undoable). */
+    fun selectAll()
+
+    /** Inverts the selection (undoable). */
+    fun invertSelection()
+
+    /** Grows ([px] > 0) or shrinks ([px] < 0) the selection by pixels (undoable). */
+    fun expandSelection(px: Float)
+
+    /** Feathers the selection edges by [radius] pixels (undoable). */
+    fun featherSelection(radius: Float)
     fun setBrushSize(size: Float)
     fun setOpacity(opacity: Float)
     fun setFlow(flow: Float)
@@ -239,6 +252,10 @@ open class NoOpStudioActions : StudioActions {
     override fun setMode(mode: BrushModeUi) {}
     override fun selectTool(tool: ToolUi) {}
     override fun deselect() {}
+    override fun selectAll() {}
+    override fun invertSelection() {}
+    override fun expandSelection(px: Float) {}
+    override fun featherSelection(radius: Float) {}
     override fun setBrushSize(size: Float) {}
     override fun setOpacity(opacity: Float) {}
     override fun setFlow(flow: Float) {}

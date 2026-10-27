@@ -185,12 +185,56 @@ private fun StudioTopBar(state: StudioUiState, actions: StudioActions, modifier:
                                 actions.selectTool(ToolUi.SELECT_LASSO)
                             },
                         )
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.tool_magic_wand)) },
+                            onClick = {
+                                toolsMenu = false
+                                actions.selectTool(ToolUi.SELECT_WAND)
+                            },
+                        )
                         if (state.hasSelection) {
                             DropdownMenuItem(
                                 text = { Text(stringResource(R.string.deselect)) },
                                 onClick = {
                                     toolsMenu = false
                                     actions.deselect()
+                                },
+                            )
+                        }
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.select_all)) },
+                            onClick = {
+                                toolsMenu = false
+                                actions.selectAll()
+                            },
+                        )
+                        if (state.hasSelection) {
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.invert_selection)) },
+                                onClick = {
+                                    toolsMenu = false
+                                    actions.invertSelection()
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.expand_selection)) },
+                                onClick = {
+                                    toolsMenu = false
+                                    actions.expandSelection(4f)
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.contract_selection)) },
+                                onClick = {
+                                    toolsMenu = false
+                                    actions.expandSelection(-4f)
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.feather_selection)) },
+                                onClick = {
+                                    toolsMenu = false
+                                    actions.featherSelection(4f)
                                 },
                             )
                         }

@@ -125,7 +125,13 @@
     <string name="tool_rect_select">Rectangle selection</string>
     <string name="tool_ellipse_select">Ellipse selection</string>
     <string name="tool_lasso_select">Lasso selection</string>
+    <string name="tool_magic_wand">Magic wand</string>
     <string name="deselect">Deselect</string>
+    <string name="select_all">Select all</string>
+    <string name="invert_selection">Invert selection</string>
+    <string name="expand_selection">Expand 4 px</string>
+    <string name="contract_selection">Contract 4 px</string>
+    <string name="feather_selection">Feather 4 px</string>
     <string name="name">Name</string>
     <string name="new_canvas">New canvas</string>
     <string name="no_recent">No recent projects</string>

@@ -124,7 +124,13 @@
     <string name="tool_rect_select">Прямоугольное выделение</string>
     <string name="tool_ellipse_select">Эллиптическое выделение</string>
     <string name="tool_lasso_select">Лассо</string>
+    <string name="tool_magic_wand">Волшебная палочка</string>
     <string name="deselect">Снять выделение</string>
+    <string name="select_all">Выделить всё</string>
+    <string name="invert_selection">Инвертировать выделение</string>
+    <string name="expand_selection">Расширить на 4 px</string>
+    <string name="contract_selection">Сузить на 4 px</string>
+    <string name="feather_selection">Растушевать на 4 px</string>
     <string name="name">Название</string>
     <string name="new_canvas">Новый холст</string>
     <string name="no_recent">Нет недавних проектов</string>
