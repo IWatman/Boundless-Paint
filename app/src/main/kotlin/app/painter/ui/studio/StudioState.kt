@@ -129,6 +129,11 @@ data class StudioUiState(
     val hasSelection: Boolean = false,
     /** Bounding box of the current selection in document pixels. */
     val selectionBounds: RectUi? = null,
+    /**
+     * Outline of the current selection in document pixels: one flat `x0, y0, x1, y1, ...` polyline per
+     * connected contour run. Null while it is unknown (the bounding box is drawn instead).
+     */
+    val selectionContour: List<FloatArray>? = null,
     /** Document→view mapping of the canvas, for overlays drawn by Compose. */
     val canvasTransform: CanvasTransformUi = CanvasTransformUi(),
     /** Open adjustment editor, null when closed. */

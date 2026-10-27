@@ -58,8 +58,10 @@ import app.painter.core.stroke.StrokeContext
 import app.painter.core.stroke.StrokeEngine
 import app.painter.core.stroke.StrokeMode
 import app.painter.core.stroke.StrokeOptions
+import app.painter.core.raster.MaskGrid
 import app.painter.core.stroke.StrokeTarget
 import app.painter.core.select.EllipseShape
+import app.painter.core.select.MaskOps
 import app.painter.core.select.PolyShape
 import app.painter.core.select.RectShape
 import app.painter.core.select.SelectMode
@@ -85,6 +87,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -105,6 +108,12 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
     private var autosaveJob: Job? = null
     private var strokeCounter = 0L
     private var strokeOnMask = false
+    /** In-flight marching-ants contour computation of the selection mask. */
+    private var contourJob: Job? = null
+    /** Bumped for every contour request so a stale result is never published later. */
+    private var contourRev = 0L
+    /** Fingerprint of the mask the published contour was computed from (tile versions + identity). */
+    private var contourSig: List<Long>? = null
 
     private var paintParams = BrushParams()
     private var eraseParams = BrushParams(size = 40f)
@@ -837,6 +846,7 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
     /** Publishes the selection presence and bounds from the document mask. */
     private fun refreshSelection() {
         val coverage = doc.selection.coverageOrNull()
+        publishSelectionContour(coverage)
         val b = coverage?.bounds()
         _state.update {
             it.copy(
@@ -844,6 +854,125 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
                 selectionBounds = b?.let { r -> RectUi(r.x0.toFloat(), r.y0.toFloat(), r.x1.toFloat(), r.y1.toFloat()) },
             )
         }
+    }
+
+    /**
+     * Publishes the marching-ants outline of [coverage] (iso-0.5 contour segments per mask tile, document
+     * pixels) so the overlay can draw the real selection shape. Cached by tile version/identity: the
+     * contour is only recomputed when the mask content changed, and a newer pass cancels an older one.
+     */
+    private fun publishSelectionContour(coverage: MaskGrid?) {
+        if (coverage == null) {
+            contourJob?.cancel()
+            contourJob = null
+            contourSig = null
+            contourRev++
+            if (_state.value.selectionContour != null) _state.update { it.copy(selectionContour = null) }
+            return
+        }
+        val sig = selectionFingerprint(coverage)
+        if (sig == contourSig) return
+        contourSig = sig
+        contourRev++
+        val rev = contourRev
+        contourJob?.cancel()
+        // The bounding-box fallback stays visible until the real outline is ready.
+        if (_state.value.selectionContour != null) _state.update { it.copy(selectionContour = null) }
+        contourJob = viewModelScope.launch {
+            val contours = withContext(Dispatchers.Default) {
+                val keys = coverage.keys().filter { coverage.isInBounds(it.tx, it.ty) }.sortedBy { it.packed }
+                val parts = ArrayList<FloatArray>(keys.size)
+                var total = 0
+                for (k in keys) {
+                    if (!isActive) return@withContext null
+                    val c = MaskOps.contour(coverage, k)
+                    if (c.isNotEmpty()) { parts.add(c); total += c.size }
+                }
+                if (parts.isEmpty()) return@withContext emptyList()
+                val flat = FloatArray(total)
+                var at = 0
+                for (p in parts) { p.copyInto(flat, at); at += p.size }
+                chainSegments(flat)
+            } ?: return@launch
+            if (rev != contourRev || contours.isEmpty()) return@launch
+            _state.update { it.copy(selectionContour = contours) }
+        }
+    }
+
+    /**
+     * Joins marching-squares segments (`x0, y0, x1, y1` quadruples in [flat]) into open polylines so the
+     * dashed outline can march along the edge instead of restarting on every one-pixel segment.
+     */
+    private fun chainSegments(flat: FloatArray): List<FloatArray> {
+        val n = flat.size / 4
+        if (n == 0) return emptyList()
+        val ids = HashMap<Long, Int>(n * 2)
+        val xs = ArrayList<Float>(n * 2)
+        val ys = ArrayList<Float>(n * 2)
+        fun pointId(x: Float, y: Float): Int {
+            val key = (x.toRawBits().toLong() shl 32) or (y.toRawBits().toLong() and 0xFFFF_FFFFL)
+            ids[key]?.let { return it }
+            xs.add(x)
+            ys.add(y)
+            val id = xs.size - 1
+            ids[key] = id
+            return id
+        }
+        val a = IntArray(n)
+        val b = IntArray(n)
+        val adj = HashMap<Int, MutableList<Int>>(n * 2)
+        for (i in 0 until n) {
+            a[i] = pointId(flat[i * 4], flat[i * 4 + 1])
+            b[i] = pointId(flat[i * 4 + 2], flat[i * 4 + 3])
+            adj.getOrPut(a[i]) { ArrayList(2) }.add(i)
+            if (b[i] != a[i]) adj.getOrPut(b[i]) { ArrayList(2) }.add(i)
+        }
+        val used = BooleanArray(n)
+        val out = ArrayList<FloatArray>()
+        for (s in 0 until n) {
+            if (used[s]) continue
+            used[s] = true
+            val fwd = ArrayList<Int>()
+            fwd.add(a[s])
+            fwd.add(b[s])
+            while (true) {
+                val tail = fwd[fwd.size - 1]
+                val next = adj[tail].orEmpty().firstOrNull { !used[it] } ?: break
+                used[next] = true
+                fwd.add(if (a[next] == tail) b[next] else a[next])
+            }
+            val back = ArrayList<Int>()
+            while (true) {
+                val head = if (back.isEmpty()) fwd[0] else back[back.size - 1]
+                val next = adj[head].orEmpty().firstOrNull { !used[it] } ?: break
+                used[next] = true
+                back.add(if (a[next] == head) b[next] else a[next])
+            }
+            val poly = FloatArray((fwd.size + back.size) * 2)
+            var at = 0
+            for (i in back.indices.reversed()) {
+                poly[at++] = xs[back[i]]
+                poly[at++] = ys[back[i]]
+            }
+            for (p in fwd) {
+                poly[at++] = xs[p]
+                poly[at++] = ys[p]
+            }
+            out.add(poly)
+        }
+        return out
+    }
+
+    /** Cheap content fingerprint of [m]: per-tile key, tile version and tile identity. */
+    private fun selectionFingerprint(m: MaskGrid): List<Long> {
+        val keys = m.keys().sortedBy { it.packed }
+        val sig = ArrayList<Long>(keys.size * 2)
+        for (k in keys) {
+            val t = m.get(k) ?: continue
+            sig.add((k.packed.toLong() shl 32) or (t.version and 0xFFFF_FFFFL))
+            sig.add(System.identityHashCode(t).toLong())
+        }
+        return sig
     }
 
     private fun refreshLayers() {
