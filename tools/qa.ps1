@@ -3,7 +3,14 @@
 param([string]$cmd, [Parameter(ValueFromRemainingArguments)] $rest)
 $root = Split-Path -Parent $PSScriptRoot
 . "$root\tools\env.ps1" | Out-Null
-$serial = if ($env:PAINTER_SERIAL) { $env:PAINTER_SERIAL } else { "emulator-5554" }
+# Serial of the painter_tab AVD: ports change between runs and other projects run their own emulators.
+$serial = $env:PAINTER_SERIAL
+if (-not $serial) {
+    foreach ($d in (adb devices | Select-String "emulator-\d+" | ForEach-Object { $_.Matches.Value })) {
+        if ((adb -s $d emu avd name | Select-Object -First 1) -eq "painter_tab") { $serial = $d; break }
+    }
+}
+if (-not $serial) { throw "painter_tab emulator is not running" }
 $qa = "C:/Users/dushc/.claude/plugins/cache/anthropic-plugin-directory/android-emulator-qa-plugin/1.0.0-18e69487874c/scripts/android-qa.py"
 $out = "$root\.tools\qa"
 New-Item -ItemType Directory -Force $out | Out-Null
