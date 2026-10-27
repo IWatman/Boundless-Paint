@@ -1,47 +1,47 @@
-# Infinite Painter: Guides (линейки и стабилизаторы)
+# Infinite Painter: Guides (rulers and stabilizers)
 
-Источник: User Guide /painter/guides/*.
+Source: User Guide /painter/guides/*.
 
-## Общее
-- Guide = геометрическое ограничение для многих свободных мазков (как линейка).
-- Shape = один редактируемый мазок (см. 11-shapes).
-- 5 guide'ов в Creative Tools: Lines, Ellipse, Hatching, Lazy, Pen (5-й виден после скролла ряда).
-- Закрытие: тап по плавающей иконке справа сверху (mini-toolbar).
-- Совместимы с Symmetry и друг с другом.
+## General
+- A guide = a geometric constraint for many free strokes (like a ruler).
+- A shape = a single editable stroke (see 11-shapes).
+- 5 guides in Creative Tools: Lines, Ellipse, Hatching, Lazy, Pen (the 5th is visible after scrolling the row).
+- Closing: tap the floating icon at the top right (mini-toolbar).
+- They are compatible with Symmetry and with each other.
 
 ## Lines guide
-- Ось с двумя ручками (drag = угол и позиция). Snap поворота к 0°, 45°, 90°.
-- Мазки в любом месте холста идут **параллельно или перпендикулярно** оси. Направление определяется началом мазка.
-- **Center tick**: средняя метка. Ручки на концах отрезка → находим его середину.
+- An axis with two handles (drag = angle and position). Rotation snapping to 0°, 45°, 90°.
+- Strokes anywhere on the canvas run **parallel or perpendicular** to the axis. The direction is determined by the start of the stroke.
+- **Center tick**: the middle mark. The handles are at the ends of the segment → this is how we find its middle.
 
 ## Ellipse guide
-- Ручки:
-  - Flatness (малая ось, до упора = круг);
-  - Center (позиция);
-  - Angle (поворот);
-  - Scale (размер гайда, на рисование не влияет);
-  - индикатор малой оси;
-  - контур.
-- Рисуются: концентрические эллипсы в любой точке, дуги, радиусы. Тип мазка определяется направлением начала.
-- Перемещение гайда снапится к линии малой оси, удобно для цилиндров в перспективе.
+- Handles:
+  - Flatness (the minor axis, all the way = a circle);
+  - Center (position);
+  - Angle (rotation);
+  - Scale (the size of the guide, it does not affect drawing);
+  - the minor-axis indicator;
+  - the outline.
+- What can be drawn: concentric ellipses anywhere, arcs, radii. The stroke type is determined by the direction at the start.
+- Moving the guide snaps to the line of the minor axis, which is handy for cylinders in perspective.
 
 ## Hatching guide
-- Штриховка одним непрерывным движением: рисуются только отрезки одного направления, обратный ход не рисуется.
-- Комбинируется с Lines (прямые параллельные), Ellipse (концентрические и радиальные), Perspective.
+- Hatching in one continuous motion: only segments of one direction are drawn, the return pass does not draw.
+- It combines with Lines (parallel straight lines), Ellipse (concentric and radial) and Perspective.
 
-## Lazy guide (stabilizer «на верёвочке»)
-- Кончик кисти тянется за стилусом на расстоянии радиуса. На холсте видны круг и линия направления.
-- Tool settings: **Guide radius** (0 = нет эффекта), **Elastic** (радиус растёт со скоростью).
-- Отдельно от Smoothness в Brush Editor.
+## Lazy guide (a stabilizer "on a leash")
+- The brush tip is dragged behind the stylus at the radius distance. A circle and a direction line are shown on the canvas.
+- Tool settings: **Guide radius** (0 = no effect), **Elastic** (the radius grows with speed).
+- Separate from Smoothness in the Brush Editor.
 
-## Pen guide (Bézier-гайд)
-- Строим путь:
-  - тап = cusp-узел;
-  - короткий drag = smooth-узел;
-  - тап по линии = вставить узел;
-  - тап по узлу = smooth↔cusp;
-  - drag узла на соседа = удалить;
+## Pen guide (a Bézier guide)
+- Building the path:
+  - a tap = a cusp node;
+  - a short drag = a smooth node;
+  - a tap on the line = insert a node;
+  - a tap on a node = smooth↔cusp;
+  - dragging a node onto a neighbor = delete it;
   - Close/Open.
-- **Lock** (замок, необратимо) → по пути рисуем сколько угодно мазков любой кистью и в любом режиме. Можно менять кисть.
-- ✓ = удалить гайд и начать новый.
-- Lock и Close «прилипают» к первому узлу.
+- **Lock** (irreversible) → you can then draw as many strokes along the path as you like, with any brush and in any mode. The brush can be changed.
+- ✓ = delete the guide and start a new one.
+- Lock and Close "stick" to the first node.

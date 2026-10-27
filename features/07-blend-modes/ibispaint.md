@@ -1,22 +1,22 @@
-# ibisPaint: режимы наложения
+# ibisPaint: blend modes
 
-Источник: ibispaint.com/lecture №83. 28 режимов (у app store заявлено 27, разница в версиях).
+Source: ibispaint.com/lecture №83. 28 modes (the app store claims 27; the difference is between versions).
 
-| Группа | Режимы |
+| Group | Modes |
 |---|---|
 | Normal | Normal |
 | Dark | Darken, Multiply, Color Burn, Linear Burn, Darker Color |
 | Light | Lighten, Screen, Color Dodge, Linear Dodge, **Add**, Lighter Color |
 | Contrast | Overlay, Soft Light, Hard Light, Vivid Light, Linear Light, Pin Light, Hard Mix |
-| Variations | **Invert** (инверсия нижнего, цвет верхнего не важен), Difference, Exclusion, Subtract, Divide |
+| Variations | **Invert** (inverts the lower layer, the color of the upper one does not matter), Difference, Exclusion, Subtract, Divide |
 | Color | Hue, Saturation, Color, Luminosity |
 
-## Отличия от IP
-- Есть у ibis, нет у IP:
-  - **Add**: отличается от Linear Dodge при opacity<1, ярче, для свечения;
+## Differences from IP
+- ibis has, IP does not:
+  - **Add**: differs from Linear Dodge at opacity<1, brighter, for glow;
   - **Invert**.
-- Есть у IP, нет у ibis: Negative, Erase, Mask, Line Art, Passthrough.
-- У ibis в списке blend mode есть отдельный пункт **Screentone** (применить скринтон к слою), см. 21.
+- IP has, ibis does not: Negative, Erase, Mask, Line Art, Passthrough.
+- In ibis the blend mode list has a separate item **Screentone** (apply a screentone to the layer), see 21.
 
-## Объединённый набор для реализации
-Normal, Passthrough (группы), Darken, Multiply, Color Burn, Linear Burn, Darker Color, Lighten, Screen, Color Dodge, Linear Dodge, Add, Lighter Color, Overlay, Soft Light, Hard Light, Vivid Light, Linear Light, Pin Light, Hard Mix, Difference, Exclusion, Negative, Invert, Subtract, Divide, Hue, Saturation, Color, Luminosity, Erase, Mask, Line Art. Итого **33** режима.
+## The combined set for the implementation
+Normal, Passthrough (groups), Darken, Multiply, Color Burn, Linear Burn, Darker Color, Lighten, Screen, Color Dodge, Linear Dodge, Add, Lighter Color, Overlay, Soft Light, Hard Light, Vivid Light, Linear Light, Pin Light, Hard Mix, Difference, Exclusion, Negative, Invert, Subtract, Divide, Hue, Saturation, Color, Luminosity, Erase, Mask, Line Art. **33** modes in total.

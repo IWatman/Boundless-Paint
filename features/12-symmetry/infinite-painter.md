@@ -1,31 +1,31 @@
-# Infinite Painter: симметрия
+# Infinite Painter: symmetry
 
-Источник: User Guide /painter/symmetry/*.
+Source: User Guide /painter/symmetry/*.
 
-## Общее
-- 4 типа: Vertical, Horizontal, Radial, Kaleidoscopic.
-- Работает в реальном времени для всех режимов кисти (Paint, Blend, Erase, Clone), а также для Guides, Shapes и Liquify.
-- Работает в Pattern projects.
-- Закрытие: иконка в mini-toolbar. Настройки: шестерёнка Tool settings.
-- **Lock** (кнопка на холсте): фиксирует ось или центр и прячет ручки. Разблокировка через Tool settings.
+## General
+- 4 types: Vertical, Horizontal, Radial, Kaleidoscopic.
+- It works in real time for all brush modes (Paint, Blend, Erase, Clone), and also for Guides, Shapes and Liquify.
+- It works in Pattern projects.
+- Closing: the icon in the mini-toolbar. Settings: the Tool settings gear.
+- **Lock** (a button on the canvas): fixes the axis or the center and hides the handles. Unlocked through Tool settings.
 
 ## Vertical / Horizontal (single-axis)
-- Это один инструмент с двумя пресетами. Угол оси любой.
-- Ручки: rotate, move.
+- This is one tool with two presets. The axis angle can be anything.
+- Handles: rotate, move.
 - Settings:
   - Lock axis;
-  - **Crop on axis** (мазок обрывается на оси);
-  - Reset (ось в центр холста).
+  - **Crop on axis** (the stroke is cut off at the axis);
+  - Reset (the axis to the center of the canvas).
 
 ## Radial
-- Поворотные копии вокруг центра, не зеркальные.
+- Rotational copies around the center, not mirrored.
 - **Planes 2–16**.
-- **Fan angle**: сектор, дефолт 360°. Сектор ориентирован от точки начала каждого мазка.
+- **Fan angle**: the sector, default 360°. The sector is oriented from the start point of each stroke.
 - Settings: Lock axes, Reset.
 
 ## Kaleidoscopic
-- Зеркала по N осям через центр.
-- **Planes 2–16**. Ручка поворота набора осей со snap 0/45/90°.
+- Mirrors across N axes through the center.
+- **Planes 2–16**. A handle rotates the set of axes with snapping at 0/45/90°.
 - Settings:
   - Lock;
   - **Crop on axes**;

@@ -1,69 +1,69 @@
-# Infinite Painter: заливки
+# Infinite Painter: fills
 
-Источник: User Guide /painter/fills/*.
+Source: User Guide /painter/fills/*.
 
-## Общее
-- 5 fill-инструментов, общий workspace. Можно делать несколько заливок подряд разных типов.
-- Gradient: одна иконка, три подтипа.
-- Цели заливки:
-  - весь слой;
-  - область похожего цвета;
-  - замкнутая область (ячейка лайнарта);
-  - выделение (как маска).
+## General
+- 5 fill tools, a shared workspace. Several fills of different types can be made in a row.
+- Gradient: one icon, three sub-types.
+- Fill targets:
+  - the whole layer;
+  - an area of similar color;
+  - an enclosed area (a cell of the line art);
+  - the selection (as a mask).
 - Toolbar:
-  - селектор типа;
+  - the type selector;
   - Sampling mode;
-  - контролы типа;
+  - the controls of the type;
   - Confirm.
-- Cancel у Solid нет: confirm + undo.
-- **Tolerance** 0–100%. В Tool settings (шестерёнка). Общий для всех заливок и Wand. 100% по тапу = весь слой.
+- Solid has no Cancel: confirm + undo.
+- **Tolerance** 0–100%. In Tool settings (the gear). Shared by all the fills and the Wand. 100% on a tap = the whole layer.
 - **Sampling**:
-  - Multiple layer (дефолт): все видимые слои;
-  - Single layer: только текущий.
-- **Source layer**: любой слой как источник границ. Кнопка «current layer as the source» в Layer options. Иконка на тулбаре, если source ≠ active. Сценарий: лайнарт на прозрачном как source, заливки на слое ниже.
-- Gap closing, expand, antialias в доке не описаны. В ibisPaint они есть (см. ibispaint.md), берём оттуда.
+  - Multiple layer (default): all visible layers;
+  - Single layer: only the current one.
+- **Source layer**: any layer as the source of boundaries. The "current layer as the source" button in Layer options. An icon on the toolbar if source ≠ active. The scenario: line art on transparency as the source, fills on a layer below.
+- Gap closing, expand and antialias are not described in the doc. ibisPaint has them (see ibispaint.md), so we take them from there.
 
 ## Solid fill (bucket)
-- Текущий цвет. Тап = заливка до границы.
-- **Live Tolerance**: drag от точки. Расстояние = tolerance 0–100% (игнорирует настройку), область растёт и сжимается в реальном времени.
+- The current color. A tap = fill up to the boundary.
+- **Live Tolerance**: drag from the point. The distance = tolerance 0–100% (it ignores the setting), the area grows and shrinks in real time.
 
 ## Gradient (Linear / Radial / Sweep)
-- Drag: старт (обязательно внутри области) → конец (где угодно). Real-time превью.
-- Цвета правятся ПОСЛЕ нанесения. Пресетов нет.
-- Первый раз градиент из текущего цвета, дальше последний использованный.
-- Редактируемо до Confirm (✓) или закрытия. Cancel (✗) отменяет только текущий.
-- Ручки:
-  - start / end stop (drag = двигать, tap = цвет);
-  - axis (drag = двигать весь, tap = новый stop);
-  - stops без лимита, увести с оси = удалить.
-- Пикер стопа: полный Color panel + **opacity на стоп**.
-- Опции:
+- Drag: start (must be inside the area) → end (anywhere). Real-time preview.
+- The colors are edited AFTER it has been applied. There are no presets.
+- The first time a gradient comes from the current color, afterwards from the last one used.
+- Editable until Confirm (✓) or closing. Cancel (✗) undoes only the current one.
+- Handles:
+  - start / end stop (drag = move, tap = color);
+  - axis (drag = move the whole thing, tap = a new stop);
+  - unlimited stops, dragging one off the axis = delete it.
+- The stop picker: the full Color panel + **opacity per stop**.
+- Options:
   - Repeat;
   - Reflect;
   - Reverse;
-  - Repeat + Reflect вместе можно.
-  - Дефолт: выкл.
-- **Radial**: от центра, направление drag не важно. Окружность-превью видна во время drag.
+  - Repeat + Reflect can be used together.
+  - Default: off.
+- **Radial**: from the center, the drag direction does not matter. A preview circle is visible during the drag.
 - **Sweep (conical)**:
-  - всегда 360°, сектор делается прозрачными стопами;
-  - длина drag не важна;
-  - **Repetitions** круговым слайдером, до 100;
-  - **Reflect дефолт ON**: ось = 180°, новый стоп даёт 2 симметричных сектора;
-  - Reflect OFF: ось = 360°, repeat без reflect = «лучи».
+  - always 360°, a sector is made with transparent stops;
+  - the drag length does not matter;
+  - **Repetitions** with a circular slider, up to 100;
+  - **Reflect default ON**: the axis = 180°, a new stop gives 2 symmetric sectors;
+  - Reflect OFF: the axis = 360°, repeat without reflect = "rays".
 
 ## Pattern fill
-- 30+ встроенных тайлов, импорт своих (секция Imported). Прозрачность поддерживается. Лучше бесшовные PNG.
-- Drag от центра. Первый раз паттерн «cloud», дальше последний.
-- Ручки:
-  - move (точка начала);
-  - end (масштаб + поворот);
-  - ось = нижний край тайла;
-  - контур одного тайла.
-- Color controls: Hue, Saturation, Brightness, Contrast, Opacity. Действуют на текущую заливку, значения не сбрасываются.
-- Sampling mode как у остальных.
+- 30+ built-in tiles, import your own (an Imported section). Transparency is supported. Seamless PNGs are better.
+- Drag from the center. The first time the pattern is "cloud", afterwards the last one.
+- Handles:
+  - move (the start point);
+  - end (scale + rotation);
+  - the axis = the bottom edge of the tile;
+  - the outline of a single tile.
+- Color controls: Hue, Saturation, Brightness, Contrast, Opacity. They apply to the current fill, the values are not reset.
+- Sampling mode as for the others.
 
 ## Fill brushes
-- Папка Fills: Solid, Screentone, Debris, Grunge, Scratch, Checker.
-- Нарисовал контур → область залилась. С нуля не создаются, только Duplicate существующей.
-- С шейпами Rectangle, Circle, Path, Arc дают залитые фигуры.
-- **Draw preview** (глобально): заливка видна во время мазка.
+- The Fills folder: Solid, Screentone, Debris, Grunge, Scratch, Checker.
+- You draw a contour → the area gets filled. They are not created from scratch, only by duplicating an existing one.
+- With the Rectangle, Circle, Path, Arc shapes they produce filled shapes.
+- **Draw preview** (global): the fill is visible during the stroke.

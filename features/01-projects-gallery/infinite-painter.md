@@ -1,142 +1,142 @@
-# Infinite Painter: проекты и галерея
+# Infinite Painter: projects and gallery
 
-Источник: публичный User Guide (docs.infinitestudio.art/painter/projects/, /home/). Версия 7.x.
-Пересказ функционала своими словами. Это не копия текста.
+Source: the public User Guide (docs.infinitestudio.art/painter/projects/, /home/). Version 7.x.
+A retelling of the functionality in our own words. This is not a copy of the text.
 
-## Модель проекта
-- Проект содержит:
-  - артворк (все слои в границах холста);
-  - историю версий;
-  - таймлапс (опционально);
-  - референсы (хранятся внутри проекта);
-  - метаданные;
-  - данные, специфичные для типа проекта.
-- Холст: прямоугольник фиксированного размера. Экспортируется только он. Размер можно менять в любой момент (Resize).
-- Слой: обычно RGBA размером с холст. Минимум один слой в проекте.
-- Страница всегда одна. Многостраничность делают слоями или отдельными проектами.
-- Типы проектов задаются при создании, сменить нельзя:
-  - **Regular**: одно изображение.
-  - **Pattern**: бесшовный тайл.
-  - **Challenge**: заданное упражнение.
-- Проекты хранятся внутри приложения как открытые директории, извне недоступны. Проект привязан к устройству.
-- В Studio открыт только один проект.
+## Project model
+- A project contains:
+  - the artwork (all layers within the canvas bounds);
+  - version history;
+  - a timelapse (optional);
+  - references (stored inside the project);
+  - metadata;
+  - data specific to the project type.
+- Canvas: a rectangle of a fixed size. Only it is exported. The size can be changed at any time (Resize).
+- Layer: usually RGBA, the size of the canvas. At least one layer per project.
+- There is always a single page. Multi-page documents are made with layers or separate projects.
+- Project types are set at creation and cannot be changed:
+  - **Regular**: a single image.
+  - **Pattern**: a seamless tile.
+  - **Challenge**: a given exercise.
+- Projects are stored inside the app as open directories and are not accessible from outside. A project is bound to the device.
+- Only one project is open in Studio at a time.
 
-## Сохранение
-- Автосохранение при выходе из Studio: кнопка Home, New, Open, выход из приложения.
-- Ручной Save (меню Options). Он добавляет новое состояние в историю и ничего не перезаписывает.
-- Save As нет. Вместо него Duplicate в галерее.
-- Crash-backup: текущее состояние бэкапится во время работы. После падения работа продолжается с того же места.
-- Настройка «Save changes prompt» (по умолчанию выкл). Когда включена, при выходе спрашивает: Discard changes / Save.
+## Saving
+- Autosave when leaving Studio: the Home button, New, Open, leaving the app.
+- Manual Save (Options menu). It adds a new state to the history and overwrites nothing.
+- There is no Save As. Duplicate in the gallery takes its place.
+- Crash backup: the current state is backed up while you work. After a crash the work continues from the same place.
+- The "Save changes prompt" setting (off by default). When enabled, it asks on exit: Discard changes / Save.
 
-## История версий
-- Версия создаётся: при создании проекта, при сетапе пустого холста, во время сессий, при ручном сохранении, при автосейве и как промежуточные архивные версии.
-- Версии без имён, опознаются по timestamp.
-- Глобальный лимит (Settings > Saving):
-  - None: только текущая версия;
-  - 1–10 последних: старейшая удаляется при переполнении;
+## Version history
+- A version is created: when a project is created, when an empty canvas is set up, during sessions, on a manual save, on autosave, and as intermediate archive versions.
+- Versions are unnamed and identified by timestamp.
+- Global limit (Settings > Saving):
+  - None: only the current version;
+  - 1–10 most recent: the oldest is deleted on overflow;
   - Unlimited.
-- После снижения лимита лишние старые версии стираются при следующем сохранении проекта.
-- UI Restore (long-press по превью → Restore):
-  - список версий, сверху новейшая;
-  - **Restore**: новый проект из выбранной версии и всех более ранних, оригинал не трогается;
-  - **Delete**: стирает выбранную версию и все более ранние, необратимо.
+- After lowering the limit, the extra old versions are wiped on the next project save.
+- Restore UI (long-press on the preview → Restore):
+  - a list of versions, newest at the top;
+  - **Restore**: a new project from the selected version and all earlier ones; the original is left untouched;
+  - **Delete**: wipes the selected version and all earlier ones, irreversibly.
 
 ## New Project creator
-- Источники:
+- Sources:
   - Blank canvas;
   - From image;
   - Pattern;
   - Challenge.
-- Также доступен через «+» в галерее и New в Options.
-- Поля:
-  - имя;
-  - ориентация (Portrait / Landscape / Square, по умолчанию текущая ориентация устройства);
-  - цвет и текстура бумаги;
-  - размер;
-  - превью;
-  - кнопка Create.
-- Размер по умолчанию: экран устройства или последний использованный.
-- Диалог размера:
-  - единицы: px, mm, cm, in;
+- Also reachable through "+" in the gallery and New in Options.
+- Fields:
+  - name;
+  - orientation (Portrait / Landscape / Square, by default the current device orientation);
+  - paper color and texture;
+  - size;
+  - preview;
+  - the Create button.
+- Default size: the device screen or the last one used.
+- Size dialog:
+  - units: px, mm, cm, in;
   - W/H, swap, lock ratio;
-  - поле DPI (только для физических единиц);
-  - показ итогового размера в px;
-  - показ максимума слоёв для этого размера.
-- Лимиты размера и числа слоёв зависят от RAM устройства. Слишком большой холст: предупреждение и автоуменьшение.
-- Пресеты:
-  - Saved (пользовательские, кнопка Save);
+  - a DPI field (only for physical units);
+  - display of the resulting size in px;
+  - display of the maximum number of layers for that size.
+- The size and layer-count limits depend on the device RAM. A canvas that is too large: a warning and automatic downscaling.
+- Presets:
+  - Saved (user-defined, the Save button);
   - Screen size;
   - Photography (13);
   - Print ISO/US (15);
   - Social (3);
   - Video/film (4).
-- Для любого пресета можно править DPI. Секции пресетов сворачиваются.
-- 7.1: настройки таймлапса и цветопрофиля для proofing перенесены в глобальные Settings.
+- The DPI of any preset can be edited. Preset sections collapse.
+- 7.1: the timelapse and color-profile settings for proofing moved to the global Settings.
 
 ### From image
-- Источники:
+- Sources:
   - Gallery;
   - Camera;
-  - Files (вкл. облако, PNTR и PSD);
-  - Search (стоковый поиск Pixabay);
-  - внутренний Clipboard.
-- Режимы:
-  - **Image**: редактируемый слой;
-  - **Reference**: пустой проект + референс;
-  - **Trace**: слой в режиме трассировки, потом может стать обычным.
-- Пиксельный размер изображения сохраняется. При увеличении холста без lock ratio картинка не искажается, добавляется пустое место.
+  - Files (including cloud, PNTR and PSD);
+  - Search (stock search via Pixabay);
+  - the internal Clipboard.
+- Modes:
+  - **Image**: an editable layer;
+  - **Reference**: an empty project + a reference;
+  - **Trace**: a layer in trace mode, which can later become a normal one.
+- The pixel size of the image is preserved. When the canvas is enlarged without lock ratio, the picture is not distorted; empty space is added.
 
-### Справка по DPI
-- Пресеты:
-  - 600 dpi: качественная печать;
-  - 300 dpi: средняя;
-  - 72 dpi: экран, дефолт для JPG/PNG.
-- Внутреннее хранение в px.
+### DPI reference
+- Presets:
+  - 600 dpi: high-quality print;
+  - 300 dpi: medium;
+  - 72 dpi: screen, the default for JPG/PNG.
+- Internal storage is in px.
 
 ## Pattern project
-- Холст повторяется во все стороны в реальном времени.
-- Внутренний прямоугольник = тайл, он и экспортируется. Внешний = холст.
-- Тайл = 1/2 размеров холста (тайл 1024² требует холст 2048²). Тайл может быть неквадратным.
-- Работают все кисти, слои, симметрии, Pattern tools.
-- Ограничения, могут работать неожиданно:
+- The canvas repeats in all directions in real time.
+- The inner rectangle = the tile, and it is what gets exported. The outer one = the canvas.
+- The tile = 1/2 of the canvas dimensions (a 1024² tile requires a 2048² canvas). The tile may be non-square.
+- All brushes, layers, symmetries and Pattern tools work.
+- Limitations, which may behave unexpectedly:
   - Crop, Resize, Straighten;
   - Linear gradient, Pattern fill;
   - Liquify;
   - Smart cloning;
-  - трансформации.
-- Экспорт: один тайл (PNG рекомендовано, JPG, WebP) и PNTR. PSD нельзя.
-- Использование тайла: текстура кисти, pattern fill, текстура бумаги.
+  - transformations.
+- Export: a single tile (PNG recommended, JPG, WebP) and PNTR. PSD is not possible.
+- Uses of the tile: brush texture, pattern fill, paper texture.
 
 ## Challenge project
-- Заданное художественное упражнение. Детали в доке не раскрыты.
+- A given art exercise. The details are not disclosed in the doc.
 
 ## Project gallery
-- Простой файловый менеджер:
-  - секция папок сверху;
-  - превью проектов;
-  - имя и дата изменения.
-- Превью обновляется при каждом сохранении.
-- Long-press + drag: перестановка. Drop на папку: переместить в неё.
-- Контекстное меню проекта:
+- A simple file manager:
+  - a folders section at the top;
+  - project previews;
+  - name and modification date.
+- The preview is updated on every save.
+- Long-press + drag: reordering. Drop onto a folder: move into it.
+- Project context menu:
   - Rename;
-  - Duplicate (мультивыбор);
-  - Share (экспорт PNTR);
+  - Duplicate (multi-select);
+  - Share (PNTR export);
   - Set as Template / Set as Project;
-  - Restore (история версий);
-  - Ungroup (вынести из папки);
-  - Delete (необратимо).
-- Папки:
-  - вложенность без лимита;
-  - переупорядочивание;
-  - Rename, Ungroup (на уровень выше);
-  - папку нельзя перетащить в папку;
-  - стрелка «вверх» для навигации.
-- Шаблоны:
-  - открытие шаблона создаёт копию;
-  - на превью синяя звезда;
-  - хранят размеры, бумагу, слои, последние кисти, свотч-палитры;
-  - не показываются в Recent.
-- Свайп вправо: возврат на Home.
+  - Restore (version history);
+  - Ungroup (take out of the folder);
+  - Delete (irreversible).
+- Folders:
+  - unlimited nesting;
+  - reordering;
+  - Rename, Ungroup (one level up);
+  - a folder cannot be dragged into a folder;
+  - an "up" arrow for navigation.
+- Templates:
+  - opening a template creates a copy;
+  - a blue star on the preview;
+  - they store sizes, paper, layers, recent brushes, swatch palettes;
+  - they are not shown in Recent.
+- Swipe right: return to Home.
 
 ## Home: Discover
-- Вкладка с онлайн-контентом (см. 27-cloud-account-ai-online).
+- A tab with online content (see 27-cloud-account-ai-online).

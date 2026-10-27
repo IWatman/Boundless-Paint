@@ -1,13 +1,13 @@
-# ibisPaint: слои
+# ibisPaint: layers
 
-Источник: ibispaint.com/lecture №5, 24, 29–32, 34, 95, 96, 135, 153, 156, 163, 173, 180, 191, 195.
+Source: ibispaint.com/lecture №5, 24, 29–32, 34, 95, 96, 135, 153, 156, 163, 173, 180, 191, 195.
 
 ## Layer Window
-- Строка слоя: видимость, **Reorder handle** (drag), opacity.
-- **Selection Layer** (розовый, всегда сверху): выделение рисуется кистью и ластиком, отображается голубым. Цвет на нём недоступен.
-- Кнопки:
-  - **Clear Layer** (с выделением: только выделенное);
-  - **Invert Layer Color** (негатив, с выделением: только выделенное);
+- Layer row: visibility, **Reorder handle** (drag), opacity.
+- **Selection Layer** (pink, always on top): the selection is drawn with a brush and an eraser and is shown in light blue. Color is unavailable on it.
+- Buttons:
+  - **Clear Layer** (with a selection: only the selected area);
+  - **Invert Layer Color** (negative; with a selection: only the selected area);
   - **Move Layer** (transform);
   - **Flip Layer H / V**;
   - Merge Down;
@@ -15,102 +15,102 @@
   - Edit Adjustment Layer;
   - Add Layer;
   - **Import from Photo Library**;
-  - **Flip Canvas H / V** (все слои);
+  - **Flip Canvas H / V** (all layers);
   - **Clipping**;
-  - **Alpha Lock** (не для папок и векторных);
+  - **Alpha Lock** (not for folders and vector layers);
   - Opacity.
 - Command menu (︙):
-  - **Clear White (Grayscale)**: в серый + белое становится прозрачным (для скана лайнарта);
-  - **Clear White (Color)**: белое становится прозрачным с сохранением цвета;
-  - **Select Opacity** (выделение по альфе);
+  - **Clear White (Grayscale)**: to gray + white becomes transparent (for a scanned line art);
+  - **Clear White (Color)**: white becomes transparent while the color is preserved;
+  - **Select Opacity** (selection by alpha);
   - Rename;
-  - **Rasterize** (вектор → растр);
-  - **Save Layer as Transparent PNG** (слой или папку в фотоальбом).
+  - **Rasterize** (vector → raster);
+  - **Save Layer as Transparent PNG** (a layer or a folder into the photo album).
 - Add Special Layer:
   - Add Folder;
   - **Add Vector Layer**;
   - Add Adjustment Layer;
-  - Duplicate (слой или папка);
-  - **Add Layer from Folder** (копия-композит папки);
-  - **Add Layer from Canvas** (композит всего холста новым слоем сверху).
+  - Duplicate (a layer or a folder);
+  - **Add Layer from Folder** (a flattened copy of the folder);
+  - **Add Layer from Canvas** (a composite of the whole canvas as a new layer on top).
 - Background row:
   - Background Color;
-  - **Transparent (Light / Dark)** шахматка;
+  - **Transparent (Light / Dark)** checkerboard;
   - **Canvas Paper**.
-- Blending mode list (+ пункт **Screentone**).
-- **Floating Layer Window** (планшет/ПК): drag за Move Bar, ресайз за углы и края, Close.
+- Blending mode list (+ the **Screentone** item).
+- **Floating Layer Window** (tablet/PC): drag by the Move Bar, resize by the corners and edges, Close.
 - Settings:
-  - Layer Row Height (обычная и floating);
+  - Layer Row Height (normal and floating);
   - Drag Left Side to Reorder;
   - **Thumbnail: Whole / Only Contents**;
   - Set Added Layer as Current.
-- Число слоёв без лимита (ограничено памятью).
+- The number of layers is unlimited (limited by memory).
 
-## Папки
-- Add Folder над выбранным слоем.
-- Вход в папку: свайп reorder-handle вправо (только слой прямо под папкой). Выход: свайп влево (нижний слой папки).
-- Тап по превью = свернуть/развернуть. Rename.
-- **Move Folder**: трансформ всех слоёв папки вместе. Если внутри vector или adjustment, диалог: Yes (растеризовать), No (трансформировать только то, что можно), Cancel.
+## Folders
+- Add Folder above the selected layer.
+- Entering a folder: swipe the reorder handle to the right (only from the layer directly under the folder). Leaving: swipe left (the bottom layer of the folder).
+- Tapping the preview = collapse/expand. Rename.
+- **Move Folder**: transforms all the layers of the folder together. If there is a vector or adjustment layer inside, a dialog: Yes (rasterize), No (transform only what is possible), Cancel.
 
 ## Vector layer
-- Линии хранятся как вершины и пути («brush shapes»). Можно масштабировать без потерь, после рисования менять кисть, толщину, цвет.
-- Создание: Add Vector Layer или кисти Vector Dip Pen / Vector Felt Tip Pen (автоматически создают слой).
+- Lines are stored as vertices and paths ("brush shapes"). They can be scaled without loss, and after drawing you can change the brush, thickness and color.
+- Creation: Add Vector Layer, or the Vector Dip Pen / Vector Felt Tip Pen brushes (they create the layer automatically).
 - Vector tool:
-  - тап = выбрать фигуру;
-  - drag по диагонали = мультивыбор;
-  - тап повторно = снять;
-  - drag/zoom/rotate выбранного;
-  - Edit (кисть, тип линии, цвет).
+  - tap = select a shape;
+  - drag diagonally = multi-select;
+  - tap again = deselect;
+  - drag/zoom/rotate the selection;
+  - Edit (brush, line type, color).
 - Vector Command menu:
   - **Edit Vertices**;
   - Bring to Front / Send to Back / Reorder Shapes;
   - Flip H/V;
   - Deselect;
   - Delete;
-  - **Convert to Polyline** (прямые, rect, polygon из Drawing Tool);
-  - **Convert to Curve** (круг, эллипс);
+  - **Convert to Polyline** (straight lines, rect, polygon from the Drawing Tool);
+  - **Convert to Curve** (circle, ellipse);
   - **Break Loop / Make Loop**;
   - **Simplify** (Strength, Angle Threshold, Show Points).
 - Edit Vertices:
-  - drag вершин;
-  - выделение рамкой;
+  - drag vertices;
+  - marquee selection;
   - Delete Selected Vertices;
-  - long-press по вершине = режим ручек.
-  - Ручки: **Smooth** (связаны, симметричная длина), **Normal** (связаны, длины раздельно), **Angle** (независимы).
-- Плотность вершин зависит от скорости мазка.
+  - long-press on a vertex = handle mode.
+  - Handles: **Smooth** (linked, symmetric length), **Normal** (linked, separate lengths), **Angle** (independent).
+- The density of the vertices depends on the stroke speed.
 - **Vector Eraser**:
-  - Mode: **Up to Intersection** (до пересечения) / **Entire Line**;
+  - Mode: **Up to Intersection** / **Entire Line**;
   - Line End: Tapered / Round;
-  - обвести короткую линию = удалить.
-- Растровый ластик на векторе создаёт невидимые **eraser shapes** (маскирующие фигуры, их можно двигать). При merge могут скрыть линии нижнего слоя, лечится через Bring to Front.
-- На векторе недоступно: Blur, Smudge, Alpha Lock, Perspective/Mesh transform, фильтры. Нужно Rasterize (необратимо).
+  - tracing a short line over something = delete it.
+- The raster eraser on a vector layer creates invisible **eraser shapes** (masking shapes that can be moved). On merge they can hide the lines of the layer below; this is fixed with Bring to Front.
+- Unavailable on a vector layer: Blur, Smudge, Alpha Lock, Perspective/Mesh transform, filters. Rasterize is required (irreversible).
 
 ## Adjustment layer
-- Add Special Layer → Add Adjustment Layer → выбор фильтра из Filter Selector → параметры → ✓.
-- Действует на все слои ниже. **Readjust**. Сила = opacity слоя.
+- Add Special Layer → Add Adjustment Layer → choose a filter in the Filter Selector → parameters → ✓.
+- It acts on all layers below. **Readjust**. The strength = the layer opacity.
 - Settings: Save Adjustment Layer Parameters, Reset.
-- Список типов = подмножество фильтров (Adjust Color и др.), см. 17/18.
+- The list of types = a subset of the filters (Adjust Color and others), see 17/18.
 
-## Clipping и Alpha Lock
-- Clipping к слою ниже. Alpha Lock сохраняет альфу пикселей.
+## Clipping and Alpha Lock
+- Clipping to the layer below. Alpha Lock preserves the alpha of the pixels.
 
-## Screentone (свойство слоя)
-- Blend mode «Screentone» превращает слой в растр-тон (паттерн, например Dot L6). Плотность тона = яркость цвета.
-- Красится кистью или заливкой. 46 тонов (store listing). Подробнее в 21.
+## Screentone (a layer property)
+- The "Screentone" blend mode turns the layer into a halftone screen (a pattern, for example Dot L6). The density of the tone = the brightness of the color.
+- It is painted with a brush or a fill. 46 tones (store listing). More in 21.
 
 ## Canvas Paper
-- Фон-текстура (22+ бумаг: Cloth, Fabric, Gauze, Steel Plate, Glass, Carpet, Japanese Paper, Mat 1–4, Normal 1–3, Rough 1–4, Streak 1–2, Watercolor 1–2, Crumpled 1–2). Регулируется opacity. Затемняет холст.
-- Background color холста-подложки (Settings) — это цвет рабочей области, не арта.
+- A background texture (22+ papers: Cloth, Fabric, Gauze, Steel Plate, Glass, Carpet, Japanese Paper, Mat 1–4, Normal 1–3, Rough 1–4, Streak 1–2, Watercolor 1–2, Crumpled 1–2). Opacity is adjustable. It darkens the canvas.
+- The background color of the backing canvas (Settings) is the color of the work area, not of the artwork.
 
 ## Contents Layer Selection
-- Пипетка или quick eyedropper показывает кнопку с именем слоя, на котором нарисован пиксель под курсором. Тап = сделать текущим.
-- Alt+Shift+drag (Option+Shift на Mac). Отключается в Settings.
+- The eyedropper or the quick eyedropper shows a button with the name of the layer on which the pixel under the cursor is painted. A tap = make it current.
+- Alt+Shift+drag (Option+Shift on Mac). Disabled in Settings.
 
-## Что добавить к IP-модели
-- Vector layer + vector tool + vector eraser.
-- Selection Layer как редактируемый слой (у IP маска редактируется в workspace, это эквивалент).
+## What to add to the IP model
+- A vector layer + vector tool + vector eraser.
+- Selection Layer as an editable layer (in IP the mask is edited in the workspace, which is the equivalent).
 - Clear White, Invert Layer, Flip layer/canvas H/V, Add Layer from Canvas/Folder, Save Layer as PNG.
 - Contents Layer Selection.
 - Thumbnail: Only Contents.
-- Screentone как свойство слоя.
+- Screentone as a layer property.
 - Transparent bg light/dark.

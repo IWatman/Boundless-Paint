@@ -1,32 +1,32 @@
-# Infinite Painter: перспективные сетки
+# Infinite Painter: perspective grids
 
-Источник: User Guide /painter/perspective/*.
+Source: User Guide /painter/perspective/*.
 
-## Типы (6)
-| Сетка | Геометрия | Ручки |
+## Types (6)
+| Grid | Geometry | Handles |
 |---|---|---|
-| 1pt | 1 VP | move VP (в т.ч. за холстом) |
-| 2pt | 2 VP, вертикали параллельны | 2 белые ручки VP, горизонт неявный |
-| 3pt | 3 VP, вертикали сходятся | ручки VP |
-| Curvilinear (5pt, fish-eye) | центр + 4 VP по сторонам контрольного круга | control handles (масштаб/VP), move |
-| Isometric | 3 направления через 120°, без сокращения | — |
-| 2D grid | ортогональная, квадрат по умолчанию | size, ratio |
-- Isometric и 2D grid спрятаны в прокручиваемом ряду.
-- Численных настроек нет: не CAD.
+| 1pt | 1 VP | move the VP (including off the canvas) |
+| 2pt | 2 VPs, verticals stay parallel | 2 white VP handles, the horizon is implicit |
+| 3pt | 3 VPs, the verticals converge | VP handles |
+| Curvilinear (5pt, fish-eye) | a center + 4 VPs at the sides of a control circle | control handles (scale/VP), move |
+| Isometric | 3 directions at 120°, no foreshortening | — |
+| 2D grid | orthogonal, a square by default | size, ratio |
+- Isometric and 2D grid are hidden in a scrollable row.
+- There are no numeric settings: it is not CAD.
 
-## Контролы (одинаковые у всех)
+## Controls (the same for all)
 - Tool settings:
   - Lock grid;
-  - **Snap** (дефолт ON);
-  - **Visibility** (дефолт ON);
+  - **Snap** (default ON);
+  - **Visibility** (default ON);
   - Reset.
 - Mini-toolbar: Close, Snap, Visibility.
-- Скрытая сетка продолжает снапить.
+- A hidden grid keeps snapping.
 
 ## Snapping
-- Свободные мазки идут к любой VP. Направление выбирается по началу мазка. Красные направляющие у курсора в реальном времени.
-- Rectangle и Circle ложатся на виртуальные плоскости (см. 11-shapes). Цветные направляющие.
-- Line в 3D не снапится. В 2D grid снапится к пересечениям.
-- 2D grid: свободные мазки параллельны линиям сетки, но к самим линиям не прилипают. Шейпы снапятся к пересечениям.
-- Остальные инструменты снап игнорируют, направляющие могут показываться.
-- Совет из доки: VP далеко от холста = «нормальный объектив», близко = fish-eye.
+- Free strokes go toward any VP. The direction is chosen by the start of the stroke. Red guides at the cursor in real time.
+- Rectangle and Circle settle onto virtual planes (see 11-shapes). Colored guides.
+- Line does not snap in 3D. In a 2D grid it snaps to the intersections.
+- 2D grid: free strokes are parallel to the grid lines but do not stick to the lines themselves. Shapes snap to the intersections.
+- The other tools ignore snapping, though guides may be shown.
+- A tip from the doc: a VP far from the canvas = a "normal lens", close = fish-eye.

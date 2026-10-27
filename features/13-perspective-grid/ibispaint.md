@@ -1,22 +1,22 @@
-# ibisPaint: перспектива
+# ibisPaint: perspective
 
-Источник: ibispaint.com/lecture №81/90, 185.
+Source: ibispaint.com/lecture №81/90, 185.
 
-- Перспективной сетки как у IP нет. Есть:
+- There is no perspective grid like IP's. What exists:
   - **Perspective Array Ruler**:
-    - куб-решётка Division X/Y/Z;
+    - a cube lattice, Division X/Y/Z;
     - Phase;
     - Initial Position 1pt/2pt/3pt;
     - Face/Vertex knobs;
     - Face Selection;
     - Array Selection;
     - Lock;
-    - рисование в work-cell тиражируется по решётке.
-  - **Radial Ruler** с несколькими центрами в точках схода (Add/Select Radial Ruler).
-  - **Straight Ruler** для вертикалей.
-  - Transform → Perspective Form (+Repeat) для текстур.
-  - **Grid** в View menu: 2 сетки с интервалами и цветами, Position X/Y.
+    - drawing in the work-cell is replicated across the lattice.
+  - **Radial Ruler** with several centers at the vanishing points (Add/Select Radial Ruler).
+  - **Straight Ruler** for verticals.
+  - Transform → Perspective Form (+Repeat) for textures.
+  - **Grid** in the View menu: 2 grids with intervals and colors, Position X/Y.
 
-## Сопоставление с IP
-- IP 6 сеток со snap — основа.
-- Добавить: «array в перспективе» (тиражирование ячейки), двойную 2D-сетку с цветами и интервалами как view-overlay (у IP 2D grid есть, но одна).
+## Mapping to IP
+- IP's 6 grids with snapping are the foundation.
+- To add: "array in perspective" (replication of a cell), and a double 2D grid with colors and intervals as a view overlay (IP has a 2D grid, but only one).

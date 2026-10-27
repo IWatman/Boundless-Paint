@@ -1,130 +1,130 @@
-# Infinite Painter: кисти (библиотека, режимы, управление)
+# Infinite Painter: brushes (library, modes, management)
 
-Источник: User Guide /painter/brushes/*. Параметры движка лежат в `04-brush-engine-settings/`.
+Source: User Guide /painter/brushes/*. The engine parameters live in `04-brush-engine-settings/`.
 
-## Понятие кисти
-- Кисть: любой инструмент, который в реальном времени следует за стилусом или пальцем. Это и перо, и мастихин.
-- Кисть может красить, смешивать, стирать или копировать пиксели (clone).
-- Анатомия:
-  - head bitmap (или дефолтный круглый);
-  - texture (опционально);
-  - параметры и эффекты (>100);
-  - результат пишется только в активный слой;
-  - текстура бумаги (Paper layer) влияет на все мазки независимо от текстуры кисти.
+## The concept of a brush
+- A brush: any tool that follows the stylus or finger in real time. That includes both a pen and a palette knife.
+- A brush can paint, blend, erase or copy pixels (clone).
+- Anatomy:
+  - a head bitmap (or the default round one);
+  - a texture (optional);
+  - parameters and effects (>100);
+  - the result is written only to the active layer;
+  - the paper texture (Paper layer) affects all strokes regardless of the brush texture.
 
-## Режимы кисти (на main toolbar)
-- **Paint** (B): кладёт цвет. Спецэффекты работают только здесь. Чистые блендеры (Colorless Blender, Palette Knife) цвет не кладут.
-- **Blend** (K): размазывает цвета активного слоя. Спецэффекты игнорируются. Вместо цвета кнопка-шестерёнка, она открывает:
-  - Blur (0 = перенос отдельных пикселей);
-  - Pull (длина мазка-смаза);
-  - Flow (множитель к Flow головы только при блендинге);
-  - Sample lower layers: глобально для всех Blend-кистей. Сэмплит активный и нижние видимые слои, пишет только в активный.
-- **Erase** (E): стирает в прозрачность. Работает любая кисть, эффекты игнорируются.
-- **Clone**: квазикисть (см. 20-cloning).
-- Для каждого режима выбирается своя кисть. Любая кисть доступна в любом режиме.
-- Пальцу можно назначить другой режим, чем стилусу (Settings).
-- Очистить слой целиком: Clear в опциях слоя или long-press Undo.
+## Brush modes (on the main toolbar)
+- **Paint** (B): lays down color. Special effects work only here. Pure blenders (Colorless Blender, Palette Knife) lay down no color.
+- **Blend** (K): smudges the colors of the active layer. Special effects are ignored. Instead of the color there is a gear button, which opens:
+  - Blur (0 = transfer of individual pixels);
+  - Pull (the length of the smudge stroke);
+  - Flow (a multiplier for the head Flow, only when blending);
+  - Sample lower layers: global for all Blend brushes. It samples the active and the lower visible layers and writes only to the active one.
+- **Erase** (E): erases to transparency. Any brush works, effects are ignored.
+- **Clone**: a quasi-brush (see 20-cloning).
+- A separate brush is chosen for each mode. Any brush is available in any mode.
+- A finger can be assigned a different mode than the stylus (Settings).
+- Clearing a whole layer: Clear in the layer options or a long-press on Undo.
 
 ## Brush selector
-- Открывается повторным тапом по иконке режима.
-- Части окна:
-  - текущая папка;
-  - превью текущей кисти + кнопки управления;
-  - список папок (скролл);
-  - кисти папки (тап = выбрать для текущего режима).
-- Спецпапки:
-  - **Recent**: кисти этого проекта, автоматически;
-  - **Favorites**: отдельные для каждого режима, сердечко-тоггл, при первом запуске предзаполнены;
-  - **Created**: новые кисти;
-  - **Downloads**: скачанные или импортированные;
-  - Custom: без лимита, иконка = первые 2 символа имени или эмодзи в начале имени;
-  - Built-in: со своими иконками.
-- Кнопки:
-  - Add (создать или импортировать);
+- Opened by tapping the mode icon again.
+- Parts of the window:
+  - the current folder;
+  - a preview of the current brush + control buttons;
+  - the list of folders (scrolling);
+  - the brushes of the folder (tap = select for the current mode).
+- Special folders:
+  - **Recent**: the brushes of this project, automatically;
+  - **Favorites**: separate for each mode, a heart toggle, pre-filled on first launch;
+  - **Created**: new brushes;
+  - **Downloads**: downloaded or imported ones;
+  - Custom: no limit, the icon = the first 2 characters of the name or an emoji at the start of the name;
+  - Built-in: with their own icons.
+- Buttons:
+  - Add (create or import);
   - Edit (Brush Editor);
   - Options;
   - Favorite;
-  - Reset (заводские настройки).
+  - Reset (factory settings).
 
 ## Brush options menu
-- Rename: можно вернуть оригинальное имя у встроенных.
-- Duplicate: копия помнит родителя.
-- Share: экспорт `.prbr`.
+- Rename: built-in brushes can be given back their original name.
+- Duplicate: the copy remembers its parent.
+- Share: export to `.prbr`.
 - Reset.
-- Remove: убрать из папки. Custom-кисть возвращается в Created/Downloads, встроенная в исходную папку.
-- Delete: навсегда, для custom.
-- Hide: для встроенных, удалить их нельзя.
+- Remove: take it out of the folder. A custom brush returns to Created/Downloads, a built-in one to its original folder.
+- Delete: permanently, for custom brushes.
+- Hide: for built-in ones, they cannot be deleted.
 
-## Папки
-- Создание, Rename (и встроенных тоже), Share (вся папка → пак `.przp`, имя папки = имя пака), Hide (кнопка «показать скрытые»), Delete (кисти возвращаются в исходные контейнеры).
-- Удалённые встроенные кисти восстанавливаются по папке: long-press → Restore.
-- Имена папок: любой Unicode.
-- Перенос кисти: long-press + drag на папку.
-- Импортированный `.przp` = новая папка.
+## Folders
+- Creation, Rename (built-in ones too), Share (the whole folder → a `.przp` pack, the folder name = the pack name), Hide (a "show hidden" button), Delete (the brushes return to their original containers).
+- Deleted built-in brushes are restored per folder: long-press → Restore.
+- Folder names: any Unicode.
+- Moving a brush: long-press + drag onto a folder.
+- An imported `.przp` = a new folder.
 
-## Быстрые настройки
-- Size: виртуальный слайдер (drag от кнопки), клавиши `[` `]`, HUD.
+## Quick settings
+- Size: a virtual slider (drag from the button), the `[` `]` keys, the HUD.
 - Size popup:
   - live preview;
   - Size;
-  - Angle головы;
-  - Color blending mode кисти;
-  - кнопка Brush Editor.
+  - Head angle;
+  - the brush color blending mode;
+  - the Brush Editor button.
 - Opacity popup:
-  - Opacity (на весь мазок);
-  - Flow (на каждый штамп);
-  - Softness (размытие края головы).
-  - Тап по имени параметра назначает его на виртуальный слайдер и жест 3 пальца по горизонтали.
-- Изменения пишутся в определение кисти сразу при закрытии попапа. Undo нет, есть Reset.
+  - Opacity (for the whole stroke);
+  - Flow (per dab);
+  - Softness (blurring of the head edge).
+  - Tapping a parameter name assigns it to the virtual slider and to the horizontal 3-finger gesture.
+- Changes are written into the brush definition as soon as the popup closes. There is no undo, only Reset.
 
-## Создание кисти
-- Пути:
+## Creating a brush
+- Paths:
   - Add brush → Brush Creator;
-  - скачать из Community;
-  - импорт стороннего пака;
-  - из выделения (fragment → голова кисти).
+  - download from Community;
+  - import a third-party pack;
+  - from a selection (fragment → brush head).
 - **Brush Creator**:
-  - имя;
-  - тип-пресет (общий шаблон);
-  - превью мазка;
-  - head bitmap (пусто = круг);
-  - texture (опционально);
-  - Confirm → папка Created;
-  - дальше доводка в Editor.
-- Селектор head/texture:
-  - встроенные пресеты + секция Imported;
-  - импорт из Gallery, Camera, Files, Pixabay search, Clipboard;
-  - удаление импортированного: long-press → Delete. Предупреждение: битмап может использоваться несколькими кистями.
-- Семантика битмапа: яркость = покрытие, белый красит, чёрный прозрачен. Тоггл Invert.
-  - Встроенные головы хранятся black-on-transparent и инвертируются по умолчанию.
-  - Принимаются: white/black, black/white, white/transparent, black/transparent, full-color (± alpha).
+  - name;
+  - a type preset (a common template);
+  - stroke preview;
+  - head bitmap (empty = a circle);
+  - texture (optional);
+  - Confirm → the Created folder;
+  - further refinement in the Editor.
+- The head/texture selector:
+  - built-in presets + an Imported section;
+  - import from Gallery, Camera, Files, Pixabay search, Clipboard;
+  - deleting an imported one: long-press → Delete. Warning: the bitmap may be used by several brushes.
+- Bitmap semantics: brightness = coverage, white paints, black is transparent. An Invert toggle.
+  - Built-in heads are stored black-on-transparent and are inverted by default.
+  - Accepted: white/black, black/white, white/transparent, black/transparent, full-color (± alpha).
 
-## Community и сторонние кисти
-- Community: бесплатно, простой список без категорий и поиска, сорт по дате, мультивыбор, уже скачанные подсвечены.
-- Сторонние паки: `.przp` (набор) и `.prbr` (одна кисть). Импорт через Files. Пак не распаковывать, иначе повреждение.
-- Совместимости с ABR (Photoshop) и Procreate нет.
+## Community and third-party brushes
+- Community: free, a simple list with no categories or search, sorted by date, multi-select, already downloaded ones are highlighted.
+- Third-party packs: `.przp` (a set) and `.prbr` (a single brush). Import through Files. Do not unpack a pack, otherwise it gets corrupted.
+- There is no compatibility with ABR (Photoshop) or Procreate.
 
-## Процедурные кисти
-- **Fill brushes**: без головы, принимают фильтры и цветокоррекции. Screentone и particles не работают, watercolor ограничен. См. 09-fill.
-- **Harmony brushes**: алгоритмические. Рисуют паттерн тонких линий по траектории, плотность зависит от длины и формы мазка. Головы нет, Size = толщина линий.
-  - Список: Sketchy, Shaded, LongFur, ShortFur, Ribbons, Curvy, Grid, Circles, Squares.
+## Procedural brushes
+- **Fill brushes**: no head, they accept filters and color adjustments. Screentone and particles do not work, watercolor is limited. See 09-fill.
+- **Harmony brushes**: algorithmic. They draw a pattern of thin lines along the trajectory, and the density depends on the length and shape of the stroke. There is no head, Size = the line thickness.
+  - The list: Sketchy, Shaded, LongFur, ShortFur, Ribbons, Curvy, Grid, Circles, Squares.
 
-## Встроенная библиотека (v7, ~168–172 кистей, 16 категорий)
-В [скобках] спецэффект кисти.
+## Built-in library (v7, ~168–172 brushes, 16 categories)
+In [brackets] the special effect of the brush.
 - **Pencils (14)**: 2B, HB, 6B, Proko, Technical, Coarse, Concept, Waxy, Old Pencil; Cloth/Fiber Shader, Hatching, Cross Shader [screentone], Scratch Shader.
 - **Pens (20)**: Solid, Soft, Fine Tip, Manga Inker, Tapered Inker, Old/Coarse/Dry Inker, Leaky, Pilot [particle], Gel, Velocity Pen [particle], Fountain, Fineliner, Signature, Slanted Inker, Torn Ink, Ink Wash [watercolor], Velocity Inker [watercolor], Pixel Pen.
 - **Calligraphy (8)**: Monoline, Oval Lettering, Soft Taper, Floral Pistil, Chalk Signage, Split Nib, Raised Edge, Right Slant.
 - **Markers (10)**: Dry Ink, Chisel Tip, Broad, Glazed, Wet, Colorless Blender, Sketch, Round, Brush Marker, Highlighter.
-- **Paint (26)**: oil, acrylic, gouache, rollers, knives (Paint Stroke, Thick Angular, Clay Roller, Dry Brush, Filbert, Flat Oil, Gouache, Palette Knife, Loaded Knife, Thick Rake, Stucco Roller, Velocity Splatter [particle] и др.).
-- **Watercolor (9)**: Wet Paper, Light/Heavy Wash, Heavy Bleed, Mostly Water, Chemical Burn, Salt Blossom, Circle Stains, Floral Stencil. Почти все [watercolor].
+- **Paint (26)**: oil, acrylic, gouache, rollers, knives (Paint Stroke, Thick Angular, Clay Roller, Dry Brush, Filbert, Flat Oil, Gouache, Palette Knife, Loaded Knife, Thick Rake, Stucco Roller, Velocity Splatter [particle], etc.).
+- **Watercolor (9)**: Wet Paper, Light/Heavy Wash, Heavy Bleed, Mostly Water, Chemical Burn, Salt Blossom, Circle Stains, Floral Stencil. Almost all [watercolor].
 - **Sprayers (12)**: airbrush soft/medium/hard, Spray Paint, Splatter [particle], Blood/Water Splatter, Flecks, Circle Drip, Sand Blaster, Cloudy, Hard Round.
 - **Chalks (7)**, **Charcoals (7)**.
-- **Design (6)**: пунктиры, точки, стрелки (Cut Out, Long Dashes, Doodle Dots, Flow Arrow, Arrows, Arrow Chain).
+- **Design (6)**: dashes, dots, arrows (Cut Out, Long Dashes, Doodle Dots, Flow Arrow, Arrows, Arrow Chain).
 - **Fills (6)**: Solid, Screentone, Debris, Grunge, Scratch, Checker.
 - **Glow (10)**: Light Pen, Neon, Sparkler [particle], Soft Glow, Bokeh, Scene Glow, Combustion, Flame Ribbon, Light Hairs, Stardust [particle].
-- **Misc (13)**: 3D-кисти Twisty/Tube/Ribbon 3D, Newspaper Transfer, губки, Smoke, Outliner, штампы Roses и Stars.
+- **Misc (13)**: the Twisty/Tube/Ribbon 3D brushes, Newspaper Transfer, sponges, Smoke, Outliner, the Roses and Stars stamps.
 - **Screentone (7)**: Dash 45, Denimite, Dot 45, Halftone, Tone Shader, V/H Lines.
-- **Textures (8)**: Bricks, Wood, Pebbles, Isometric/Standard Grid и др.
-- **Harmony (9)**: список выше.
+- **Textures (8)**: Bricks, Wood, Pebbles, Isometric/Standard Grid, etc.
+- **Harmony (9)**: the list above.
 
-Примечание для clean-room: имена встроенных кистей не переносить, делать свою библиотеку по категориям.
+Note for the clean room: do not carry over the built-in brush names; build our own library by category.

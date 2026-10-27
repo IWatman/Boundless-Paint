@@ -1,10 +1,10 @@
-# Infinite Painter: рабочее пространство, UI, жесты
+# Infinite Painter: workspace, UI, gestures
 
-Источник: User Guide, раздел Studio workspace (/painter/studio/*).
+Source: User Guide, the Studio workspace section (/painter/studio/*).
 
-## Структура Studio
-- Единое рабочее пространство. Общие контролы на месте при любом инструменте.
-- Инструменты с отдельным workspace (модальный режим):
+## Studio structure
+- A single workspace. The shared controls stay in place with any tool.
+- Tools with their own workspace (modal mode):
   - Selection;
   - Fill;
   - Transform;
@@ -13,112 +13,112 @@
   - Liquify;
   - Clipboard.
 
-### Всегда видимо
-- Home: закрыть, сохранить, на Home.
-- Два Tools-меню:
+### Always visible
+- Home: close, save, back to Home.
+- Two Tools menus:
   - **Creative**: Fill, Text, Clone, Guides (5), Shapes (5), Symmetry, Perspective (6), View;
   - **Editing**: Selection, Transform, Adjustments, Filters, Liquify, Patterns, Canvas.
-- Тоггл Layer panel.
+- The Layer panel toggle.
 - Options menu: New, Open, Save, Import, Record, Export, Community, Classroom, Settings.
-- Холст.
-- Main toolbar.
-- Undo / Redo. Redo появляется только после undo.
+- The canvas.
+- The Main toolbar.
+- Undo / Redo. Redo only appears after an undo.
 
-### Условные элементы
+### Conditional elements
 - Top bar:
-  - шестерёнка Tool settings: настройки всех активных инструментов в одном меню;
-  - Selection menu и тоггл выделения, когда есть выделение;
-  - Reference menu (pushpin), когда есть референсы;
-  - Custom toolbar.
-- Mini-toolbars справа сверху для активного инструмента.
-- Попапы параметров (например, opacity).
+  - the Tool settings gear: the settings of all active tools in one menu;
+  - the Selection menu and the selection toggle, when there is a selection;
+  - the Reference menu (pushpin), when there are references;
+  - the Custom toolbar.
+- Mini-toolbars at the top right for the active tool.
+- Parameter popups (for example, opacity).
 - Shortcut T: Creative Tools.
-- Tools-меню связаны, переключаются свайпом.
-- Опция Split Tools menu: выключена → одно меню с двумя вкладками.
-- Шеврон = горизонтально прокручиваемый ряд иконок.
+- The Tools menus are linked and switch by swiping.
+- The Split Tools menu option: off → a single menu with two tabs.
+- The chevron = a horizontally scrollable row of icons.
 
 ## Main toolbar
-- Режимы кисти: **Paint**, **Blend** (размазывание), **Erase**. Повторный тап по режиму открывает выбор кисти для этого режима.
+- Brush modes: **Paint**, **Blend** (smudging), **Erase**. Tapping a mode again opens the brush selection for that mode.
 - Size:
-  - тап: попап;
-  - drag вверх/вниз: изменение размера.
+  - tap: popup;
+  - drag up/down: change the size.
 - Color:
-  - тап: Color panel;
-  - drag вверх/вниз: HSB brightness (hue сохраняется на 0% и 100%);
-  - вытягивание наружу: пипетка;
-  - при горизонтальном тулбаре оси меняются местами.
-- В Blend/Clone цвет заменяется шестерёнкой. Для кистей-эффектов вместо цвета регулятор силы эффекта.
+  - tap: the Color panel;
+  - drag up/down: HSB brightness (hue is preserved at 0% and 100%);
+  - pull outward: eyedropper;
+  - in a horizontal toolbar the axes are swapped.
+- In Blend/Clone the color is replaced by a gear. For effect brushes there is an effect-strength control instead of color.
 - Opacity:
-  - тап: попап;
-  - drag: изменение;
-  - можно переназначить на Flow или Softness.
-- Recent Colors strip (история цветов) можно пристыковать к тулбару.
-- Тулбар:
-  - переносится двумя пальцами в любое место, прилипает к краям;
-  - в нижнем углу превращается в компактную форму (legacy, для телефонов);
-  - long-press по иконке компактной формы: undock.
+  - tap: popup;
+  - drag: change;
+  - it can be reassigned to Flow or Softness.
+- The Recent Colors strip (color history) can be docked to the toolbar.
+- The toolbar:
+  - is moved with two fingers to any place and snaps to the edges;
+  - in the bottom corner it turns into a compact form (legacy, for phones);
+  - long-press on the compact-form icon: undock.
 
 ## Undo
-- Тап: undo. Long-press: очистить текущий слой (тоже отменяемо).
-- Жесты: 2 пальца = undo, 3 пальца = redo.
-- Кнопка History появляется после первого undo. Открывает слайдер истории: влево undo, вправо redo.
-- Лимит 64 шага в v7 (в разделе Gestures сказано 32: расхождение в доке).
-- Шаг = мазок или сложная операция.
-- Undo только в пределах сессии. Для долгой истории есть версии проекта.
+- Tap: undo. Long-press: clear the current layer (also undoable).
+- Gestures: 2 fingers = undo, 3 fingers = redo.
+- The History button appears after the first undo. It opens a history slider: left = undo, right = redo.
+- The limit is 64 steps in v7 (the Gestures section says 32: a discrepancy in the doc).
+- A step = a stroke or a complex operation.
+- Undo works only within a session. For a long history there are project versions.
 
 ## HUD
-- Сверху экрана. Числовые значения size, opacity, flow в реальном времени.
-- Визуальное кольцо:
-  - внутреннее = текущий размер;
-  - внешнее = максимум кисти;
-  - учитывается зум, кольцо показывает реальный размер.
-- Undo/redo тоже отображаются в HUD.
+- At the top of the screen. Real-time numeric values for size, opacity, flow.
+- A visual ring:
+  - the inner one = the current size;
+  - the outer one = the maximum brush size;
+  - zoom is taken into account, so the ring shows the real size.
+- Undo/redo are also shown in the HUD.
 
-## Кастомизация
-- Виджеты:
-  - Navigator (можно монохром для проверки тона);
+## Customization
+- Widgets:
+  - Navigator (it can be monochrome for checking tone);
   - Color wheel;
-  - Main toolbar как виджет;
+  - the Main toolbar as a widget;
   - Reference images.
-- Светлая тема (в Settings).
-- Layer panel в свёрнутом виде.
-- Custom toolbar (только планшеты):
-  - long-press по иконке инструмента → drag в top bar;
-  - перестановка, удаление (вынести наружу);
-  - иконки из Tools, Options, Layer options;
-  - число слотов зависит от экрана.
+- Light theme (in Settings).
+- The Layer panel in collapsed form.
+- Custom toolbar (tablets only):
+  - long-press a tool icon → drag it into the top bar;
+  - reorder, delete (drag it outside);
+  - icons from Tools, Options, Layer options;
+  - the number of slots depends on the screen.
 - Immersive mode:
-  - тап 4 пальцами: скрыть весь UI, инструмент остаётся активным;
-  - не скрываются: референсы, color wheel, navigator, mini-toolbars активных инструментов;
-  - жесты и клавиатура работают.
+  - a 4-finger tap: hide the whole UI, the tool stays active;
+  - what is not hidden: references, color wheel, navigator, the mini-toolbars of the active tools;
+  - gestures and the keyboard keep working.
 
-## Жесты
-- Pinch: zoom. Rotate двумя пальцами: поворот. Одновременно.
-- Быстрый pinch + отпускание: fit-to-screen.
-- Двойной тап одним пальцем: fit-to-screen (переназначаемо).
-- Long-press по холсту: назначаемое действие, по умолчанию пипетка.
-- Long-press в списках: меню опций для кистей, папок кистей, проектов, палитр, свотчей, текстур, паттернов, буфера.
-- Long-press + drag: перемещение слоёв, проектов, кистей, папок кистей, иконок тулбара.
-- 3 пальца вертикально: размер. 3 пальца горизонтально: opacity (или flow/softness). Работает и для других инструментов.
-- Touch-Alt (стилус рисует, палец касается экрана):
-  - для кистей: пипетка или назначенная Finger-функция (Blend, Erase, move canvas);
-  - Rectangle: квадрат;
-  - Line: шаг 15°;
-  - Ellipse: ось с шагом 15°;
+## Gestures
+- Pinch: zoom. Two-finger rotate: rotation. Both at the same time.
+- A quick pinch + release: fit-to-screen.
+- Double tap with one finger: fit-to-screen (reassignable).
+- Long-press on the canvas: an assignable action, eyedropper by default.
+- Long-press in lists: an options menu for brushes, brush folders, projects, palettes, swatches, textures, patterns, the clipboard.
+- Long-press + drag: moving layers, projects, brushes, brush folders, toolbar icons.
+- 3 fingers vertically: size. 3 fingers horizontally: opacity (or flow/softness). This also works for other tools.
+- Touch-Alt (the stylus draws, the finger touches the screen):
+  - for brushes: eyedropper or the assigned Finger function (Blend, Erase, move canvas);
+  - Rectangle: a square;
+  - Line: 15° steps;
+  - Ellipse: an axis in 15° steps;
   - Move: 45°;
-  - Resize: шаг 100%;
-  - Gradient / Pattern fill: ось 45°;
-  - Crop / Resize canvas: сохранить пропорции.
-- После использования стилуса часть функций доступна только стилусу (палец = навигация).
+  - Resize: 100% steps;
+  - Gradient / Pattern fill: an axis at 45°;
+  - Crop / Resize canvas: preserve the proportions.
+- After the stylus has been used, some functions are available only to the stylus (a finger = navigation).
 
-## Плавающие виджеты
-- Несколько одновременно, свободное размещение, масштаб pinch.
+## Floating widgets
+- Several at once, free placement, pinch to scale.
 - Navigator, Reference images, Color wheel.
 
 ## Reference images
-- Импорт: Import → «Import As Reference». Хранятся в проекте, лимита нет. Удаление не трогает оригинал.
-- Двумя пальцами: move, scale, rotate. Тап поднимает наверх. Можно частично за краем экрана.
-- Двойной тап: flip.
-- Drag стилусом на ✖ в центре: быстрое скрытие.
-- Сэмплинг цвета: тап стилусом, пальцем в Normal-режиме, пипетка в Color panel.
-- Reference menu: превью, видимость, удаление.
+- Import: Import → "Import As Reference". They are stored in the project, no limit. Deleting one does not touch the original.
+- Two fingers: move, scale, rotate. A tap raises it to the top. It can be partly off the edge of the screen.
+- Double tap: flip.
+- Dragging the stylus onto the ✖ in the center: quick hide.
+- Color sampling: a stylus tap, a finger in Normal mode, the eyedropper in the Color panel.
+- Reference menu: previews, visibility, deletion.

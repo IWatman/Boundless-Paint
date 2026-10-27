@@ -1,25 +1,25 @@
-# Infinite Painter: вид и навигация
+# Infinite Painter: view and navigation
 
-Источник: User Guide /painter/view/*, /studio/gestures/.
+Source: User Guide /painter/view/*, /studio/gestures/.
 
-- **Жесты**:
+- **Gestures**:
   - pinch = zoom;
-  - rotate = поворот;
-  - двумя пальцами = pan;
-  - быстрый pinch и отпускание = Fit;
-  - двойной тап = Fit (переназначаемо).
-- **Fit to screen**: холст на весь экран (Creative Tools → View).
+  - rotate = rotation;
+  - two fingers = pan;
+  - a quick pinch and release = Fit;
+  - a double tap = Fit (reassignable).
+- **Fit to screen**: the canvas fills the screen (Creative Tools → View).
 - **Flip canvas**:
-  - зеркало по горизонтали относительно центра экрана;
-  - **меняет сам артворк**: сохраняется во флипнутом виде;
-  - жест (long-press и/или double-tap, настраивается);
-  - клавиша H.
-- **Lock view**: фиксирует zoom и rotation.
-- **Navigator** (виджет):
-  - миниатюра всего холста, красный прямоугольник = текущий вид;
-  - drag, двумя пальцами scale и rotate;
-  - **Grayscale** (проверка тона, в Tool settings);
-  - **двойной тап = flip** только навигатора;
-  - открыть и закрыть иконкой в Creative Tools.
-- Immersive mode (4 пальца) см. 02.
-- Interpolation при зуме не описана (в ibisPaint есть, см. ibispaint.md).
+  - a mirror horizontally about the center of the screen;
+  - it **changes the artwork itself**: it is saved in the flipped form;
+  - a gesture (long-press and/or double-tap, configurable);
+  - the H key.
+- **Lock view**: fixes zoom and rotation.
+- **Navigator** (a widget):
+  - a thumbnail of the whole canvas, the red rectangle = the current view;
+  - drag, two fingers to scale and rotate;
+  - **Grayscale** (for checking tone, in Tool settings);
+  - **double tap = flip** of the navigator only;
+  - opened and closed with an icon in Creative Tools.
+- Immersive mode (4 fingers) see 02.
+- Interpolation when zooming is not described (ibisPaint has it, see ibispaint.md).

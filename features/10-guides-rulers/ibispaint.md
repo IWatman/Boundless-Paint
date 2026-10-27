@@ -1,35 +1,35 @@
-# ibisPaint: линейки (Ruler) и стабилизатор-инструменты
+# ibisPaint: rulers (Ruler) and the stabilizer tools
 
-Источник: ibispaint.com/lecture №43–48, 50, 51, 89, 90.
+Source: ibispaint.com/lecture №43–48, 50, 51, 89, 90.
 
-## Ruler tool (8 типов)
-| Линейка | Контролы | Назначение |
+## Ruler tool (8 types)
+| Ruler | Controls | Purpose |
 |---|---|---|
-| **Straight** | angle handle, move handle | прямые, спидлайны |
-| **Circular** | position, size | точные окружности |
-| **Elliptical** | width, position, height, angle (4 ручки) | эллипсы, баллоны |
-| **Radial** | центр (несколько, «Add Radial Ruler», выбор стрелкой) | лучи из точки, точки схода |
-| **Mirror** | Phase (угол), position | зеркальная симметрия (= IP Symmetry) |
-| **Kaleidoscope** | **Division** (кол-во секторов), **Phase** (угол) | кружево (≈ IP Kaleidoscopic/Radial) |
-| **Array** | Division X/Y (до 10×10), рамка в перспективе (drag углов), **Lock** → оранжевая work-cell | рисуешь в одной ячейке → копируется во все с перспективой |
-| **Perspective Array** | Division X/Y/Z (старт 3), **Phase**, Face Selection (Right/Front…), Vertex/Face thumbs (размер, позиция, ориентация куба), Lock | 1/2/3-точечная перспектива из кубической решётки, рисунок в work-cell тиражируется (окна, заборы) |
-- Линейки комбинируются: Perspective Array + Straight + Radial (центры в VP).
-- Опции кисти «Bind Center on Elliptical Ruler», «Billboard Display on Array Ruler» (см. 04).
+| **Straight** | angle handle, move handle | straight lines, speed lines |
+| **Circular** | position, size | precise circles |
+| **Elliptical** | width, position, height, angle (4 handles) | ellipses, balloons |
+| **Radial** | center (several, "Add Radial Ruler", selected with an arrow) | rays from a point, vanishing points |
+| **Mirror** | Phase (angle), position | mirror symmetry (= IP Symmetry) |
+| **Kaleidoscope** | **Division** (number of sectors), **Phase** (angle) | lace (≈ IP Kaleidoscopic/Radial) |
+| **Array** | Division X/Y (up to 10×10), a frame in perspective (drag the corners), **Lock** → an orange work-cell | you draw in one cell → it is copied into all of them with perspective |
+| **Perspective Array** | Division X/Y/Z (starts at 3), **Phase**, Face Selection (Right/Front…), Vertex/Face thumbs (size, position, orientation of the cube), Lock | 1/2/3-point perspective from a cubic lattice, the drawing in the work-cell is replicated (windows, fences) |
+- Rulers are combined: Perspective Array + Straight + Radial (centers at the VP).
+- The brush options "Bind Center on Elliptical Ruler" and "Billboard Display on Array Ruler" (see 04).
 
-## Стабилизатор-группа (Drawing tools в окне Stabilizer)
-- Stabilizer: Real Time / After, Fade (см. 04).
-- **Straight Line**: рисование прямой без линейки.
-- Остальные Drawing tools (Rectangle, Circle, Ellipse, Regular Polygon, Bézier, Polyline) см. 11.
+## The stabilizer group (Drawing tools in the Stabilizer window)
+- Stabilizer: Real Time / After, Fade (see 04).
+- **Straight Line**: drawing a straight line without a ruler.
+- The other Drawing tools (Rectangle, Circle, Ellipse, Regular Polygon, Bézier, Polyline) are in 11.
 
-## Сопоставление с IP
-| ibis | IP-аналог | Что делать |
+## Mapping to IP
+| ibis | IP analogue | What to do |
 |---|---|---|
-| Straight Ruler | Lines guide | IP богаче (параллель + перпендикуляр + центр). Добавить режим «только вдоль оси» |
-| Circular/Elliptical | Ellipse guide | IP богаче (дуги, радиусы, концентрика) |
-| Radial Ruler | нет (частично Perspective 1pt) | **добавить** Radial guide (лучи из точки, несколько центров) |
-| Mirror | Symmetry V/H | есть |
-| Kaleidoscope | Kaleidoscopic symmetry | есть |
-| Array Ruler | нет (Quilt pattern пост-фактум) | **добавить** Array guide (живое тиражирование в сетке + перспектива) |
-| Perspective Array | нет (Grids + Stamp) | **добавить** |
-| Stabilizer Real Time/After | Smoothness + Lazy guide | **добавить** After-режим и Fast Strokes |
-| Force Fade | Size/Flow profile | есть в IP богаче, добавить быстрый тоггл |
+| Straight Ruler | Lines guide | IP is richer (parallel + perpendicular + center). Add an "along the axis only" mode |
+| Circular/Elliptical | Ellipse guide | IP is richer (arcs, radii, concentric) |
+| Radial Ruler | none (partly Perspective 1pt) | **add** a Radial guide (rays from a point, several centers) |
+| Mirror | Symmetry V/H | exists |
+| Kaleidoscope | Kaleidoscopic symmetry | exists |
+| Array Ruler | none (Quilt pattern post factum) | **add** an Array guide (live replication in a grid + perspective) |
+| Perspective Array | none (Grids + Stamp) | **add** it |
+| Stabilizer Real Time/After | Smoothness + Lazy guide | **add** an After mode and Fast Strokes |
+| Force Fade | Size/Flow profile | IP has it in a richer form, add a quick toggle |

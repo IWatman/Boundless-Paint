@@ -1,27 +1,27 @@
-# ibisPaint: вид и навигация
+# ibisPaint: view and navigation
 
-Источник: ibispaint.com/lecture №10, 151, 166, 167, 168, 171, 81.
+Source: ibispaint.com/lecture №10, 151, 166, 167, 168, 171, 81.
 
-- Жесты: 2 пальца = pan, pinch = zoom, круг = rotate. На ПК Space / Z / R + drag, колесо.
+- Gestures: 2 fingers = pan, pinch = zoom, circle = rotate. On PC Space / Z / R + drag, the wheel.
 - **View menu**:
   - Reference Window;
-  - **Grid** + Grid Settings: 2 сетки, интервалы, цвета, позиция, ручка начала;
-  - Manga Manuscript (направляющие) + Settings;
-  - **Display when zooming: Smooth / Pixelated** (per-artwork, дефолт в Settings).
+  - **Grid** + Grid Settings: 2 grids, intervals, colors, position, an origin handle;
+  - Manga Manuscript (guides) + Settings;
+  - **Display when zooming: Smooth / Pixelated** (per artwork, the default in Settings).
 - **Reference Window**:
-  - **Canvas Mode** = навигатор (миниатюра холста);
-  - **Reference Mode** = импортированные референсы, несколько, листать `<` `>`;
+  - **Canvas Mode** = a navigator (a thumbnail of the canvas);
+  - **Reference Mode** = imported references, several of them, paged with `<` `>`;
   - Menu: Add, Remove, **Reset Reference Position**;
-  - move bar, ресайз за угол;
-  - quick eyedropper долгим нажатием;
-  - Full Screen скрывает окно;
-  - референсы не шарятся с IPV. Remove All References в Settings.
-- Flip: Invert Canvas Horizontally/Vertically (кнопки в Layer window) — меняет данные.
-- **Full Screen** кнопка (= IP immersive).
+  - a move bar, resizing by the corner;
+  - a quick eyedropper on a long press;
+  - Full Screen hides the window;
+  - references are not shared with the IPV. Remove All References in Settings.
+- Flip: Invert Canvas Horizontally/Vertically (buttons in the Layer window) — this changes the data.
+- The **Full Screen** button (= IP immersive).
 - Interpolation on Zoom In (Settings).
 
-## Что добавить к IP
-- Pixelated-режим отображения при зуме (пиксель-арт).
-- Overlay-сетка с двумя уровнями (major/minor), цветами, позицией.
+## What to add to IP
+- A pixelated display mode when zoomed (pixel art).
+- An overlay grid with two levels (major/minor), colors and position.
 - Vertical flip.
-- IP Navigator + Reference widgets покрывают Reference Window.
+- The IP Navigator + Reference widgets cover the Reference Window.
