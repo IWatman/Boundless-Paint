@@ -55,12 +55,19 @@ import app.painter.core.stroke.StrokeCommit
 import app.painter.core.stroke.StrokeContext
 import app.painter.core.stroke.StrokeEngine
 import app.painter.core.stroke.StrokeMode
+import app.painter.core.stroke.StrokeOptions
 import app.painter.core.stroke.StrokeTarget
+import app.painter.core.select.RectShape
+import app.painter.core.select.SelectMode
+import app.painter.core.select.SelectionEdits
 import app.painter.render.CanvasInputListener
 import app.painter.render.CanvasView
 import app.painter.ui.home.ProjectCardUi
 import app.painter.ui.studio.AdjustEditorUi
 import app.painter.ui.studio.BrushModeUi
+import app.painter.ui.studio.CanvasTransformUi
+import app.painter.ui.studio.RectUi
+import app.painter.ui.studio.ToolUi
 import app.painter.ui.studio.HudUi
 import app.painter.ui.studio.adjustTitleRes
 import app.painter.ui.studio.LayerUi
@@ -174,7 +181,14 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
         view.inputListener = this
         view.setDocument(doc)
         viewModelScope.launch {
-            view.viewState.collect { vs -> _state.update { it.copy(viewZoom = vs.zoom) } }
+            view.viewState.collect { vs ->
+                _state.update {
+                    it.copy(
+                        viewZoom = vs.zoom,
+                        canvasTransform = CanvasTransformUi(vs.zoom, vs.rotationDeg, vs.tx, vs.ty),
+                    )
+                }
+            }
         }
     }
 
@@ -199,7 +213,7 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
             threads = STROKE_THREADS,
         )
         val target = if (layer == null) StrokeTarget.Mask(node.id) else StrokeTarget.Layer(layer.id)
-        val engine = StrokeEngine(doc, target, brush, BrushResources.EMPTY, s.color, mode, ctx)
+        val engine = StrokeEngine(doc, target, brush, BrushResources.EMPTY, s.color, mode, ctx, StrokeOptions(clip = doc.selection.coverageOrNull()))
         stroke = engine
         strokeOnMask = layer == null
         engine.begin(p)
@@ -269,8 +283,55 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
     // ---- brush ----
 
     override fun setMode(mode: BrushModeUi) {
-        _state.update { it.copy(mode = mode) }
+        _state.update { it.copy(mode = mode, tool = ToolUi.BRUSH, selectionDraft = null) }
         syncBrushState()
+    }
+
+    // ---- selection tools ----
+
+    /** Drag origin in document pixels (clamped to the canvas). */
+    private var toolStartX = 0f
+    private var toolStartY = 0f
+
+    override val toolActive: Boolean get() = _state.value.tool == ToolUi.SELECT_RECT
+
+    override fun selectTool(tool: ToolUi) = _state.update { it.copy(tool = tool, selectionDraft = null) }
+
+    private fun clampX(x: Float) = x.coerceIn(0f, doc.width.toFloat())
+    private fun clampY(y: Float) = y.coerceIn(0f, doc.height.toFloat())
+
+    override fun onToolDown(x: Float, y: Float) {
+        if (!toolActive) return
+        toolStartX = clampX(x)
+        toolStartY = clampY(y)
+        _state.update { it.copy(selectionDraft = RectUi(toolStartX, toolStartY, toolStartX, toolStartY)) }
+    }
+
+    override fun onToolMove(x: Float, y: Float) {
+        if (!toolActive) return
+        val cx = clampX(x)
+        val cy = clampY(y)
+        _state.update {
+            it.copy(
+                selectionDraft = RectUi(minOf(toolStartX, cx), minOf(toolStartY, cy), maxOf(toolStartX, cx), maxOf(toolStartY, cy)),
+            )
+        }
+    }
+
+    override fun onToolUp(x: Float, y: Float) {
+        if (!toolActive) return
+        onToolMove(x, y)
+        val draft = _state.value.selectionDraft
+        _state.update { it.copy(selectionDraft = null) }
+        val rect = draft?.let { RectUi.between(it.left, it.top, it.right, it.bottom) } ?: return
+        val shape = RectShape(rect.left + rect.width / 2f, rect.top + rect.height / 2f, rect.width, rect.height)
+        SelectionEdits.shape(doc, shape, SelectMode.NEW, aa = true)?.let { exec(it) }
+    }
+
+    override fun onToolCancel() = _state.update { it.copy(selectionDraft = null) }
+
+    override fun deselect() {
+        SelectionEdits.deselect(doc)?.let { exec(it) }
     }
 
     override fun setBrushSize(size: Float) {
@@ -666,7 +727,20 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
 
     private val thumbCache = HashMap<String, Pair<Long, ImageBitmap?>>()
 
+    /** Publishes the selection presence and bounds from the document mask. */
+    private fun refreshSelection() {
+        val coverage = doc.selection.coverageOrNull()
+        val b = coverage?.bounds()
+        _state.update {
+            it.copy(
+                hasSelection = coverage != null,
+                selectionBounds = b?.let { r -> RectUi(r.x0.toFloat(), r.y0.toFloat(), r.x1.toFloat(), r.y1.toFloat()) },
+            )
+        }
+    }
+
     private fun refreshLayers() {
+        refreshSelection()
         val rows = ArrayList<LayerUi>()
         fun visit(group: GroupNode, depth: Int) {
             for (n in group.children.asReversed()) {

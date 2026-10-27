@@ -9,7 +9,7 @@ import kotlin.math.roundToInt
 import kotlin.math.sin
 
 /** Public, observable part of the canvas view: zoom factor and rotation in degrees (−180, 180]. */
-data class ViewState(val zoom: Float, val rotationDeg: Float)
+data class ViewState(val zoom: Float, val rotationDeg: Float, val tx: Float = 0f, val ty: Float = 0f)
 
 /**
  * Affine mapping between document pixels and view (screen) pixels:
@@ -36,7 +36,7 @@ class ViewTransform {
     private val tmp = FloatArray(2)
 
     /** Snapshot of zoom and rotation. */
-    val state: ViewState get() = ViewState(zoom, rotationDeg)
+    val state: ViewState get() = ViewState(zoom, rotationDeg, tx, ty)
 
     /** Sets all parameters at once; zoom is clamped and rotation normalized. */
     fun set(zoom: Float, rotationDeg: Float, tx: Float, ty: Float) {

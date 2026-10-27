@@ -22,6 +22,9 @@ import kotlin.math.max
  *   90° within ±3°. A quick pinch-in (zoom ratio < 0.8 within [TAP_MS]) fits the canvas.
  * - Two/three-finger taps (all down and up within [TAP_MS], movement < [TAP_SLOP_PX]) fire undo/redo.
  * - During a stroke, a tap of another finger cancels the stroke.
+ * - While [CanvasInputListener.toolActive] is true, a single pointer drives the tool
+ *   ([CanvasInputListener.onToolDown]/[onToolMove]/[onToolUp]) instead of a stroke; a second finger
+ *   cancels the tool drag and navigates, and two/three-finger taps still undo/redo.
  *
  * Must be used on the main thread.
  */
@@ -38,7 +41,7 @@ class GestureRouter(private val view: View, private val host: Host) {
     /** Emits motion-predicted points (predicted = true) after the real samples of each move. */
     var predictionEnabled: Boolean = true
 
-    private enum class State { IDLE, PENDING, STROKE, NAV, IGNORE }
+    private enum class State { IDLE, PENDING, STROKE, TOOL, NAV, IGNORE }
 
     private var state = State.IDLE
     private val predictor: MotionEventPredictor? by lazy {
@@ -142,6 +145,13 @@ class GestureRouter(private val view: View, private val host: Host) {
         strokeStart = e.eventTime
         strokeMaxMove = 0f
         val tool = e.getToolType(0)
+        if (host.listener?.toolActive == true) {
+            // Selection-style tool: raw single-pointer input in document coordinates.
+            state = State.TOOL
+            val p = point(e, 0, -1, false)
+            host.listener?.onToolDown(p.x, p.y)
+            return
+        }
         if (tool == MotionEvent.TOOL_TYPE_FINGER || tool == MotionEvent.TOOL_TYPE_UNKNOWN) {
             state = State.PENDING
             pending.add(point(e, 0, -1, false))
@@ -174,6 +184,7 @@ class GestureRouter(private val view: View, private val host: Host) {
                 }
             }
             State.NAV -> reanchor(e, -1)
+            State.TOOL -> { host.listener?.onToolCancel(); enterNav(e) }
             else -> Unit
         }
     }
@@ -219,6 +230,10 @@ class GestureRouter(private val view: View, private val host: Host) {
                     }
                 }
                 if (navActive && e.pointerCount == 2) applyNav(e)
+            }
+            State.TOOL -> { val ti = e.findPointerIndex(strokeId)
+                if (ti >= 0) { val p = point(e, ti, -1, false); host.listener?.onToolMove(p.x, p.y) }
+
             }
             else -> Unit
         }
@@ -292,6 +307,10 @@ class GestureRouter(private val view: View, private val host: Host) {
                     }
                 }
             }
+            State.TOOL -> { val ti = e.findPointerIndex(strokeId)
+                if (ti >= 0) { val p = point(e, ti, -1, false); l?.onToolUp(p.x, p.y) }
+
+            }
             else -> Unit
         }
         clear()
@@ -299,7 +318,9 @@ class GestureRouter(private val view: View, private val host: Host) {
 
     private fun onCancel() {
         view.removeCallbacks(longPressRunnable)
-        if (state == State.STROKE) { traceStroke("cancel(system)"); host.listener?.onStrokeCancel() }
+        if (state == State.STROKE) { traceStroke("cancel(system)"); host.listener?.onStrokeCancel() } else if (state == State.TOOL) {
+            host.listener?.onToolCancel()
+        }
         clear()
     }
 

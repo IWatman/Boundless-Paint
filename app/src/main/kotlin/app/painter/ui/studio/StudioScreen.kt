@@ -65,6 +65,7 @@ fun StudioScreen(
             .background(PainterTheme.colors.canvasBackground),
     ) {
         Box(Modifier.fillMaxSize()) { canvas() }
+        SelectionOverlay(state = state, modifier = Modifier.fillMaxSize())
 
         Box(
             Modifier
@@ -154,7 +155,33 @@ private fun StudioTopBar(state: StudioUiState, actions: StudioActions, modifier:
             Row(Modifier.padding(2.dp)) {
                 PainterIconButton(Icons.Outlined.Home, stringResource(R.string.cd_home), actions::openHome)
                 PainterIconButton(Icons.Outlined.AutoAwesome, stringResource(R.string.creative_tools), actions::openCreativeTools)
-                PainterIconButton(Icons.Outlined.Tune, stringResource(R.string.editing_tools), actions::openEditingTools)
+                var toolsMenu by remember { mutableStateOf(false) }
+                Box {
+                    PainterIconButton(
+                        Icons.Outlined.Tune,
+                        stringResource(R.string.editing_tools),
+                        { toolsMenu = true },
+                        tint = if (state.tool == ToolUi.BRUSH) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.primary,
+                    )
+                    DropdownMenu(expanded = toolsMenu, onDismissRequest = { toolsMenu = false }) {
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.tool_rect_select)) },
+                            onClick = {
+                                toolsMenu = false
+                                actions.selectTool(ToolUi.SELECT_RECT)
+                            },
+                        )
+                        if (state.hasSelection) {
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.deselect)) },
+                                onClick = {
+                                    toolsMenu = false
+                                    actions.deselect()
+                                },
+                            )
+                        }
+                    }
+                }
             }
         }
         Spacer(Modifier.weight(1f))

@@ -121,6 +121,8 @@
     <string name="mode_paint">Кисть</string>
     <string name="mode_blend">Растушёвка</string>
     <string name="mode_erase">Ластик</string>
+    <string name="tool_rect_select">Прямоугольное выделение</string>
+    <string name="deselect">Снять выделение</string>
     <string name="name">Название</string>
     <string name="new_canvas">Новый холст</string>
     <string name="no_recent">Нет недавних проектов</string>

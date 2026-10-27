@@ -10,6 +10,31 @@ import app.painter.core.doc.EditTarget
 import app.painter.core.history.MaskInit
 
 /** Brush mode of the main toolbar. */
+/** Active canvas tool. [BRUSH] paints with the current brush mode; [SELECT_RECT] drags a selection. */
+enum class ToolUi { BRUSH, SELECT_RECT }
+
+/** Axis-aligned document-space rectangle (selection draft and selection bounds). */
+@Immutable
+data class RectUi(val left: Float, val top: Float, val right: Float, val bottom: Float) {
+    val width: Float get() = right - left
+    val height: Float get() = bottom - top
+
+    companion object {
+        /** Normalized rect spanning two points; null when the drag is degenerate. */
+        fun between(x0: Float, y0: Float, x1: Float, y1: Float): RectUi? {
+            val r = RectUi(minOf(x0, x1), minOf(y0, y1), maxOf(x0, x1), maxOf(y0, y1))
+            return if (r.width < 1f || r.height < 1f) null else r
+        }
+    }
+}
+
+/**
+ * Document→view mapping published by the canvas (offset, zoom, rotation in degrees) so Compose
+ * layers above the GL surface can place document-space geometry.
+ */
+@Immutable
+data class CanvasTransformUi(val zoom: Float = 1f, val rotationDeg: Float = 0f, val tx: Float = 0f, val ty: Float = 0f)
+
 enum class BrushModeUi { PAINT, BLEND, ERASE }
 
 /**
@@ -82,6 +107,16 @@ data class StudioUiState(
     val paperColor: Rgba = Rgba.WHITE,
     val paperVisible: Boolean = true,
     val viewZoom: Float = 1f,
+    /** Active tool; [ToolUi.BRUSH] paints, [ToolUi.SELECT_RECT] drags a selection rectangle. */
+    val tool: ToolUi = ToolUi.BRUSH,
+    /** Live selection rectangle while dragging (document pixels), null when idle. */
+    val selectionDraft: RectUi? = null,
+    /** A selection is in effect (non-empty and active mask). */
+    val hasSelection: Boolean = false,
+    /** Bounding box of the current selection in document pixels. */
+    val selectionBounds: RectUi? = null,
+    /** Document→view mapping of the canvas, for overlays drawn by Compose. */
+    val canvasTransform: CanvasTransformUi = CanvasTransformUi(),
     /** Open adjustment editor, null when closed. */
     val adjustmentEditor: AdjustEditorUi? = null,
 )
@@ -89,6 +124,12 @@ data class StudioUiState(
 /** All user intents raised by [StudioScreen]. Display indices refer to [StudioUiState.layers]. */
 interface StudioActions {
     fun setMode(mode: BrushModeUi)
+
+    /** Selects the active tool; switching away from a selection tool drops its draft. */
+    fun selectTool(tool: ToolUi)
+
+    /** Clears the selection. */
+    fun deselect()
     fun setBrushSize(size: Float)
     fun setOpacity(opacity: Float)
     fun setFlow(flow: Float)
@@ -183,6 +224,8 @@ data class AdjustEditorUi(
 /** No-op base for previews and partial implementations. */
 open class NoOpStudioActions : StudioActions {
     override fun setMode(mode: BrushModeUi) {}
+    override fun selectTool(tool: ToolUi) {}
+    override fun deselect() {}
     override fun setBrushSize(size: Float) {}
     override fun setOpacity(opacity: Float) {}
     override fun setFlow(flow: Float) {}
