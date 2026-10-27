@@ -49,3 +49,6 @@ Found:
 | 13 | A new canvas opens with the layers panel expanded, and the name "Layer 1" is not localized | minor, M2 |
 | 14 | ✅ Autosave 2 s after the last change (not during a stroke), verified with force-stop. Was: autosave only on leaving the studio and in `onStop`: if the process was killed (adb install, crash, system), the last strokes were lost (found on the emulator 2026-10-27) | debounced save ~2 s after each history change |
 | 15 | The preview of a wide canvas in Recent shows a checkerboard at the edges instead of the card background | cosmetic |
+| 16 | The Creative tools menu (symmetry, guides, perspective, shapes) no longer fits the screen and has to be scrolled | group it into sections or a side panel like IP |
+| 17 | The live preview of a closed shape omits the closing segment and the fill; both appear only on Apply | render the closed path and fill in the preview engine (StrokeEngine closes/fills only in end()) |
+| 18 | On/off toggles in the tool bars (shape Outline/Fill, guide toggles) look the same as plain action buttons | distinct on/off styling (filled chip or check) |
