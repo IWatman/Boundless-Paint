@@ -97,7 +97,10 @@ internal fun MainToolbar(
         IconToggle(
             Icons.Outlined.Brush, stringResource(R.string.mode_paint),
             checked = state.mode == BrushModeUi.PAINT,
-            onCheckedChange = { actions.setMode(BrushModeUi.PAINT) },
+            onCheckedChange = {
+                // A tap on the active mode opens the brush browser instead of switching mode.
+                if (state.mode == BrushModeUi.PAINT) actions.toggleBrushBrowser() else actions.setMode(BrushModeUi.PAINT)
+            },
         )
         IconToggle(
             Icons.Outlined.BlurOn, stringResource(R.string.mode_blend),
@@ -108,7 +111,9 @@ internal fun MainToolbar(
         IconToggle(
             Icons.Outlined.AutoFixNormal, stringResource(R.string.mode_erase),
             checked = state.mode == BrushModeUi.ERASE,
-            onCheckedChange = { actions.setMode(BrushModeUi.ERASE) },
+            onCheckedChange = {
+                if (state.mode == BrushModeUi.ERASE) actions.toggleBrushBrowser() else actions.setMode(BrushModeUi.ERASE)
+            },
         )
         HorizontalDivider(
             Modifier.width(28.dp).padding(vertical = 4.dp),

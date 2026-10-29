@@ -73,6 +73,14 @@ data class HudUi(
     val ringMaxDiameterPx: Float? = null,
 )
 
+/** One preset row of the brush browser: [id] is the preset id (`<category>.<name>`). */
+@Immutable
+data class BrushItemUi(val id: String, val name: String)
+
+/** One category column of the brush browser with its presets in catalog order. */
+@Immutable
+data class BrushCategoryUi(val id: String, val name: String, val brushes: List<BrushItemUi>)
+
 /** One row of the layer panel. [depth] is the group nesting level (0 = root). */
 @Immutable
 data class LayerUi(
@@ -166,6 +174,12 @@ data class StudioUiState(
     val perspective: PerspectiveUi? = null,
     /** Symmetry settings of the open document, null while symmetry is off. */
     val symmetry: SymmetryUi? = null,
+    /** Built-in brush presets, empty until the brush library has been loaded. */
+    val brushCategories: List<BrushCategoryUi> = emptyList(),
+    /** Id of the preset the current mode paints with, null while the library is not loaded (or for Blend). */
+    val currentBrushId: String? = null,
+    /** The brush browser popup is open. */
+    val brushBrowserOpen: Boolean = false,
 )
 
 /**
@@ -340,6 +354,12 @@ interface StudioActions {
     fun setOpacity(opacity: Float)
     fun setFlow(flow: Float)
     fun setHardness(hardness: Float)
+
+    /** Opens or closes the built-in brush browser. */
+    fun toggleBrushBrowser() {}
+
+    /** Picks the built-in preset [id] for the current mode and closes the browser. */
+    fun selectBrush(id: String) {}
 
     /** Sets the brush color. [commit] is false for live updates during a drag. */
     fun setColor(color: Rgba, commit: Boolean = true)

@@ -82,6 +82,7 @@
     <string name="hue">Тон</string>
     <string name="saturation">Насыщенность</string>
     <string name="brightness">Яркость</string>
+    <string name="brush_browser">Кисти</string>
     <string name="cancel">Отмена</string>
     <string name="ok">ОК</string>
     <string name="cd_decrease">Уменьшить</string>

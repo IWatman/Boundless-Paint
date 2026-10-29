@@ -204,6 +204,18 @@ fun StudioScreen(
                 )
             }
 
+            if (state.brushBrowserOpen) {
+                val brushOffsetX = with(LocalDensity.current) { 112.dp.roundToPx() }
+                Popup(
+                    alignment = Alignment.CenterStart,
+                    offset = IntOffset(brushOffsetX, 0),
+                    onDismissRequest = { actions.toggleBrushBrowser() },
+                    properties = PopupProperties(focusable = true),
+                ) {
+                    BrushBrowser(state = state, actions = actions)
+                }
+            }
+
             if (state.colorPanelOpen) {
                 val offsetX = with(LocalDensity.current) { 72.dp.roundToPx() }
                 Popup(

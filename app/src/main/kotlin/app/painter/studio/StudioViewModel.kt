@@ -114,6 +114,8 @@ import app.painter.render.CanvasInputListener
 import app.painter.render.CanvasView
 import app.painter.ui.home.ProjectCardUi
 import app.painter.ui.studio.AdjustEditorUi
+import app.painter.ui.studio.BrushCategoryUi
+import app.painter.ui.studio.BrushItemUi
 import app.painter.ui.studio.BrushModeUi
 import app.painter.ui.studio.CanvasTransformUi
 import app.painter.ui.studio.EllipseUi
@@ -148,6 +150,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonObject
 import java.io.ByteArrayOutputStream
+import java.util.Locale
 
 /** Owns the open document and wires UI actions, the canvas view and the core engines. */
 class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, CanvasInputListener {
@@ -175,6 +178,13 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
     private var paintParams = BrushParams()
     private var eraseParams = BrushParams(size = 40f)
 
+    /** Built-in preset catalog; read off the main thread once at start-up. */
+    private val brushes = BrushLibrary(app.assets)
+
+    /** Preset the PAINT and ERASE modes paint with, null until the library has picked its favourites. */
+    private var paintBrush: Brush? = null
+    private var eraseBrush: Brush? = null
+
     private val _state = MutableStateFlow(StudioUiState(palette = DefaultPalette.colors, layerPanelOpen = false))
     val state: StateFlow<StudioUiState> = _state
 
@@ -192,6 +202,7 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
         syncBrushState()
         viewModelScope.launch(Dispatchers.IO) { ioLock.withLock { store.recoverInterrupted() } }
         refreshProjects()
+        loadBrushes()
     }
 
     // ---- projects ----
@@ -295,7 +306,7 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
         val layer = if (maskTarget) null else doc.activeRaster ?: return
         val s = _state.value
         val mode = if (s.mode == BrushModeUi.ERASE) StrokeMode.ERASE else StrokeMode.PAINT
-        val brush = Brush.of(currentParams(), STUDIO_BRUSH_ID)
+        val brush = strokeBrush()
         val vs = canvas?.viewState?.value
         val zoom = vs?.zoom ?: 1f
         val ctx = StrokeContext(
@@ -310,7 +321,7 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
         // Guides and the lazy rope are snapshotted per stroke too (spec G1.1): they never change mid-stroke.
         val stages = guides.buildStages(SnapContext(screenToDoc = 1f / zoom, brushSize = s.brushSize))
         val engine = StrokeEngine(
-            doc, target, brush, BrushResources.EMPTY, s.color, mode, ctx,
+            doc, target, brush, brushes.resources(brush), s.color, mode, ctx,
             StrokeOptions(stages = stages, copies = copies, clip = doc.selection.coverageOrNull()),
         )
         stroke = engine
@@ -388,6 +399,64 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
         _state.update { it.copy(mode = mode, tool = ToolUi.BRUSH, selectionDraft = null, selectionDraftPath = null) }
         syncBrushState()
     }
+
+    override fun toggleBrushBrowser() = _state.update { it.copy(brushBrowserOpen = !it.brushBrowserOpen) }
+
+    override fun selectBrush(id: String) {
+        val brush = brushes.find(id) ?: return
+        if (_state.value.mode == BrushModeUi.ERASE) {
+            eraseBrush = brush
+            eraseParams = brush.params
+        } else {
+            paintBrush = brush
+            paintParams = brush.params
+        }
+        syncBrushState()
+        _state.update { it.copy(brushBrowserOpen = false) }
+    }
+
+    /**
+     * Reads the built-in brush catalog off the main thread, publishes its categories and seeds the quick
+     * parameters of both modes from the favourite preset of that mode.
+     */
+    private fun loadBrushes() {
+        viewModelScope.launch(Dispatchers.IO) {
+            brushes.load()
+            val lang = if (Locale.getDefault().language == "ru") "ru" else "en"
+            val categories = brushes.categories.map { c ->
+                BrushCategoryUi(c.id, c.name, c.brushes.map { BrushItemUi(it.id, it.name.get(lang)) })
+            }
+            val paint = brushes.favorites(FAVORITE_PAINT).firstOrNull()?.let { brushes.find(it) }
+            val erase = brushes.favorites(FAVORITE_ERASE).firstOrNull()?.let { brushes.find(it) }
+            if (paintBrush == null && paint != null) {
+                paintBrush = paint
+                paintParams = paint.params
+            }
+            if (eraseBrush == null && erase != null) {
+                eraseBrush = erase
+                eraseParams = erase.params
+            }
+            // Decoding the images of the initial presets happens here, not on the first stroke.
+            listOfNotNull(paintBrush, eraseBrush).forEach { brushes.resources(it) }
+            _state.update { it.copy(brushCategories = categories) }
+            syncBrushState()
+        }
+    }
+
+    /** Preset of the current mode; null for [BrushModeUi.BLEND], which always paints with the studio brush. */
+    private val currentBrush: Brush?
+        get() = when (_state.value.mode) {
+            BrushModeUi.PAINT -> paintBrush
+            BrushModeUi.ERASE -> eraseBrush
+            BrushModeUi.BLEND -> null
+        }
+
+    /**
+     * Brush of the current mode with the quick size/opacity/flow/hardness edits applied on top of the preset;
+     * the studio brush stands in while the library is not loaded and for [BrushModeUi.BLEND].
+     */
+    private fun strokeBrush(params: BrushParams = currentParams()): Brush =
+        (currentBrush ?: Brush.of(params, STUDIO_BRUSH_ID)).copy(params = params)
 
     // ---- selection tools ----
 
@@ -1244,7 +1313,7 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
         val s = _state.value
         val mode = if (s.mode == BrushModeUi.ERASE) StrokeMode.ERASE else StrokeMode.PAINT
         val params = if (shapeOutlined(d)) currentParams() else currentParams().copy(flow = 0f)
-        val brush = Brush.of(params, STUDIO_BRUSH_ID)
+        val brush = strokeBrush(params)
         val vs = canvas?.viewState?.value
         val ctx = StrokeContext(
             zoom = vs?.zoom ?: 1f,
@@ -1257,7 +1326,7 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
         val copies = if (guides.symmetry.on) guides.copies(Vec2(first.x, first.y)) else SymmetryCopies.NONE
         val fill = if (shapeFilled(d)) FillSpec(1f) else null
         val engine = StrokeEngine(
-            doc, StrokeTarget.Layer(layerId), brush, BrushResources.EMPTY, s.color, mode, ctx,
+            doc, StrokeTarget.Layer(layerId), brush, brushes.resources(brush), s.color, mode, ctx,
             ShapeStroke.options(d, fill = fill, copies = copies),
         )
         stroke = engine
@@ -2056,7 +2125,14 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
     private fun syncBrushState() {
         val p = currentParams()
         _state.update {
-            it.copy(brushSize = p.size, brushSizeMax = p.sizeMax, opacity = p.opacity, flow = p.flow, hardness = p.hardness)
+            it.copy(
+                brushSize = p.size,
+                brushSizeMax = p.sizeMax,
+                opacity = p.opacity,
+                flow = p.flow,
+                hardness = p.hardness,
+                currentBrushId = currentBrush?.id,
+            )
         }
     }
 
@@ -2292,6 +2368,10 @@ private fun StudioViewModel.defaultLayerName(n: Int): String =
     getApplication<android.app.Application>().getString(R.string.layer_default_name, n)
 
 private const val STUDIO_BRUSH_ID = "studio.round"
+
+/** Keys of the mode favourites in `presets/index.json`: the initial preset of PAINT and of ERASE. */
+private const val FAVORITE_PAINT = "PAINT"
+private const val FAVORITE_ERASE = "ERASE"
 
 /** Longest lazy rope radius, in screen px (spec G2.4). */
 private const val MAX_LAZY_RADIUS = 200f
