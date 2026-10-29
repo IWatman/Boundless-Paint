@@ -1,0 +1,41 @@
+{
+  "categories": [
+    {
+      "brushes": [
+        "pencils.hb",
+        "pencils.2b",
+        "pencils.6b_soft",
+        "pencils.mechanical",
+        "pencils.colored"
+      ],
+      "id": "pencils",
+      "name": {
+        "en": "Pencils",
+        "ru": "Карандаши"
+      }
+    },
+    {
+      "brushes": [
+        "erasers.hard",
+        "erasers.soft",
+        "erasers.grainy"
+      ],
+      "id": "erasers",
+      "name": {
+        "en": "Erasers",
+        "ru": "Ластики"
+      }
+    }
+  ],
+  "favorites": {
+    "ERASE": [
+      "erasers.soft"
+    ],
+    "PAINT": [
+      "pencils.hb",
+      "pencils.2b",
+      "pencils.colored"
+    ]
+  },
+  "schema": 1
+}

@@ -1,0 +1,52 @@
+{
+  "category": "erasers",
+  "id": "erasers.grainy",
+  "name": {
+    "en": "Grainy eraser",
+    "ru": "Зернистый ластик"
+  },
+  "params": {
+    "flow": 0.75,
+    "hardness": 0.5,
+    "head": {
+      "rotationMode": "random",
+      "source": "bitmap"
+    },
+    "jitter": {
+      "angle": 1.0,
+      "scatter": 0.04,
+      "size": 0.06
+    },
+    "opacity": 1.0,
+    "pressureToSize": {
+      "min": 0.4,
+      "points": [
+        [
+          0.0,
+          0.0
+        ],
+        [
+          1.0,
+          1.0
+        ]
+      ]
+    },
+    "size": 34.0,
+    "sizeMax": 300.0,
+    "sizeMin": 2.0,
+    "spacing": 0.07,
+    "taperEnd": 0.0,
+    "taperStart": 0.0
+  },
+  "resources": {
+    "head": "asset:heads/charcoal_disk_02.png"
+  },
+  "schema": 1,
+  "tags": [
+    "ластик",
+    "eraser",
+    "grain",
+    "текстура",
+    "texture"
+  ]
+}

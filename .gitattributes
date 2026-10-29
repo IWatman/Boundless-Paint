@@ -2,4 +2,6 @@
 gradlew text eol=lf
 *.bat text eol=crlf
 *.png binary
+# Generated brush presets stay LF (tools/gen_assets.py --check compares bytes on any platform).
+app/src/main/assets/brushes/presets/** text eol=lf
 *.jar binary

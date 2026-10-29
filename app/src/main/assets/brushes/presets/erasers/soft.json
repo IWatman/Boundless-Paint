@@ -1,0 +1,61 @@
+{
+  "category": "erasers",
+  "id": "erasers.soft",
+  "name": {
+    "en": "Soft eraser",
+    "ru": "Мягкий ластик"
+  },
+  "params": {
+    "flow": 0.6,
+    "hardness": 0.12,
+    "head": {
+      "source": "bitmap"
+    },
+    "jitter": {
+      "size": 0.03
+    },
+    "opacity": 0.9,
+    "pressureToFlow": {
+      "min": 0.0,
+      "points": [
+        [
+          0.0,
+          0.25
+        ],
+        [
+          1.0,
+          1.0
+        ]
+      ]
+    },
+    "pressureToSize": {
+      "min": 0.3,
+      "points": [
+        [
+          0.0,
+          0.0
+        ],
+        [
+          1.0,
+          1.0
+        ]
+      ]
+    },
+    "size": 40.0,
+    "sizeMax": 300.0,
+    "sizeMin": 2.0,
+    "spacing": 0.06,
+    "taperEnd": 0.0,
+    "taperStart": 0.0
+  },
+  "resources": {
+    "head": "asset:heads/soft_disk.png"
+  },
+  "schema": 1,
+  "tags": [
+    "ластик",
+    "eraser",
+    "soft",
+    "lift"
+  ]
+}

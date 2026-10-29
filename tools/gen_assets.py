@@ -1,10 +1,11 @@
 """Procedural brush assets (heads, textures, particles) for the stock catalog.
 
-Usage: .venv\\Scripts\\python tools\\gen_assets.py [--only heads|textures|particles] [--check] [--out DIR]
+Usage: .venv\\Scripts\\python tools\\gen_assets.py [--only heads|textures|particles|presets] [--check] [--out DIR]
 
 Everything is generated from code (clean-room: no third-party images). Output is deterministic: every
 asset is seeded with crc32(name), so --check can regenerate into a temp dir and compare bytes.
-Heads are white-on-black coverage (gray) or RGBA colour stamps; textures tile seamlessly.
+Heads are white-on-black coverage (gray) or RGBA colour stamps; textures tile seamlessly. The
+`presets` group dumps the brush JSON of tools/catalog (never edited by hand).
 Spec: spec/tools/m2-brush.md §5.
 """
 from __future__ import annotations
@@ -488,6 +489,18 @@ def textures() -> dict[str, Image.Image]:
     return {k: gray(v) for k, v in t.items()}
 
 
+# --------------------------------------------------------------------------------------------- presets
+
+def catalog_files() -> dict[str, str]:
+    """`presets` group: path under `presets/` → file text, built by the tools/catalog package."""
+    tools_dir = str(ROOT / "tools")
+    if tools_dir not in sys.path:
+        sys.path.insert(0, tools_dir)
+    import catalog
+
+    return catalog.render()
+
+
 # --------------------------------------------------------------------------------------------- driver
 
 GROUPS = {
@@ -495,7 +508,11 @@ GROUPS = {
                       **h_splatter(), **h_design(), **h_stamps(), **h_watercolor()},
     "particles": particles,
     "textures": textures,
+    "presets": catalog_files,
 }
+
+#: Groups that write text files (path → text) instead of images.
+JSON_GROUPS = {"presets"}
 
 
 def generate(out: Path, only: str | None) -> dict:
@@ -504,6 +521,13 @@ def generate(out: Path, only: str | None) -> dict:
         if only and group != only:
             continue
         d = out / group
+        if group in JSON_GROUPS:
+            for rel, text in sorted(fn().items()):
+                p = d / rel
+                p.parent.mkdir(parents=True, exist_ok=True)
+                with p.open("w", encoding="utf-8", newline="\n") as f:
+                    f.write(text)
+            continue
         d.mkdir(parents=True, exist_ok=True)
         for name, img in sorted(fn().items()):
             img.save(d / f"{name}.png", optimize=True)
@@ -524,7 +548,7 @@ def main() -> int:
         try:
             generate(tmp, a.only)
             bad = []
-            for f in tmp.rglob("*.png"):
+            for f in sorted(p for p in tmp.rglob("*") if p.is_file()):
                 ref = a.out / f.relative_to(tmp)
                 if not ref.exists() or not filecmp.cmp(f, ref, shallow=False):
                     bad.append(str(f.relative_to(tmp)))
@@ -535,6 +559,8 @@ def main() -> int:
     m = generate(a.out, a.only)
     total = sum(p.stat().st_size for p in a.out.rglob("*.png"))
     print(f"{len(m['assets'])} assets, {total / 1e6:.2f} MB -> {a.out}")
+    if not a.only or a.only == "presets":
+        print(f"{len(list((a.out / 'presets').rglob('*.json')))} preset files -> {a.out / 'presets'}")
     return 0
 
 

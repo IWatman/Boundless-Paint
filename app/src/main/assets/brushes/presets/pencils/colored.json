@@ -1,0 +1,74 @@
+{
+  "category": "pencils",
+  "id": "pencils.colored",
+  "name": {
+    "en": "Colored pencil",
+    "ru": "Цветной карандаш"
+  },
+  "params": {
+    "flow": 0.65,
+    "hardness": 0.7,
+    "head": {
+      "angle": 0.0,
+      "depth": 0.15,
+      "rotationMode": "fixed",
+      "source": "bitmap"
+    },
+    "jitter": {
+      "angle": 0.8,
+      "scatter": 0.01,
+      "size": 0.04
+    },
+    "opacity": 0.85,
+    "pressureToFlow": {
+      "min": 0.0,
+      "points": [
+        [
+          0.0,
+          0.2
+        ],
+        [
+          1.0,
+          1.0
+        ]
+      ]
+    },
+    "pressureToSize": {
+      "min": 0.12,
+      "points": [
+        [
+          0.0,
+          0.0
+        ],
+        [
+          0.5,
+          0.5
+        ],
+        [
+          1.0,
+          1.0
+        ]
+      ]
+    },
+    "size": 7.0,
+    "sizeMax": 60.0,
+    "sizeMin": 1.0,
+    "spacing": 0.06,
+    "taperEnd": 10.0,
+    "taperOpacity": 0.3,
+    "taperShape": "smooth",
+    "taperSize": 1.0,
+    "taperStart": 2.0
+  },
+  "resources": {
+    "head": "asset:heads/grain_disk_04.png"
+  },
+  "schema": 1,
+  "tags": [
+    "цветной",
+    "colored",
+    "wax",
+    "иллюстрация",
+    "illustration"
+  ]
+}

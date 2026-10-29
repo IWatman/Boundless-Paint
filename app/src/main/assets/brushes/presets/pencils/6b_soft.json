@@ -1,0 +1,93 @@
+{
+  "category": "pencils",
+  "id": "pencils.6b_soft",
+  "name": {
+    "en": "6B soft",
+    "ru": "6B мягкий"
+  },
+  "params": {
+    "dynamics": [
+      {
+        "curve": {
+          "min": 0.45,
+          "points": [
+            [
+              0.0,
+              0.0
+            ],
+            [
+              1.0,
+              1.0
+            ]
+          ]
+        },
+        "source": "VELOCITY",
+        "target": "FLOW"
+      }
+    ],
+    "flow": 0.7,
+    "hardness": 0.6,
+    "head": {
+      "angle": 0.0,
+      "depth": 0.15,
+      "rotationMode": "fixed",
+      "source": "bitmap"
+    },
+    "jitter": {
+      "angle": 0.7,
+      "scatter": 0.03,
+      "size": 0.07
+    },
+    "opacity": 0.95,
+    "pressureToFlow": {
+      "min": 0.0,
+      "points": [
+        [
+          0.0,
+          0.2
+        ],
+        [
+          1.0,
+          1.0
+        ]
+      ]
+    },
+    "pressureToSize": {
+      "min": 0.12,
+      "points": [
+        [
+          0.0,
+          0.0
+        ],
+        [
+          0.5,
+          0.5
+        ],
+        [
+          1.0,
+          1.0
+        ]
+      ]
+    },
+    "size": 9.0,
+    "sizeMax": 60.0,
+    "sizeMin": 1.0,
+    "spacing": 0.05,
+    "taperEnd": 14.0,
+    "taperOpacity": 0.4,
+    "taperShape": "smooth",
+    "taperSize": 1.0,
+    "taperStart": 4.0
+  },
+  "resources": {
+    "head": "asset:heads/charcoal_disk_01.png"
+  },
+  "schema": 1,
+  "tags": [
+    "графит",
+    "graphite",
+    "мягкий",
+    "soft",
+    "charcoal"
+  ]
+}
