@@ -17,3 +17,6 @@ liblz4-java-*.so
 *.jks
 *.keystore
 keystore.properties
+
+# Kotlin daemon markers
+kotlin-compiler-in-*.alive

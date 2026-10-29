@@ -2,6 +2,7 @@ package app.painter.core.stroke
 
 import app.painter.core.raster.MaskTile
 import app.painter.core.raster.Tile
+import kotlin.math.PI
 import kotlin.math.ceil
 import kotlin.math.cos
 import kotlin.math.floor
@@ -9,6 +10,17 @@ import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.sin
 import kotlin.math.sqrt
+
+/** Texture period in document pixels at 1× texture scale (spec/tools/m2-brush.md §1.4). */
+private const val TEXTURE_PERIOD = 512f
+
+/** Guards against a degenerate texture scale or stretch. */
+private const val MIN_TEX_SCALE = 1e-3f
+
+private const val MIN_TEX_STRETCH = 1e-3f
+
+/** Degrees → radians. */
+private val DEG = (PI / 180.0).toFloat()
 
 /** Renders dabs into one tile at a time; see [TileScheduler]. */
 interface DabKernel {
@@ -48,6 +60,13 @@ enum class MaskOp {
  * With [ceiling] (stroke buffers) the dab opacity and the selection value form a ceiling the pixel alpha
  * approaches: `a' = a + (C − a)·k`, C = opacity·clip, applied only while a < C. Without it (direct to layer)
  * both simply multiply the alpha. C = 1 reduces to plain source-over, bit-identical to M1.
+ *
+ * With [tex] and [texImage] (spec/tools/m2-brush.md §1.4, S2) the grain scales the dab alpha and the ceiling
+ * per pixel: `f = 1 − dab.texDepth·(1 − t)` with `t` sampled at the UV of [TextureParams.mode], and
+ * `C = opacity·clip·cap`, `cap = L + (1 − L)·f` ([TextureParams.lowerLimit] L < 1). The ceiling makes repeated
+ * dabs of one stroke saturate at `cap` instead of 1. [TextureMode.WARP_ALONG_STROKE] renders as CANVAS_FIXED
+ * for now; softness, gradation and texture jitter arrive with S2b. Without a texture the kernel takes exactly
+ * the untextured path (one branch per dab, no per-pixel texture work).
  */
 class MaskKernel(
     private val op: MaskOp,
@@ -56,6 +75,9 @@ class MaskKernel(
     private val depth: Float = 0f,
     private val alphaScale: Float = 1f,
     private val ceiling: Boolean = true,
+    private val tex: TextureParams? = null,
+    private val texImage: TextureImage? = null,
+    private val brushSize: Float = 0f,
 ) : DabKernel {
     override val createsTiles: Boolean get() = op == MaskOp.OVER
 
@@ -107,6 +129,105 @@ class MaskKernel(
         val b = dab.b
         val data = tile
 
+        // Texture (§1.4): a per-pixel grain factor scales the dab alpha and, with a lower limit, the ceiling.
+        // Textured dabs take the loop below; untextured ones fall through to the untouched M1 loop.
+        val tp = tex
+        val grainImage = texImage
+        val tDepth = dab.texDepth.coerceIn(0f, 1f)
+        if (tp != null && grainImage != null && tDepth > 0f) {
+            var angle = tp.angle * DEG
+            var ox = 0f
+            var oy = 0f
+            when (tp.mode) {
+                // TODO(S2b): warp-along-stroke (u = s, v = signed distance to the path) renders as canvas-fixed.
+                TextureMode.CANVAS_FIXED, TextureMode.WARP_ALONG_STROKE -> Unit
+                TextureMode.ROTATE_WITH_STROKE -> {
+                    angle += dab.angle
+                    ox = cx
+                    oy = cy
+                }
+                TextureMode.MOVING -> {
+                    ox = cx
+                    oy = cy
+                }
+            }
+            var sc = tp.scale
+            if (tp.scaleWithSize && brushSize > 0f) sc *= dab.d / brushSize
+            val period = TEXTURE_PERIOD * max(sc, MIN_TEX_SCALE)
+            val inU = 1f / (period * max(tp.stretch, MIN_TEX_STRETCH))
+            val inV = 1f / period
+            val ca = cos(angle)
+            val sa = sin(angle)
+            // Affine UV in periods: u = x·tXU + y·tYU + tCU, v = x·tXV + y·tYV + tCV.
+            val tXU = ca * inU
+            val tYU = sa * inU
+            val tCU = -(ox * ca + oy * sa) * inU
+            val tXV = -sa * inV
+            val tYV = ca * inV
+            val tCV = (ox * sa - oy * ca) * inV
+            val tLow = tp.lowerLimit.coerceIn(0f, 1f)
+            for (py in py0..py1) {
+                val dy = baseY + py + 0.5f - cy
+                val dy2 = dy * dy
+                if (circle && dy2 >= rOut2) continue
+                val yc = baseY + py + 0.5f
+                val rowU = yc * tYU + tCU
+                val rowV = yc * tYV + tCV
+                var i = (py * Tile.SIZE + px0) * 4
+                for (px in px0..px1) {
+                    val dx = baseX + px + 0.5f - cx
+                    val cov: Float
+                    if (circle) {
+                        val d2 = dx * dx + dy2
+                        cov = if (!antialias) {
+                            if (d2 <= rad2) 1f else 0f
+                        } else if (d2 >= rOut2) {
+                            0f
+                        } else if (d2 <= rIn2) {
+                            1f
+                        } else {
+                            val t = (sqrt(d2) - rIn) / band
+                            1f - t * t * (3f - 2f * t)
+                        }
+                    } else {
+                        val lx = (dx * cs + dy * sn) * isx
+                        val ly = (-dx * sn + dy * cs) * isy
+                        if (pyr == null) {
+                            val d2 = lx * lx + ly * ly
+                            cov = if (!antialias) {
+                                if (d2 <= rad2) 1f else 0f
+                            } else if (d2 >= rOut2) {
+                                0f
+                            } else if (d2 <= rIn2) {
+                                1f
+                            } else {
+                                val t = (sqrt(d2) - rIn) / band
+                                1f - t * t * (3f - 2f * t)
+                            }
+                        } else {
+                            var u = 0.5f + lx * invD
+                            if (dab.flipX) u = 1f - u
+                            var c = pyr.sample(level, u, 0.5f + ly * invD)
+                            if (kDepth > 0f) c = ((c - kDepth) / (1f - kDepth)).coerceIn(0f, 1f)
+                            cov = if (!antialias) (if (c >= 0.5f) 1f else 0f) else c
+                        }
+                    }
+                    if (cov > 0f) {
+                        val m = if (clip != null) clip.data[(py shl Tile.SHIFT) + px].toInt().and(0xFF) / 255f else clipValue
+                        if (m > 0f) {
+                            val xc = baseX + px + 0.5f
+                            val t = grainImage.sample(xc * tXU + rowU, xc * tXV + rowV)
+                            val f = 1f - tDepth * (1f - t)
+                            blend(data, i, cov * peak, opac, m, r, g, b, if (tLow < 1f) tLow + (1f - tLow) * f else f)
+                        }
+                    }
+                    i += 4
+                }
+            }
+            tile.markDirty()
+            return
+        }
+
         for (py in py0..py1) {
             val dy = baseY + py + 0.5f - cy
             val dy2 = dy * dy
@@ -152,7 +273,7 @@ class MaskKernel(
                 }
                 if (cov > 0f) {
                     val m = if (clip != null) clip.data[(py shl Tile.SHIFT) + px].toInt().and(0xFF) / 255f else clipValue
-                    if (m > 0f) blend(data, i, cov * peak, opac, m, r, g, b)
+                    if (m > 0f) blend(data, i, cov * peak, opac, m, r, g, b, 1f)
                 }
                 i += 4
             }
@@ -160,9 +281,9 @@ class MaskKernel(
         tile.markDirty()
     }
 
-    private fun blend(d: Tile, i: Int, k: Float, opac: Float, m: Float, r: Float, g: Float, b: Float) {
+    private fun blend(d: Tile, i: Int, k: Float, opac: Float, m: Float, r: Float, g: Float, b: Float, cap: Float) {
         if (ceiling) {
-            val c = opac * m
+            val c = if (cap >= 1f) opac * m else opac * m * cap
             if (c >= 1f) {
                 plain(d, i, k, r, g, b)
             } else if (op != MaskOp.OVER) {
@@ -177,7 +298,7 @@ class MaskKernel(
             }
         } else {
             val km = if (opac >= 1f && m >= 1f) k else k * opac * m
-            plain(d, i, km, r, g, b)
+            plain(d, i, if (cap >= 1f) km else km * cap, r, g, b)
         }
     }
 

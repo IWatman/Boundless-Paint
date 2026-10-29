@@ -32,6 +32,10 @@ import kotlin.math.sqrt
  * [StrokeOptions.clip] limits coverage: in buffered paths it is a ceiling of the buffer alpha (the buffer never
  * exceeds the selection value), in the direct path it multiplies dab coverage. [StrokeOptions.copies] repeats
  * every dab through each transform (mirrors flip the head); its domain drops dabs in all copies.
+ *
+ * Grain texture ([BrushParams.texture] with [BrushResources.texture], spec/tools/m2-brush.md §1.4) is applied by
+ * [MaskKernel] to the dab alpha; with [TextureParams.lowerLimit] < 1 it also caps the alpha the stroke buffer
+ * reaches in a pixel, so repeated dabs of one stroke stop at that cap (build-up strokes have no cap).
  * [StrokeOptions.fill] fills each closed sub-stroke (even-odd, AA) under the outline.
  *
  * Re-render on pen-up: the post-stage points are recorded; with [BrushParams.afterSmoothing] or a profile that
@@ -109,9 +113,15 @@ class StrokeEngine(
     private val head = if (params.head.source == HeadSource.BITMAP) res.head else null
 
     private val kernel: MaskKernel = if (directToLayer) {
-        MaskKernel(directOpOf(mode, alphaLock), head, params.head.antialias, params.head.depth, previewOpacity, ceiling = false)
+        MaskKernel(
+            directOpOf(mode, alphaLock), head, params.head.antialias, params.head.depth, previewOpacity, ceiling = false,
+            tex = params.texture, texImage = res.texture, brushSize = params.size,
+        )
     } else {
-        MaskKernel(MaskOp.OVER, head, params.head.antialias, params.head.depth, 1f, ceiling = true)
+        MaskKernel(
+            MaskOp.OVER, head, params.head.antialias, params.head.depth, 1f, ceiling = true,
+            tex = params.texture, texImage = res.texture, brushSize = params.size,
+        )
     }
     private val directOp = directOpOf(mode, alphaLock)
     private val access: TileAccess = if (directToLayer) working!! else bufferAccess
