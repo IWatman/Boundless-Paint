@@ -61,6 +61,10 @@ enum class MaskOp {
  * approaches: `a' = a + (C − a)·k`, C = opacity·clip, applied only while a < C. Without it (direct to layer)
  * both simply multiply the alpha. C = 1 reduces to plain source-over, bit-identical to M1.
  *
+ * With [glaze] > 0 (spec/tools/m2-brush.md §1.7) the dab is composited into the buffer as
+ * `a = lerp(over(a_buf, a_dab), max(a_buf, a_dab), glaze)` (colour by the same weights), so a stroke crossing
+ * itself does not build up; 0 takes the plain ceiling path, bit-identical to the unglazed kernel.
+ *
  * With [tex] and [texImage] (spec/tools/m2-brush.md §1.4, S2) the grain scales the dab alpha and the ceiling
  * per pixel: `f = 1 − dab.texDepth·(1 − t)` with `t` sampled at the UV of [TextureParams.mode], and
  * `C = opacity·clip·cap`, `cap = L + (1 − L)·f` ([TextureParams.lowerLimit] L < 1). The ceiling makes repeated
@@ -75,6 +79,7 @@ class MaskKernel(
     private val depth: Float = 0f,
     private val alphaScale: Float = 1f,
     private val ceiling: Boolean = true,
+    private val glaze: Float = 0f,
     private val tex: TextureParams? = null,
     private val texImage: TextureImage? = null,
     private val brushSize: Float = 0f,
@@ -284,7 +289,9 @@ class MaskKernel(
     private fun blend(d: Tile, i: Int, k: Float, opac: Float, m: Float, r: Float, g: Float, b: Float, cap: Float) {
         if (ceiling) {
             val c = if (cap >= 1f) opac * m else opac * m * cap
-            if (c >= 1f) {
+            if (glaze > 0f && op == MaskOp.OVER) {
+                glazed(d, i, k, c, r, g, b)
+            } else if (c >= 1f) {
                 plain(d, i, k, r, g, b)
             } else if (op != MaskOp.OVER) {
                 plain(d, i, k * c, r, g, b)
@@ -300,6 +307,49 @@ class MaskKernel(
             val km = if (opac >= 1f && m >= 1f) k else k * opac * m
             plain(d, i, if (cap >= 1f) km else km * cap, r, g, b)
         }
+    }
+
+    /**
+     * Glazed ceiling blend (§1.7): `a = lerp(over(a_buf, a_dab), max(a_buf, a_dab), glaze)`, colour by the same
+     * weights. The dab alpha in the pixel is `c·k`; when the dab does not win the max, the buffer colour stays.
+     */
+    private fun glazed(d: Tile, i: Int, k: Float, c: Float, r: Float, g: Float, b: Float) {
+        val a = d[i + 3]
+        val aOver: Float
+        val rOver: Float
+        val gOver: Float
+        val bOver: Float
+        if (c >= 1f) {
+            val inv = 1f - k
+            aOver = k + a * inv
+            rOver = r * k + d[i] * inv
+            gOver = g * k + d[i + 1] * inv
+            bOver = b * k + d[i + 2] * inv
+        } else {
+            aOver = a + (c - a) * k
+            rOver = d[i] + (r * c - d[i]) * k
+            gOver = d[i + 1] + (g * c - d[i + 1]) * k
+            bOver = d[i + 2] + (b * c - d[i + 2]) * k
+        }
+        val dab = if (c >= 1f) k else c * k
+        val aMax = max(a, dab)
+        val rMax: Float
+        val gMax: Float
+        val bMax: Float
+        if (aMax > a) {
+            rMax = r * aMax
+            gMax = g * aMax
+            bMax = b * aMax
+        } else {
+            rMax = d[i]
+            gMax = d[i + 1]
+            bMax = d[i + 2]
+        }
+        val w = glaze
+        d[i] = rOver + (rMax - rOver) * w
+        d[i + 1] = gOver + (gMax - gOver) * w
+        d[i + 2] = bOver + (bMax - bOver) * w
+        d[i + 3] = aOver + (aMax - aOver) * w
     }
 
     private fun plain(d: Tile, i: Int, sa: Float, r: Float, g: Float, b: Float) {

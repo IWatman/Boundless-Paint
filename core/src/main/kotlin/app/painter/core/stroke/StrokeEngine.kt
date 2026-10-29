@@ -1,5 +1,7 @@
 package app.painter.core.stroke
 
+import app.painter.core.blend.BlendMath
+import app.painter.core.blend.BlendMode
 import app.painter.core.color.ColorConv
 import app.painter.core.color.Rgba
 import app.painter.core.doc.Document
@@ -28,6 +30,9 @@ import kotlin.math.sqrt
  * Targets: [StrokeTarget.Layer] commits [StrokeCommit.Pixels]. [StrokeTarget.Mask] and [StrokeTarget.Selection]
  * always use the buffered path and commit [StrokeCommit.Mask]: with buffer alpha `a` (× cap) and value
  * `L` = colour luminance (1 for the selection), PAINT writes `m + a·(L − m)`, ERASE writes `m·(1 − a)`.
+ *
+ * Effects ([EffectParams], spec/tools/m2-brush.md §1.7): glaze makes dabs saturate instead of accumulating in the
+ * buffer; a blend mode other than normal composites the whole buffer with `BlendMath` and forces the buffered path.
  *
  * [StrokeOptions.clip] limits coverage: in buffered paths it is a ceiling of the buffer alpha (the buffer never
  * exceeds the selection value), in the direct path it multiplies dab coverage. [StrokeOptions.copies] repeats
@@ -99,8 +104,18 @@ class StrokeEngine(
     /** Opacity cap the renderer must multiply [buffer] by when previewing. */
     val previewOpacity: Float = params.opacity.coerceIn(0f, 1f)
 
-    /** True when dabs are written directly into the layer (build-up mode). */
-    val directToLayer: Boolean = params.buildup && layer != null
+    // Stroke effects (spec/tools/m2-brush.md §1.7): glaze in the buffer, the brush blend mode on composite.
+    /** Blend mode of the buffered composite (spec/tools/m2-brush.md §1.7); NORMAL/PASSTHROUGH mean the plain path. */
+    private val strokeBlend: BlendMode = BlendMode.fromId(params.effects.blendMode)
+
+    /** Share of [strokeBlend]: `out = lerp(normal, mode, strength)`. */
+    private val blendStrength: Float = params.effects.blendStrength.coerceIn(0f, 1f)
+
+    /** True when the stroke buffer is composited with [strokeBlend] instead of plain source-over. */
+    private val blended: Boolean = blendStrength > 0f && strokeBlend != BlendMode.NORMAL && strokeBlend != BlendMode.PASSTHROUGH
+
+    /** True when dabs are written directly into the layer (build-up mode); a blend mode forces the buffer path. */
+    val directToLayer: Boolean = params.buildup && layer != null && !blended
 
     private val alphaLock = layer?.alphaLock ?: false
     private val inert = locked || (mode == StrokeMode.ERASE && alphaLock)
@@ -120,6 +135,7 @@ class StrokeEngine(
     } else {
         MaskKernel(
             MaskOp.OVER, head, params.head.antialias, params.head.depth, 1f, ceiling = true,
+            glaze = params.effects.glaze.coerceIn(0f, 1f),
             tex = params.texture, texImage = res.texture, brushSize = params.size,
         )
     }
@@ -418,6 +434,13 @@ class StrokeEngine(
             if (src.isEmpty()) continue
             val dst = ws.prepare(key, create = !(alphaLock || erase)) ?: continue
             val s = src
+            // Brush blend mode (§1.7): the buffered stroke is blended into the layer instead of plain over.
+            // TODO(S3b): the live preview still composites the buffer with normal source-over.
+            if (blended && !erase && !alphaLock) {
+                blendTile(s, dst, op)
+                dst.markDirty()
+                continue
+            }
             val d = dst
             var i = 0
             while (i < Tile.CHANNELS) {
@@ -445,6 +468,42 @@ class StrokeEngine(
                 i += 4
             }
             dst.markDirty()
+        }
+    }
+
+    /**
+     * Composites the stroke buffer tile [src] into [dst] with [strokeBlend]:
+     * `out = lerp(normal, BlendMath.blendPixel(mode), blendStrength)`, opacity [op].
+     */
+    private fun blendTile(src: Tile, dst: Tile, op: Float) {
+        val mode = strokeBlend
+        val strength = blendStrength
+        val s = FloatArray(4)
+        val d = FloatArray(4)
+        val n = FloatArray(4)
+        val m = FloatArray(4)
+        var i = 0
+        while (i < Tile.CHANNELS) {
+            val sa = src[i + 3] * op
+            if (sa > 0f) {
+                src.read(i, s)
+                dst.read(i, d)
+                val inv = 1f - sa
+                n[0] = s[0] * op + d[0] * inv
+                n[1] = s[1] * op + d[1] * inv
+                n[2] = s[2] * op + d[2] * inv
+                n[3] = sa + d[3] * inv
+                d.copyInto(m)
+                BlendMath.blendPixel(mode, m, 0, s, 0, op)
+                dst.write(
+                    i,
+                    n[0] + (m[0] - n[0]) * strength,
+                    n[1] + (m[1] - n[1]) * strength,
+                    n[2] + (m[2] - n[2]) * strength,
+                    n[3] + (m[3] - n[3]) * strength,
+                )
+            }
+            i += 4
         }
     }
 
