@@ -34,6 +34,15 @@ interface DabKernel {
     fun extent(dab: Dab): Float = dab.halfExtent()
 
     /**
+     * Called on the calling thread before the first tile of [dab] renders, once per dab; only for
+     * [orderDependent] kernels, which use it to set up their per-dab state (samples, pickup buffer).
+     */
+    fun beginDab(dab: Dab) {}
+
+    /** Called on the calling thread after every tile of [dab] is rendered; only for [orderDependent] kernels. */
+    fun endDab(dab: Dab) {}
+
+    /**
      * Renders [dab] into [tile] at tile coords ([tx], [ty]) clipped to the canvas [canvasW]×[canvasH].
      * [clip] is the selection tile (null = uniform [clipValue]).
      */

@@ -38,10 +38,18 @@ class TileScheduler(val threads: Int) : AutoCloseable {
     fun run(batch: DabBatch, target: TileAccess, kernel: DabKernel, clip: MaskGrid? = null) {
         if (batch.size == 0) return
         if (kernel.orderDependent) {
-            for (i in 0 until batch.size) runRange(batch, i, i + 1, target, kernel, clip)
+            for (i in 0 until batch.size) runDab(batch, i, target, kernel, clip)
         } else {
             runRange(batch, 0, batch.size, target, kernel, clip)
         }
+    }
+
+    /** One pass for one dab of an [DabKernel.orderDependent] kernel: the [DabKernel.beginDab]/[DabKernel.endDab]
+     *  hooks bracket the dab's tiles. */
+    private fun runDab(batch: DabBatch, i: Int, target: TileAccess, kernel: DabKernel, clip: MaskGrid?) {
+        kernel.beginDab(batch[i])
+        runRange(batch, i, i + 1, target, kernel, clip)
+        kernel.endDab(batch[i])
     }
 
     private fun runRange(batch: DabBatch, from: Int, to: Int, target: TileAccess, kernel: DabKernel, clip: MaskGrid?) {

@@ -53,8 +53,11 @@ import kotlin.math.sqrt
  * Re-render on pen-up: the post-stage points are recorded; with [BrushParams.afterSmoothing] or a profile that
  * needs the final length, [end] clears the buffer (or resets the working copies) and redraws the final path.
  *
- * Modes [StrokeMode.BLEND] and [StrokeMode.CLONE] are part of the API but their kernels arrive in S4/S5:
- * constructing an engine with them throws [UnsupportedOperationException].
+ * [StrokeMode.BLEND] writes [SmudgeKernel] dabs straight into the layer (§1.8): no colour is deposited, the dab
+ * drags the layer colours along. [StrokeMode.CLONE] throws [UnsupportedOperationException] until S5.
+ *
+ * The smudge takes the direct path, so [takeDirty] reports layer tiles and [cancel] restores them; the layer
+ * alpha of an alpha-locked layer stays untouched and the pickup buffer restarts when the stroke is re-rendered.
  *
  * Predicted input points are ignored. Non-stylus input is pressure 1. Erasing on an alpha-locked layer is a
  * no-op; a locked node is never modified.
@@ -82,8 +85,8 @@ class StrokeEngine(
     private val params = brush.params
 
     init {
-        if (mode == StrokeMode.BLEND || mode == StrokeMode.CLONE) {
-            throw UnsupportedOperationException("StrokeMode.$mode kernels arrive in m2-brush S4/S5")
+        if (mode == StrokeMode.CLONE) {
+            throw UnsupportedOperationException("StrokeMode.CLONE kernel arrives in m2-brush S5")
         }
     }
 
@@ -131,7 +134,7 @@ class StrokeEngine(
     private val blended: Boolean = blendStrength > 0f && strokeBlend != BlendMode.NORMAL && strokeBlend != BlendMode.PASSTHROUGH
 
     /** True when dabs are written directly into the layer (build-up mode); a blend mode forces the buffer path. */
-    val directToLayer: Boolean = params.buildup && layer != null && !blended
+    val directToLayer: Boolean = layer != null && (mode == StrokeMode.BLEND || (params.buildup && !blended))
 
     private val alphaLock = layer?.alphaLock ?: false
     private val inert = locked || (mode == StrokeMode.ERASE && alphaLock)
@@ -149,7 +152,15 @@ class StrokeEngine(
     /** Load plane `L` of adhesion (§1.7), `L = over(L, m·flow)` per dab; allocated only with adhesion > 0. */
     private val load: TileGrid? = if (adhesion > 0f) TileGrid(doc.width, doc.height, precise = true) else null
 
-    private val kernel: MaskKernel = if (directToLayer) {
+    /** Smudge kernel of [StrokeMode.BLEND] (§1.8); it samples the layer, so it needs a layer target. */
+    private val smudge: SmudgeKernel? = if (mode == StrokeMode.BLEND) SmudgeKernel(
+        requireNotNull(layer) { "StrokeMode.BLEND needs a layer target" }.pixels,
+        params.paint.pull,
+        params.paint.blendFlow.coerceIn(0f, 1f),
+        alphaLock,
+    ) else null
+
+    private val kernel: DabKernel = smudge ?: if (directToLayer) {
         MaskKernel(
             directOpOf(mode, alphaLock), head, params.head.antialias, params.head.depth, previewOpacity, ceiling = false,
             tex = params.texture, texImage = res.texture, brushSize = params.size,
@@ -351,6 +362,7 @@ class StrokeEngine(
     )
 
     private fun rerender() {
+        smudge?.reset()
         loadAccess?.releaseAll()
         if (directToLayer) working!!.reset() else {
             touchBuffer()

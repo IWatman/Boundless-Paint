@@ -87,6 +87,7 @@ import app.painter.core.stroke.InputPoint
 import app.painter.core.stroke.StrokeCommit
 import app.painter.core.stroke.StrokeContext
 import app.painter.core.stroke.StrokeEngine
+import app.painter.core.stroke.PaintParams
 import app.painter.core.stroke.StrokeMode
 import app.painter.core.stroke.StrokeOptions
 import app.painter.core.stroke.SymmetryCopies
@@ -177,6 +178,14 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
 
     private var paintParams = BrushParams()
     private var eraseParams = BrushParams(size = 40f)
+
+    /** Blend (smudge) keeps its own soft, large tip with a long pull so the smear is visible (spec §1.8). */
+    private var blendParams = BrushParams(
+        size = 60f,
+        hardness = 0.4f,
+        spacing = 0.1f,
+        paint = PaintParams(pull = 0.9f),
+    )
 
     /** Built-in preset catalog; read off the main thread once at start-up. */
     private val brushes = BrushLibrary(app.assets)
@@ -305,7 +314,12 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
         if (!maskTarget && node !is RasterLayer) return // groups and adjustment layers have no pixels to paint
         val layer = if (maskTarget) null else doc.activeRaster ?: return
         val s = _state.value
-        val mode = if (s.mode == BrushModeUi.ERASE) StrokeMode.ERASE else StrokeMode.PAINT
+        val mode = when (s.mode) {
+            BrushModeUi.ERASE -> StrokeMode.ERASE
+            // Smudge reads and writes layer pixels; masks have none, so Blend on a mask paints as before.
+            BrushModeUi.BLEND -> if (layer != null) StrokeMode.BLEND else StrokeMode.PAINT
+            BrushModeUi.PAINT -> StrokeMode.PAINT
+        }
         val brush = strokeBrush()
         val vs = canvas?.viewState?.value
         val zoom = vs?.zoom ?: 1f
@@ -2115,10 +2129,18 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
     ) = exec(SetNodeProps(id, newName, visible, null, blendMode, clipped, alphaLock))
 
     private fun currentParams(): BrushParams =
-        if (_state.value.mode == BrushModeUi.ERASE) eraseParams else paintParams
+        when (_state.value.mode) {
+            BrushModeUi.ERASE -> eraseParams
+            BrushModeUi.BLEND -> blendParams
+            BrushModeUi.PAINT -> paintParams
+        }
 
     private fun updateParams(f: (BrushParams) -> BrushParams) {
-        if (_state.value.mode == BrushModeUi.ERASE) eraseParams = f(eraseParams) else paintParams = f(paintParams)
+        when (_state.value.mode) {
+            BrushModeUi.ERASE -> eraseParams = f(eraseParams)
+            BrushModeUi.BLEND -> blendParams = f(blendParams)
+            BrushModeUi.PAINT -> paintParams = f(paintParams)
+        }
         syncBrushState()
     }
 

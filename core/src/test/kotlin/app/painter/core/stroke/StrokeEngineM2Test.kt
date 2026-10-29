@@ -29,9 +29,9 @@ class StrokeEngineM2Test {
     private val hard = BrushParams(size = 20f, hardness = 1f, smoothing = 0f)
 
     @Test
-    fun blendAndCloneAreNotYetSupported() {
+    fun cloneIsNotYetSupported() {
         val doc = Document.create(64, 64)
-        for (m in listOf(StrokeMode.BLEND, StrokeMode.CLONE)) {
+        for (m in listOf(StrokeMode.CLONE)) {
             assertFailsWith<UnsupportedOperationException> { engine(doc, hard, mode = m) }
         }
     }
