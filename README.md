@@ -4,7 +4,8 @@ Bitmap painting editor for Android tablets. The feature set is the union of Infi
 
 The app is completely free: no subscriptions, ads, watermarks or paid features.
 
-[![Release](https://img.shields.io/github/v/release/IWatman/Painter?include_prereleases&label=release)](https://github.com/IWatman/Painter/releases)
+[![Release](https://img.shields.io/github/v/release/IWatman/Painter?label=release)](https://github.com/IWatman/Painter/releases)
+[![CI](https://github.com/IWatman/Painter/actions/workflows/ci.yml/badge.svg)](https://github.com/IWatman/Painter/actions/workflows/ci.yml)
 ![Android](https://img.shields.io/badge/Android-10%2B-3DDC84)
 ![Kotlin](https://img.shields.io/badge/Kotlin-2.0-7F52FF)
 
@@ -13,24 +14,33 @@ The app is completely free: no subscriptions, ads, watermarks or paid features.
   <img src="docs/screenshots/update.png" width="49%" alt="In-app update">
 </p>
 
-> **Status:** early version. The drawing core is ready (M1). Milestone M2 is in progress: the full brush engine, layers and masks, selections, transforms, fills, guides and symmetry. Most of M2 already works in the core; the interface is being connected to it piece by piece.
+> **Status:** early but usable. The drawing core (M1) is done, and most of milestone M2 is now in the app: layers with masks and adjustment layers, selections, transform, fills, gradients, symmetry, guides, perspective grids, shapes and a first brush catalog. Still in progress: the advanced brush engine (texture, paint mixing, watercolor and special brushes), the full preset catalog and the brush editor.
 
 ## Features
 
-**Already in the app**
+**In the app**
 - Canvases: screen sizes and print presets, project gallery (rename, copy, delete)
-- Brush and eraser: stylus pressure, stabilizer, point prediction, rejection of accidental stylus touches
-- Layers: add, copy, merge, order, visibility, opacity, blend modes, clipping, alpha lock
+- Brushes: a browser with 20 built-in presets (pencils, pens, markers, airbrushes, erasers); stylus pressure, stabilizer, point prediction, rejection of accidental stylus touches
+- Layers: groups, layer and group masks, all 33 blend modes, clipping, alpha lock, color tags, lock, reference layer
+- Adjustment layers: curves, levels, gradient map, hue/saturation and others, non-destructive
+- Selection: rectangle, ellipse, lasso, magic wand; invert, expand, feather; marching ants
+- Transform: move, scale and rotate a layer or the selection, with a live preview
+- Fill: bucket fill with gap closing and live recolor; gradients (linear, radial, symmetric, angular) with color stops, repeat/reflect, reverse and opacity
+- Symmetry: mirror (vertical, horizontal, both), radial and kaleidoscope
+- Guides: ruler, ellipse guide, lazy stroke; perspective grids (1, 2 and 3 points, isometric, 2D grid)
+- Shapes: line, rectangle, ellipse, polygon, arc, drawn with the current brush; outline, fill, stamp
 - Color: HSB wheel, sliders, hex, palette, eyedropper (long press)
 - Undo and redo with buttons and gestures (two- and three-finger tap), two-finger navigation
 - Autosave 2 seconds after a change, PNG export
-- In-app update: checks GitHub releases, downloads and installs
+- In-app update from GitHub Releases
 
-**Ready in the core, UI in progress (M2)**
-- Brush engine: bitmap heads, dynamics from pressure, speed and tilt, jitter, tapers, profiles, stylus calibration
-- All 33 blend modes, groups, layer and group masks, 13 adjustment layers (curves, levels, gradient map and others)
-- Selections (lasso, rectangle, ellipse, magic wand), transform (regular, perspective, warp), fill, gradients
-- Guides (ruler, ellipse, path, hatching), symmetry, perspective grids, shape detection
+**Ready in the core, UI in progress**
+- Transform modes beyond the basic one: distort, perspective, warp
+- Path guide, hatching, shape detection
+
+**In progress**
+- Brush engine stages S2–S9: paper texture, wet edges and glaze, paint mixing and smudge, filter and clone brushes, particles, watercolor, 3D brushes
+- The full catalog of about 236 presets, the brush editor and stylus settings
 
 Full plan: [spec/ROADMAP.md](spec/ROADMAP.md), current milestone: [spec/PLAN-M2.md](spec/PLAN-M2.md), known issues: [spec/STATUS.md](spec/STATUS.md).
 
@@ -40,7 +50,7 @@ Full plan: [spec/ROADMAP.md](spec/ROADMAP.md), current milestone: [spec/PLAN-M2.
 2. Open the file on the device and allow installation from this source. Android 10 or newer and OpenGL ES 3 support are required.
 3. Further updates: the "Updates" button on the app's home screen.
 
-> Version 0.1.0 is signed with a different key. If it is installed, uninstall it once and install the fresh release.
+> Releases from 0.1.1 on are signed with the same key and update each other in place. Version 0.1.0 used a different key: if it is installed, uninstall it once.
 
 ## Building from source
 
@@ -62,7 +72,8 @@ Releases are built by GitHub Actions: bump the default `appVersion` in `app/buil
 |---|---|
 | `core/` | Pure Kotlin, no Android. Document model, 256² tiles in half float, history, brush engine, blend modes, adjustments, selections, transforms, fills, guides, project format. Covered by JVM tests |
 | `app/` | Android app: canvas on OpenGL ES 3 (layer compositing, masks, adjustments), input and gesture handling, UI on Jetpack Compose, updates |
-| `tools/` | Environment, QA helper for the emulator, brush asset generator, release script |
+| `.github/` | CI (unit tests and debug build on every push) and the release workflow (signed APK on a `v*` tag) |
+| `tools/` | Environment, QA helper for the emulator, procedural asset generator and brush catalog (`tools/catalog`) |
 | `features/` | Infinite Painter and ibisPaint functionality across 27 areas, described in our own words |
 | `spec/` | Specifications: UI shell, feature map, decisions, brush engine, formats, tool specs by milestone |
 
