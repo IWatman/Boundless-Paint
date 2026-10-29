@@ -1,0 +1,101 @@
+{
+  "category": "charcoal",
+  "id": "charcoal.compressed",
+  "name": {
+    "en": "Compressed charcoal",
+    "ru": "Прессованный уголь"
+  },
+  "params": {
+    "dynamics": [
+      {
+        "curve": {
+          "min": 0.0,
+          "points": [
+            [
+              0.0,
+              0.5
+            ],
+            [
+              1.0,
+              1.0
+            ]
+          ]
+        },
+        "source": "PRESSURE",
+        "target": "TEX_DEPTH"
+      }
+    ],
+    "flow": 0.6,
+    "hardness": 0.35,
+    "head": {
+      "depth": 0.35,
+      "rotationFollow": 0.7,
+      "rotationMode": "tangent",
+      "source": "bitmap"
+    },
+    "jitter": {
+      "angle": 0.7,
+      "scatter": 0.04,
+      "size": 0.06
+    },
+    "opacity": 0.98,
+    "pressureToFlow": {
+      "min": 0.0,
+      "points": [
+        [
+          0.0,
+          0.25
+        ],
+        [
+          1.0,
+          1.0
+        ]
+      ]
+    },
+    "pressureToSize": {
+      "min": 0.22,
+      "points": [
+        [
+          0.0,
+          0.0
+        ],
+        [
+          0.5,
+          0.6
+        ],
+        [
+          1.0,
+          1.0
+        ]
+      ]
+    },
+    "size": 30.0,
+    "sizeMax": 220.0,
+    "sizeMin": 3.0,
+    "spacing": 0.05,
+    "taperEnd": 12.0,
+    "taperOpacity": 0.4,
+    "taperShape": "smooth",
+    "taperSize": 0.85,
+    "taperStart": 4.0,
+    "texture": {
+      "depth": 0.7,
+      "lowerLimit": 0.35,
+      "mode": "canvas-fixed",
+      "scale": 0.8
+    }
+  },
+  "resources": {
+    "head": "asset:heads/charcoal_disk_02.png",
+    "texture": "asset:textures/grain_charcoal.png"
+  },
+  "schema": 1,
+  "tags": [
+    "уголь",
+    "charcoal",
+    "прессованный",
+    "compressed",
+    "тёмный",
+    "dark"
+  ]
+}

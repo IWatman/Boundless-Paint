@@ -61,7 +61,11 @@ class CatalogPresetsTest {
                 assertTrue(ref in refs, "${f.path}: unknown resource ref $ref")
             }
             assertTrue(brush.params.special == null, "${f.path}: S1 presets must not use a special engine")
-            assertTrue(brush.params.texture == null, "${f.path}: S1 presets must not use a texture")
+            // S2a paper texture: the grain params are meaningless without the texture image next to them.
+            assertTrue(
+                brush.params.texture == null || brush.resources.texture != null,
+                "${f.path}: texture params need a texture image",
+            )
         }
     }
 

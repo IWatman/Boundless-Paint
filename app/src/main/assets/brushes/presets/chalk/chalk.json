@@ -1,0 +1,100 @@
+{
+  "category": "chalk",
+  "id": "chalk.chalk",
+  "name": {
+    "en": "Chalk",
+    "ru": "Мел"
+  },
+  "params": {
+    "dynamics": [
+      {
+        "curve": {
+          "min": 0.0,
+          "points": [
+            [
+              0.0,
+              0.55
+            ],
+            [
+              1.0,
+              1.0
+            ]
+          ]
+        },
+        "source": "PRESSURE",
+        "target": "TEX_DEPTH"
+      }
+    ],
+    "flow": 0.5,
+    "hardness": 0.35,
+    "head": {
+      "depth": 0.25,
+      "rotationFollow": 0.6,
+      "rotationMode": "tangent",
+      "source": "bitmap"
+    },
+    "jitter": {
+      "angle": 0.5,
+      "scatter": 0.04,
+      "size": 0.07
+    },
+    "opacity": 0.85,
+    "pressureToFlow": {
+      "min": 0.0,
+      "points": [
+        [
+          0.0,
+          0.25
+        ],
+        [
+          1.0,
+          1.0
+        ]
+      ]
+    },
+    "pressureToSize": {
+      "min": 0.2,
+      "points": [
+        [
+          0.0,
+          0.0
+        ],
+        [
+          0.5,
+          0.55
+        ],
+        [
+          1.0,
+          1.0
+        ]
+      ]
+    },
+    "size": 16.0,
+    "sizeMax": 180.0,
+    "sizeMin": 2.0,
+    "spacing": 0.06,
+    "taperEnd": 12.0,
+    "taperOpacity": 0.35,
+    "taperShape": "smooth",
+    "taperSize": 0.8,
+    "taperStart": 3.0,
+    "texture": {
+      "depth": 0.8,
+      "lowerLimit": 0.3,
+      "mode": "canvas-fixed",
+      "scale": 0.7
+    }
+  },
+  "resources": {
+    "head": "asset:heads/chalk_01.png",
+    "texture": "asset:textures/grain_chalk.png"
+  },
+  "schema": 1,
+  "tags": [
+    "мел",
+    "chalk",
+    "доска",
+    "blackboard",
+    "dry"
+  ]
+}

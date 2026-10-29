@@ -58,10 +58,17 @@
     "taperOpacity": 0.3,
     "taperShape": "smooth",
     "taperSize": 1.0,
-    "taperStart": 2.0
+    "taperStart": 2.0,
+    "texture": {
+      "depth": 0.35,
+      "lowerLimit": 0.55,
+      "mode": "canvas-fixed",
+      "scale": 0.6
+    }
   },
   "resources": {
-    "head": "asset:heads/grain_disk_02.png"
+    "head": "asset:heads/grain_disk_02.png",
+    "texture": "asset:textures/grain_graphite.png"
   },
   "schema": 1,
   "tags": [

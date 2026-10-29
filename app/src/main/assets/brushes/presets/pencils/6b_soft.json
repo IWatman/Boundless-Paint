@@ -77,10 +77,17 @@
     "taperOpacity": 0.4,
     "taperShape": "smooth",
     "taperSize": 1.0,
-    "taperStart": 4.0
+    "taperStart": 4.0,
+    "texture": {
+      "depth": 0.7,
+      "lowerLimit": 0.4,
+      "mode": "canvas-fixed",
+      "scale": 0.85
+    }
   },
   "resources": {
-    "head": "asset:heads/charcoal_disk_01.png"
+    "head": "asset:heads/charcoal_disk_01.png",
+    "texture": "asset:textures/paper_rough.png"
   },
   "schema": 1,
   "tags": [

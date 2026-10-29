@@ -1,0 +1,98 @@
+{
+  "category": "chalk",
+  "id": "chalk.soft_pastel",
+  "name": {
+    "en": "Soft pastel",
+    "ru": "Сухая пастель"
+  },
+  "params": {
+    "dynamics": [
+      {
+        "curve": {
+          "min": 0.0,
+          "points": [
+            [
+              0.0,
+              0.55
+            ],
+            [
+              1.0,
+              1.0
+            ]
+          ]
+        },
+        "source": "PRESSURE",
+        "target": "TEX_DEPTH"
+      }
+    ],
+    "flow": 0.62,
+    "hardness": 0.28,
+    "head": {
+      "aspect": -0.3,
+      "depth": 0.3,
+      "rotationFollow": 0.5,
+      "rotationMode": "tangent",
+      "source": "bitmap"
+    },
+    "jitter": {
+      "angle": 0.4,
+      "scatter": 0.03,
+      "size": 0.05
+    },
+    "opacity": 0.95,
+    "pressureToFlow": {
+      "min": 0.0,
+      "points": [
+        [
+          0.0,
+          0.25
+        ],
+        [
+          1.0,
+          1.0
+        ]
+      ]
+    },
+    "pressureToSize": {
+      "min": 0.35,
+      "points": [
+        [
+          0.0,
+          0.0
+        ],
+        [
+          1.0,
+          1.0
+        ]
+      ]
+    },
+    "size": 26.0,
+    "sizeMax": 180.0,
+    "sizeMin": 2.0,
+    "spacing": 0.06,
+    "taperEnd": 20.0,
+    "taperOpacity": 0.35,
+    "taperShape": "smooth",
+    "taperSize": 0.8,
+    "taperStart": 6.0,
+    "texture": {
+      "depth": 0.9,
+      "lowerLimit": 0.25,
+      "mode": "canvas-fixed",
+      "scale": 0.85
+    }
+  },
+  "resources": {
+    "head": "asset:heads/pastel_square.png",
+    "texture": "asset:textures/paper_rough.png"
+  },
+  "schema": 1,
+  "tags": [
+    "пастель",
+    "pastel",
+    "сухая",
+    "soft",
+    "портрет",
+    "portrait"
+  ]
+}

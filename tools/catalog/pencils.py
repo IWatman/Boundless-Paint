@@ -1,7 +1,8 @@
 """Pencils: graphite grades, a mechanical pencil and a coloured pencil.
 
-S1 only, so no paper texture: the tooth of the paper is faked with the grain heads, a low flow and a
-small size/angle jitter. Names and tags are ours (spec/assets.md).
+S2a paper texture: every grade sits on a canvas-fixed grain, so the tooth of the paper comes from the
+texture and not only from the grain heads; softer grades use a deeper grain and a lower floor. Names
+and tags are ours (spec/assets.md).
 """
 from __future__ import annotations
 
@@ -20,8 +21,9 @@ HB = preset(
         "spacing": 0.07,
         "hardness": 0.88,
         "jitter": {"size": 0.03, "angle": 0.4, "scatter": 0.01},
+        "texture": {"mode": "canvas-fixed", "depth": 0.35, "lowerLimit": 0.55, "scale": 0.6},
     },
-    resources={"head": "asset:heads/grain_disk_02.png"},
+    resources={"head": "asset:heads/grain_disk_02.png", "texture": "asset:textures/grain_graphite.png"},
 )
 
 TWO_B = preset(
@@ -38,8 +40,9 @@ TWO_B = preset(
         "pressureToFlow": curve([(0.0, 0.3), (1.0, 1.0)]),
         "taperEnd": 10.0,
         "jitter": {"size": 0.05, "angle": 0.5, "scatter": 0.02},
+        "texture": {"mode": "canvas-fixed", "depth": 0.45, "lowerLimit": 0.5, "scale": 0.7},
     },
-    resources={"head": "asset:heads/grain_disk_01.png"},
+    resources={"head": "asset:heads/grain_disk_01.png", "texture": "asset:textures/paper_cold_press.png"},
 )
 
 SIX_B_SOFT = preset(
@@ -58,9 +61,10 @@ SIX_B_SOFT = preset(
         "taperEnd": 14.0,
         "taperOpacity": 0.4,
         "jitter": {"size": 0.07, "angle": 0.7, "scatter": 0.03},
+        "texture": {"mode": "canvas-fixed", "depth": 0.7, "lowerLimit": 0.4, "scale": 0.85},
         "dynamics": [link("VELOCITY", "FLOW", [(0.0, 0.0), (1.0, 1.0)], 0.45)],
     },
-    resources={"head": "asset:heads/charcoal_disk_01.png"},
+    resources={"head": "asset:heads/charcoal_disk_01.png", "texture": "asset:textures/paper_rough.png"},
 )
 
 MECHANICAL = preset(
@@ -81,8 +85,9 @@ MECHANICAL = preset(
         "taperStart": 0.0,
         "taperEnd": 0.0,
         "jitter": {"size": 0.02, "angle": 0.2, "scatter": 0.0},
+        "texture": {"mode": "canvas-fixed", "depth": 0.35, "lowerLimit": 0.6, "scale": 0.5},
     },
-    resources={"head": "asset:heads/grain_disk_03.png"},
+    resources={"head": "asset:heads/grain_disk_03.png", "texture": "asset:textures/grain_graphite.png"},
 )
 
 COLORED = preset(
@@ -99,8 +104,9 @@ COLORED = preset(
         "hardness": 0.7,
         "taperEnd": 10.0,
         "jitter": {"size": 0.04, "angle": 0.8, "scatter": 0.01},
+        "texture": {"mode": "canvas-fixed", "depth": 0.5, "lowerLimit": 0.45, "scale": 0.65},
     },
-    resources={"head": "asset:heads/grain_disk_04.png"},
+    resources={"head": "asset:heads/grain_disk_04.png", "texture": "asset:textures/paper_smooth.png"},
 )
 
 CATEGORY = {

@@ -1,10 +1,11 @@
 """Base templates for the stock brush catalog (spec/tools/m2-brush.md §5).
 
 A category module picks one of [BASE] and overrides only the fields that differ from it, so a preset
-reads as a short list of "what makes it this brush". The templates use the S1 feature set only: head
-source plus an `asset:` head, hardness, spacing, flow, opacity, size range, the pressure curves, the
-taper, jitter (scatter/angle/size), the rotation mode and dynamics links. Texture, paint mixing and
-the special engines stay off until their milestones land.
+reads as a short list of "what makes it this brush". The templates use the S1 feature set plus the S2a
+paper texture (`params.texture` with a `resources.texture` image): head source plus an `asset:` head,
+hardness, spacing, flow, opacity, size range, the pressure curves, the taper, jitter (scatter/angle/size),
+the rotation mode, the texture and dynamics links. Paint mixing and the special engines stay off until
+their milestones land.
 
 Everything is plain Python data (dicts and lists) that is dumped to JSON by `tools/gen_assets.py`;
 see tools/catalog/__init__.py for the writer and the index.
@@ -46,6 +47,54 @@ BASE: dict[str, dict] = {
             "jitter": {"size": 0.03, "angle": 0.4, "scatter": 0.01},
         },
         "resources": {"head": "asset:heads/grain_disk_02.png"},
+    },
+    # Chalk: a ragged dry dab on a heavy canvas-fixed grain, so the flow is low and pressure drives the grain.
+    "chalk": {
+        "params": {
+            "size": 18.0,
+            "sizeMin": 2.0,
+            "sizeMax": 180.0,
+            "opacity": 0.92,
+            "flow": 0.55,
+            "spacing": 0.06,
+            "hardness": 0.4,
+            "pressureToSize": curve([(0.0, 0.0), (0.5, 0.55), (1.0, 1.0)], 0.2),
+            "pressureToFlow": curve([(0.0, 0.25), (1.0, 1.0)]),
+            "taperStart": 3.0,
+            "taperEnd": 12.0,
+            "taperShape": "smooth",
+            "taperSize": 0.8,
+            "taperOpacity": 0.35,
+            "head": {"source": "bitmap", "rotationMode": "tangent", "rotationFollow": 0.6, "depth": 0.2},
+            "jitter": {"size": 0.06, "angle": 0.6, "scatter": 0.03},
+            "texture": {"mode": "canvas-fixed", "depth": 0.75, "lowerLimit": 0.3, "scale": 0.8},
+            "dynamics": [link("PRESSURE", "TEX_DEPTH", [(0.0, 0.55), (1.0, 1.0)])],
+        },
+        "resources": {"head": "asset:heads/chalk_01.png", "texture": "asset:textures/grain_chalk.png"},
+    },
+    # Charcoal: the same dry dab, softer and deeper: a lower hardness, more scatter and a heavier grain.
+    "charcoal": {
+        "params": {
+            "size": 22.0,
+            "sizeMin": 3.0,
+            "sizeMax": 220.0,
+            "opacity": 0.95,
+            "flow": 0.5,
+            "spacing": 0.05,
+            "hardness": 0.3,
+            "pressureToSize": curve([(0.0, 0.0), (0.5, 0.6), (1.0, 1.0)], 0.22),
+            "pressureToFlow": curve([(0.0, 0.2), (1.0, 1.0)]),
+            "taperStart": 4.0,
+            "taperEnd": 16.0,
+            "taperShape": "smooth",
+            "taperSize": 0.85,
+            "taperOpacity": 0.4,
+            "head": {"source": "bitmap", "rotationMode": "tangent", "rotationFollow": 0.7, "depth": 0.25},
+            "jitter": {"size": 0.08, "angle": 0.9, "scatter": 0.05},
+            "texture": {"mode": "canvas-fixed", "depth": 0.8, "lowerLimit": 0.3, "scale": 0.9},
+            "dynamics": [link("PRESSURE", "TEX_DEPTH", [(0.0, 0.5), (1.0, 1.0)])],
+        },
+        "resources": {"head": "asset:heads/charcoal_disk_01.png", "texture": "asset:textures/grain_charcoal.png"},
     },
     # Ink: saturated and even, so the flow curve is shallow and the dabs sit close together.
     "ink": {

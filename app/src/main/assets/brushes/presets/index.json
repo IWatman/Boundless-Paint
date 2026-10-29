@@ -16,6 +16,31 @@
     },
     {
       "brushes": [
+        "charcoal.vine",
+        "charcoal.compressed",
+        "charcoal.pencil"
+      ],
+      "id": "charcoal",
+      "name": {
+        "en": "Charcoal",
+        "ru": "Уголь"
+      }
+    },
+    {
+      "brushes": [
+        "chalk.chalk",
+        "chalk.soft_pastel",
+        "chalk.oil_pastel",
+        "chalk.crayon"
+      ],
+      "id": "chalk",
+      "name": {
+        "en": "Chalk & pastel",
+        "ru": "Мел и пастель"
+      }
+    },
+    {
+      "brushes": [
         "erasers.hard",
         "erasers.soft",
         "erasers.grainy"

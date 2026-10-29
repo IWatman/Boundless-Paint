@@ -1,0 +1,98 @@
+{
+  "category": "chalk",
+  "id": "chalk.oil_pastel",
+  "name": {
+    "en": "Oil pastel",
+    "ru": "Масляная пастель"
+  },
+  "params": {
+    "dynamics": [
+      {
+        "curve": {
+          "min": 0.0,
+          "points": [
+            [
+              0.0,
+              0.7
+            ],
+            [
+              1.0,
+              1.0
+            ]
+          ]
+        },
+        "source": "PRESSURE",
+        "target": "TEX_DEPTH"
+      }
+    ],
+    "flow": 0.75,
+    "hardness": 0.45,
+    "head": {
+      "aspect": -0.35,
+      "depth": 0.15,
+      "rotationFollow": 0.6,
+      "rotationMode": "tangent",
+      "source": "bitmap"
+    },
+    "jitter": {
+      "angle": 0.3,
+      "scatter": 0.02,
+      "size": 0.03
+    },
+    "opacity": 0.98,
+    "pressureToFlow": {
+      "min": 0.0,
+      "points": [
+        [
+          0.0,
+          0.25
+        ],
+        [
+          1.0,
+          1.0
+        ]
+      ]
+    },
+    "pressureToSize": {
+      "min": 0.4,
+      "points": [
+        [
+          0.0,
+          0.0
+        ],
+        [
+          1.0,
+          1.0
+        ]
+      ]
+    },
+    "size": 22.0,
+    "sizeMax": 180.0,
+    "sizeMin": 2.0,
+    "spacing": 0.06,
+    "taperEnd": 12.0,
+    "taperOpacity": 0.35,
+    "taperShape": "smooth",
+    "taperSize": 0.8,
+    "taperStart": 3.0,
+    "texture": {
+      "depth": 0.6,
+      "lowerLimit": 0.4,
+      "mode": "canvas-fixed",
+      "scale": 0.75
+    }
+  },
+  "resources": {
+    "head": "asset:heads/pastel_square.png",
+    "texture": "asset:textures/grain_crayon.png"
+  },
+  "schema": 1,
+  "tags": [
+    "масляная пастель",
+    "oil pastel",
+    "воск",
+    "wax",
+    "жирный",
+    "bold"
+  ]
+}
