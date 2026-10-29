@@ -15,6 +15,7 @@ import app.painter.core.raster.TileKey
 import app.painter.core.raster.TilePatch
 import kotlin.math.abs
 import kotlin.math.max
+import kotlin.math.min
 import kotlin.math.sqrt
 
 /**
@@ -33,6 +34,8 @@ import kotlin.math.sqrt
  *
  * Effects ([EffectParams], spec/tools/m2-brush.md §1.7): glaze makes dabs saturate instead of accumulating in the
  * buffer; a blend mode other than normal composites the whole buffer with `BlendMath` and forces the buffered path.
+ * Wet edges darken the rim on composite: `α' = α·(1 − w·(1 − e))` with `e` the buffer alpha against its 4 px box
+ * blur, so a flat fill stays solid at the edge and thins out in the middle; `wetEdges` 0 composites unchanged.
  *
  * [StrokeOptions.clip] limits coverage: in buffered paths it is a ceiling of the buffer alpha (the buffer never
  * exceeds the selection value), in the direct path it multiplies dab coverage. [StrokeOptions.copies] repeats
@@ -101,12 +104,18 @@ class StrokeEngine(
     /** Premultiplied stroke buffer, alpha uncapped; the preview applies [previewOpacity]. */
     val buffer: TileGrid = TileGrid(doc.width, doc.height, precise = true)
 
-    /** Opacity cap the renderer must multiply [buffer] by when previewing. */
+    /** Opacity cap the renderer must multiply [buffer] by when previewing; [previewTile] adds the wet rim. */
     val previewOpacity: Float = params.opacity.coerceIn(0f, 1f)
 
     // Stroke effects (spec/tools/m2-brush.md §1.7): glaze in the buffer, the brush blend mode on composite.
     /** Blend mode of the buffered composite (spec/tools/m2-brush.md §1.7); NORMAL/PASSTHROUGH mean the plain path. */
     private val strokeBlend: BlendMode = BlendMode.fromId(params.effects.blendMode)
+
+    /** Wet edge strength (spec/tools/m2-brush.md §1.7) of the buffered composite; 0 leaves the plain path. */
+    private val wetEdges: Float = params.effects.wetEdges.coerceIn(0f, 1f)
+
+    /** Scratch of the wet edge blur (§1.7), allocated on the first composite that has wet edges. */
+    private var wet: WetScratch? = null
 
     /** Share of [strokeBlend]: `out = lerp(normal, mode, strength)`. */
     private val blendStrength: Float = params.effects.blendStrength.coerceIn(0f, 1f)
@@ -435,16 +444,20 @@ class StrokeEngine(
             val dst = ws.prepare(key, create = !(alphaLock || erase)) ?: continue
             val s = src
             // Brush blend mode (§1.7): the buffered stroke is blended into the layer instead of plain over.
-            // TODO(S3b): the live preview still composites the buffer with normal source-over.
+            // Wet edges (§1.7): the rim factor scales the premultiplied pixel on composite; 0 skips the blur.
+            // TODO: the live preview still composites [strokeBlend] with normal source-over.
+            val f = if (wetEdges > 0f) wetFactors(key) else null
             if (blended && !erase && !alphaLock) {
-                blendTile(s, dst, op)
+                blendTile(s, dst, op, f)
                 dst.markDirty()
                 continue
             }
             val d = dst
             var i = 0
+            var p = 0
             while (i < Tile.CHANNELS) {
-                val sa = s[i + 3] * op
+                val k = if (f == null) op else op * f[p]
+                val sa = s[i + 3] * k
                 if (sa > 0f) {
                     val inv = 1f - sa
                     when {
@@ -453,19 +466,20 @@ class StrokeEngine(
                         }
                         alphaLock -> {
                             val da = d[i + 3]
-                            d[i] = s[i] * op * da + d[i] * inv
-                            d[i + 1] = s[i + 1] * op * da + d[i + 1] * inv
-                            d[i + 2] = s[i + 2] * op * da + d[i + 2] * inv
+                            d[i] = s[i] * k * da + d[i] * inv
+                            d[i + 1] = s[i + 1] * k * da + d[i + 1] * inv
+                            d[i + 2] = s[i + 2] * k * da + d[i + 2] * inv
                         }
                         else -> {
-                            d[i] = s[i] * op + d[i] * inv
-                            d[i + 1] = s[i + 1] * op + d[i + 1] * inv
-                            d[i + 2] = s[i + 2] * op + d[i + 2] * inv
+                            d[i] = s[i] * k + d[i] * inv
+                            d[i + 1] = s[i + 1] * k + d[i + 1] * inv
+                            d[i + 2] = s[i + 2] * k + d[i + 2] * inv
                             d[i + 3] = sa + d[i + 3] * inv
                         }
                     }
                 }
                 i += 4
+                p++
             }
             dst.markDirty()
         }
@@ -474,8 +488,10 @@ class StrokeEngine(
     /**
      * Composites the stroke buffer tile [src] into [dst] with [strokeBlend]:
      * `out = lerp(normal, BlendMath.blendPixel(mode), blendStrength)`, opacity [op].
+     * [f] carries the wet edge factors of the tile (spec §1.7) and scales the source opacity per pixel; null is
+     * the plain uniform [op].
      */
-    private fun blendTile(src: Tile, dst: Tile, op: Float) {
+    private fun blendTile(src: Tile, dst: Tile, op: Float, f: FloatArray?) {
         val mode = strokeBlend
         val strength = blendStrength
         val s = FloatArray(4)
@@ -484,17 +500,18 @@ class StrokeEngine(
         val m = FloatArray(4)
         var i = 0
         while (i < Tile.CHANNELS) {
-            val sa = src[i + 3] * op
+            val o = if (f == null) op else op * f[i shr 2]
+            val sa = src[i + 3] * o
             if (sa > 0f) {
                 src.read(i, s)
                 dst.read(i, d)
                 val inv = 1f - sa
-                n[0] = s[0] * op + d[0] * inv
-                n[1] = s[1] * op + d[1] * inv
-                n[2] = s[2] * op + d[2] * inv
+                n[0] = s[0] * o + d[0] * inv
+                n[1] = s[1] * o + d[1] * inv
+                n[2] = s[2] * o + d[2] * inv
                 n[3] = sa + d[3] * inv
                 d.copyInto(m)
-                BlendMath.blendPixel(mode, m, 0, s, 0, op)
+                BlendMath.blendPixel(mode, m, 0, s, 0, o)
                 dst.write(
                     i,
                     n[0] + (m[0] - n[0]) * strength,
@@ -505,6 +522,94 @@ class StrokeEngine(
             }
             i += 4
         }
+    }
+
+    /**
+     * Wet edge factors of buffer tile [key] (spec/tools/m2-brush.md §1.7), one per pixel in reading order:
+     * `f = 1 − w·(1 − e)`, `e = sat((α − box₄(α))·4 + 0.5)`. The box blur is separable (horizontal then vertical,
+     * radius [WET_HALO]) over the tile alpha plus a halo read from the neighbouring buffer tiles.
+     */
+    private fun wetFactors(key: TileKey): FloatArray {
+        val s = wet ?: WetScratch().also { wet = it }
+        val h = WET_HALO
+        val n = WET_SPAN
+        val plane = s.plane
+        java.util.Arrays.fill(plane, 0f)
+        val baseX = (key.tx shl Tile.SHIFT) - h
+        val baseY = (key.ty shl Tile.SHIFT) - h
+        for (ty in key.ty - 1..key.ty + 1) {
+            for (tx in key.tx - 1..key.tx + 1) {
+                val t = buffer.get(tx, ty) ?: continue
+                val tileX = tx shl Tile.SHIFT
+                val tileY = ty shl Tile.SHIFT
+                val x0 = max(baseX, tileX) - baseX
+                val x1 = min(baseX + n, tileX + Tile.SIZE) - baseX
+                val y0 = max(baseY, tileY) - baseY
+                val y1 = min(baseY + n, tileY + Tile.SIZE) - baseY
+                if (x0 >= x1 || y0 >= y1) continue
+                val sx = (baseX + x0) and Tile.MASK
+                val sy = (baseY + y0) and Tile.MASK
+                for (y in y0 until y1) {
+                    var di = y * n + x0
+                    var si = t.index(sx, sy + y - y0) + 3
+                    for (x in x0 until x1) {
+                        plane[di++] = t[si]
+                        si += 4
+                    }
+                }
+            }
+        }
+        // First pass: a horizontal box of radius h per row; only the columns the vertical pass reads are kept.
+        val rows = s.rows
+        val inv = 1f / (2 * h + 1)
+        for (y in 0 until n) {
+            val row = y * n
+            var sum = 0f
+            for (x in 0..2 * h) sum += plane[row + x]
+            rows[row + h] = sum * inv
+            for (x in h + 1 until n - h) {
+                sum += plane[row + x + h] - plane[row + x - h - 1]
+                rows[row + x] = sum * inv
+            }
+        }
+        // Second pass: a vertical box over the blurred rows, then the rim factor of every tile pixel.
+        val w = wetEdges
+        val f = s.factor
+        for (x in h until n - h) {
+            var sum = 0f
+            for (y in 0..2 * h) sum += rows[y * n + x]
+            for (y in h until n - h) {
+                if (y > h) sum += rows[(y + h) * n + x] - rows[(y - h - 1) * n + x]
+                val e = ((plane[y * n + x] - sum * inv) * 4f + 0.5f).coerceIn(0f, 1f)
+                f[(y - h) * Tile.SIZE + (x - h)] = 1f - w * (1f - e)
+            }
+        }
+        return f
+    }
+
+    /**
+     * Live preview of buffer tile [key] (spec/tools/m2-brush.md §1.7): the buffer with the wet edge factors applied
+     * to every channel, so the rim shows before the stroke is committed; null when the tile is absent. With
+     * [EffectParams.wetEdges] 0 this is a plain copy of the buffer; the caller scales it by [previewOpacity].
+     */
+    fun previewTile(key: TileKey): Tile? {
+        val src = buffer.get(key) ?: return null
+        val out = src.copy()
+        if (wetEdges <= 0f) return out
+        val f = wetFactors(key)
+        var i = 0
+        var p = 0
+        while (i < Tile.CHANNELS) {
+            val k = f[p]
+            out[i] = src[i] * k
+            out[i + 1] = src[i + 1] * k
+            out[i + 2] = src[i + 2] * k
+            out[i + 3] = src[i + 3] * k
+            i += 4
+            p++
+        }
+        out.markDirty()
+        return out
     }
 
     private fun commitMask(grid: MaskGrid): StrokeCommit? {
@@ -553,6 +658,13 @@ class StrokeEngine(
         return StrokeCommit.Mask(MaskPatch(id, before, after))
     }
 
+    /** Reusable buffers of the wet edge blur (§1.7): the tile alpha plus halo, the horizontal pass, the factors. */
+    private class WetScratch {
+        val plane = FloatArray(WET_SPAN * WET_SPAN)
+        val rows = FloatArray(WET_SPAN * WET_SPAN)
+        val factor = FloatArray(Tile.SIZE * Tile.SIZE)
+    }
+
     private companion object {
         fun directOpOf(mode: StrokeMode, alphaLock: Boolean): MaskOp = when {
             mode == StrokeMode.ERASE -> MaskOp.ERASE
@@ -561,6 +673,12 @@ class StrokeEngine(
         }
 
         const val MAX_PER_SAMPLE = 16
+
+        /** Radius of the wet edge box blur (§1.7); a buffer tile is read with a halo of this many pixels. */
+        const val WET_HALO = 4
+
+        /** Side of the haloed alpha plane of one buffer tile: the tile plus two [WET_HALO] rims. */
+        const val WET_SPAN = Tile.SIZE + 2 * WET_HALO
         const val PI_F = kotlin.math.PI.toFloat()
         const val ZERO: Byte = 0
     }
