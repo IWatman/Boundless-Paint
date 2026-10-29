@@ -71,6 +71,9 @@ enum class MaskOp {
  * dabs of one stroke saturate at `cap` instead of 1. [TextureMode.WARP_ALONG_STROKE] renders as CANVAS_FIXED
  * for now; softness, gradation and texture jitter arrive with S2b. Without a texture the kernel takes exactly
  * the untextured path (one branch per dab, no per-pixel texture work).
+ *
+ * With [ignoreOpacity] the dab opacity is left out of the alpha: the adhesion load plane (§1.7) accumulates
+ * `m·flow` per pixel no matter how much the opacity cap would limit the buffer alpha itself.
  */
 class MaskKernel(
     private val op: MaskOp,
@@ -83,6 +86,7 @@ class MaskKernel(
     private val tex: TextureParams? = null,
     private val texImage: TextureImage? = null,
     private val brushSize: Float = 0f,
+    private val ignoreOpacity: Boolean = false,
 ) : DabKernel {
     override val createsTiles: Boolean get() = op == MaskOp.OVER
 
@@ -128,7 +132,7 @@ class MaskKernel(
         val level = pyr?.level(dEff * min(dab.sx, dab.sy)) ?: 0
         val invD = 1f / dEff
         val kDepth = if (depth > 0f) (depth * (1f - dab.pressure)).coerceIn(0f, 0.999f) else 0f
-        val opac = dab.opacity
+        val opac = if (ignoreOpacity) 1f else dab.opacity
         val r = dab.r
         val g = dab.g
         val b = dab.b

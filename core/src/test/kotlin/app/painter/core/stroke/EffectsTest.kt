@@ -16,11 +16,13 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
- * Stroke effects (spec/tools/m2-brush.md §1.7, stages S3a/S3b): glaze saturates the buffer instead of accumulating, so
- * a self-intersection is not darker than a single pass; glaze = 0 keeps the unglazed stroke bit-identical; a brush
+ * Stroke effects (spec/tools/m2-brush.md §1.7, stages S3a/S3b/S3c): glaze saturates the buffer instead of
+ * accumulating, so a self-intersection is not darker than a single pass; glaze = 0 keeps the stroke bit-identical; a
  * blend mode composites the buffered stroke with `BlendMath` and its strength mixes it with the normal result.
  * Wet edges thin the middle of a flat fill and keep its rim: the composite uses `α' = α·(1 − w·(1 − e))` with `e`
  * from the alpha against its 4 px box blur, wetEdges 0 composites bit-identically, and the preview shows the rim.
+ * Adhesion (S3c) keeps a load plane `L` beside the buffer and composites `smoothstep(a, 1, L)`, so one light pass
+ * stays faint while repeated passes over the same place build up; adhesion 0 is the plain stroke, bit-identical.
  */
 class EffectsTest {
     /** Flow < 1 so that overlapping dabs build up alpha unless glaze stops them. */
@@ -126,6 +128,54 @@ class EffectsTest {
         val centre = t[t.index(150, 110) + 3]
         e.cancel()
         assertTrue(rim >= centre * 1.3f, "preview rim $rim vs centre $centre")
+    }
+
+    /** Light buffered brush: 10 px between dabs against a 40 px head, so a pixel collects ~4 dabs per pass. */
+    private val adhering = BrushParams(size = 40f, hardness = 1f, spacing = 0.25f, smoothing = 0f, flow = 0.3f, opacity = 1f)
+
+    /** [count] passes of (40, 100)–(160, 100) drawn as one stroke, so the adhesion load plane keeps accumulating. */
+    private fun passes(count: Int): List<InputPoint> {
+        val pts = ArrayList<InputPoint>()
+        for (i in 0 until count) {
+            val l = if (i % 2 == 0) line(40f, 100.5f, 160f, 100.5f, 4f) else line(160f, 100.5f, 40f, 100.5f, 4f)
+            pts.addAll(if (pts.isEmpty()) l else l.drop(1))
+        }
+        return pts
+    }
+
+    /** Layer alpha at the middle of the band after [passCount] passes of [adhering] with adhesion [a]. */
+    private fun loaded(a: Float, passCount: Int): Float {
+        val doc = Document.create(200, 200)
+        val e = engine(doc, adhering.copy(effects = EffectParams(adhesion = a)))
+        drawOpen(e, passes(passCount))
+        e.endPatch()
+        return alpha(doc.activeRaster!!.pixels, 100, 100)
+    }
+
+    @Test
+    fun adhesionZeroIsThePlainStroke() {
+        fun draw(effects: EffectParams): TileGrid {
+            val doc = Document.create(200, 200)
+            val e = engine(doc, adhering.copy(effects = effects))
+            drawOpen(e, passes(3))
+            e.endPatch()
+            return doc.activeRaster!!.pixels
+        }
+        assertGridsEqual(draw(EffectParams(adhesion = 0f)), draw(EffectParams()), "adhesion 0")
+    }
+
+    @Test
+    fun adhesionThinsOnePassAndBuildsUpOverRepeats() {
+        // flow 0.3 and 10 px between dabs under a 40 px head load a pixel to L ≈ 0.76 in one pass, so adhesion 0.7
+        // keeps 0.10 of the 0.76 alpha (smoothstep(0.7, 1, 0.76)); three passes load it to ≈ 0.99, i.e. 0.99 against
+        // the 0.986 of the unadhered stroke — well within 0.1.
+        val plainOne = loaded(0f, 1)
+        val stuckOne = loaded(0.7f, 1)
+        val plainThree = loaded(0f, 3)
+        val stuckThree = loaded(0.7f, 3)
+        assertTrue(plainOne > 0.15f, "the light stroke must paint, got $plainOne")
+        assertTrue(stuckOne < plainOne - 0.1f, "adhesion 0.7 must thin one pass: $stuckOne vs $plainOne")
+        assertTrue(abs(stuckThree - plainThree) <= 0.1f, "three passes: $stuckThree vs $plainThree")
     }
 
     private fun red(x: Float): BrushParams = BrushParams(

@@ -36,6 +36,10 @@ import kotlin.math.sqrt
  * buffer; a blend mode other than normal composites the whole buffer with `BlendMath` and forces the buffered path.
  * Wet edges darken the rim on composite: `α' = α·(1 − w·(1 − e))` with `e` the buffer alpha against its 4 px box
  * blur, so a flat fill stays solid at the edge and thins out in the middle; `wetEdges` 0 composites unchanged.
+ * Adhesion keeps an L load plane beside the buffer, `L = over(L, m·flow)` per dab, and composites the visible
+ * alpha `smoothstep(adhesion, 1, L)` instead of the buffer alpha (the buffer colour is kept): a light pass stays
+ * faint and repeated passes over the same place build up. Adhesion 0 composites the plain path bit-identically;
+ * it applies to buffered strokes only (a build-up stroke writes to the layer directly).
  *
  * [StrokeOptions.clip] limits coverage: in buffered paths it is a ceiling of the buffer alpha (the buffer never
  * exceeds the selection value), in the direct path it multiplies dab coverage. [StrokeOptions.copies] repeats
@@ -117,6 +121,9 @@ class StrokeEngine(
     /** Scratch of the wet edge blur (§1.7), allocated on the first composite that has wet edges. */
     private var wet: WetScratch? = null
 
+    /** Scratch of [visibleAlpha] (§1.7), allocated on the first composite that has adhesion. */
+    private var loadScratch: LoadScratch? = null
+
     /** Share of [strokeBlend]: `out = lerp(normal, mode, strength)`. */
     private val blendStrength: Float = params.effects.blendStrength.coerceIn(0f, 1f)
 
@@ -136,6 +143,12 @@ class StrokeEngine(
     private val scheduler = TileScheduler.shared(ctx.threads)
     private val head = if (params.head.source == HeadSource.BITMAP) res.head else null
 
+    /** Adhesion (spec/tools/m2-brush.md §1.7) of the buffered stroke; 0 keeps the plain composite path. */
+    private val adhesion: Float = if (directToLayer) 0f else params.effects.adhesion.coerceIn(0f, 1f)
+
+    /** Load plane `L` of adhesion (§1.7), `L = over(L, m·flow)` per dab; allocated only with adhesion > 0. */
+    private val load: TileGrid? = if (adhesion > 0f) TileGrid(doc.width, doc.height, precise = true) else null
+
     private val kernel: MaskKernel = if (directToLayer) {
         MaskKernel(
             directOpOf(mode, alphaLock), head, params.head.antialias, params.head.depth, previewOpacity, ceiling = false,
@@ -150,6 +163,14 @@ class StrokeEngine(
     }
     private val directOp = directOpOf(mode, alphaLock)
     private val access: TileAccess = if (directToLayer) working!! else bufferAccess
+
+    /** Writes of the load plane; it accumulates like the buffer alpha, so it shares the pool and the dirty set. */
+    private val loadAccess: BufferAccess? = load?.let { BufferAccess(it, pool, touch) }
+
+    /** Load kernel (§1.7): plain source-over of `m·flow` per dab, without opacity, glaze, texture or a ceiling. */
+    private val loadKernel: MaskKernel? = if (load == null) null else MaskKernel(
+        MaskOp.OVER, head, params.head.antialias, params.head.depth, 1f, ceiling = false, ignoreOpacity = true,
+    )
 
     private val stabilizer = Stabilizer(params.smoothing, params.smoothingSpeed)
     private val stages: List<PointStage> = buildList {
@@ -213,6 +234,7 @@ class StrokeEngine(
         }
         touchBuffer()
         bufferAccess.releaseAll()
+        loadAccess?.releaseAll()
         return commit
     }
 
@@ -221,6 +243,7 @@ class StrokeEngine(
 
     /** Aborts the stroke without changing the target. */
     fun cancel() {
+        loadAccess?.releaseAll()
         for (s in stages) s.cancel()
         working?.rollback()
         touchBuffer()
@@ -328,6 +351,7 @@ class StrokeEngine(
     )
 
     private fun rerender() {
+        loadAccess?.releaseAll()
         if (directToLayer) working!!.reset() else {
             touchBuffer()
             bufferAccess.releaseAll()
@@ -374,6 +398,9 @@ class StrokeEngine(
             fanned
         }
         scheduler.run(out, access, kernel, options.clip)
+        // Adhesion (§1.7): the same dabs fill the load plane of the buffer.
+        val lk = loadKernel
+        if (lk != null) scheduler.run(out, loadAccess!!, lk, options.clip)
         batch.clear()
     }
 
@@ -390,16 +417,25 @@ class StrokeEngine(
                 val ys = FloatArray(sub.size) { t.b * sub[it].x + t.d * sub[it].y + t.ty }
                 var cachedKey = Long.MIN_VALUE
                 var tile: Tile? = null
+                var loadTile: Tile? = null
                 PolygonFill.rasterize(xs, ys, doc.width, doc.height) { x, y, cov ->
                     val key = TileKey(x shr Tile.SHIFT, y shr Tile.SHIFT)
                     if (key.packed != cachedKey) {
                         cachedKey = key.packed
                         tile = access.prepare(key, kernel.createsTiles)
+                        loadTile = loadAccess?.prepare(key, create = true)
                     }
                     val d = tile ?: return@rasterize
                     val m = clip?.value(x, y) ?: 1f
                     val sa = cov * alpha * m
                     if (sa <= 0f) return@rasterize
+                    val lt = loadTile
+                    if (lt != null) {
+                        // Adhesion (§1.7): the fill loads the plane too, so a filled area survives the threshold.
+                        val li = lt.index(x and Tile.MASK, y and Tile.MASK) + 3
+                        lt[li] = lt[li] + (1f - lt[li]) * sa
+                        lt.markDirty()
+                    }
                     val i = d.index(x and Tile.MASK, y and Tile.MASK)
                     if (directToLayer) {
                         val k = sa * previewOpacity
@@ -447,8 +483,9 @@ class StrokeEngine(
             // Wet edges (§1.7): the rim factor scales the premultiplied pixel on composite; 0 skips the blur.
             // TODO: the live preview still composites [strokeBlend] with normal source-over.
             val f = if (wetEdges > 0f) wetFactors(key) else null
+            val vis = if (load != null) visibleAlpha(key) else null
             if (blended && !erase && !alphaLock) {
-                blendTile(s, dst, op, f)
+                blendTile(s, dst, op, f, vis)
                 dst.markDirty()
                 continue
             }
@@ -457,7 +494,16 @@ class StrokeEngine(
             var p = 0
             while (i < Tile.CHANNELS) {
                 val k = if (f == null) op else op * f[p]
-                val sa = s[i + 3] * k
+                val sa: Float
+                var kc = k
+                if (vis != null) {
+                    // Adhesion (§1.7): the load plane decides the visible alpha, the RGB keeps its premultiplied weight.
+                    val a = s[i + 3]
+                    sa = vis[p] * k
+                    kc = if (a > 0f) k * (vis[p] / a) else 0f
+                } else {
+                    sa = s[i + 3] * k
+                }
                 if (sa > 0f) {
                     val inv = 1f - sa
                     when {
@@ -466,14 +512,14 @@ class StrokeEngine(
                         }
                         alphaLock -> {
                             val da = d[i + 3]
-                            d[i] = s[i] * k * da + d[i] * inv
-                            d[i + 1] = s[i + 1] * k * da + d[i + 1] * inv
-                            d[i + 2] = s[i + 2] * k * da + d[i + 2] * inv
+                            d[i] = s[i] * kc * da + d[i] * inv
+                            d[i + 1] = s[i + 1] * kc * da + d[i + 1] * inv
+                            d[i + 2] = s[i + 2] * kc * da + d[i + 2] * inv
                         }
                         else -> {
-                            d[i] = s[i] * k + d[i] * inv
-                            d[i + 1] = s[i + 1] * k + d[i + 1] * inv
-                            d[i + 2] = s[i + 2] * k + d[i + 2] * inv
+                            d[i] = s[i] * kc + d[i] * inv
+                            d[i + 1] = s[i + 1] * kc + d[i + 1] * inv
+                            d[i + 2] = s[i + 2] * kc + d[i + 2] * inv
                             d[i + 3] = sa + d[i + 3] * inv
                         }
                     }
@@ -489,9 +535,10 @@ class StrokeEngine(
      * Composites the stroke buffer tile [src] into [dst] with [strokeBlend]:
      * `out = lerp(normal, BlendMath.blendPixel(mode), blendStrength)`, opacity [op].
      * [f] carries the wet edge factors of the tile (spec §1.7) and scales the source opacity per pixel; null is
-     * the plain uniform [op].
+     * the plain uniform [op]. [vis] is the adhesion alpha of the tile (§1.7): when set it replaces the buffer
+     * alpha, and the source colour keeps its premultiplied weight.
      */
-    private fun blendTile(src: Tile, dst: Tile, op: Float, f: FloatArray?) {
+    private fun blendTile(src: Tile, dst: Tile, op: Float, f: FloatArray?, vis: FloatArray? = null) {
         val mode = strokeBlend
         val strength = blendStrength
         val s = FloatArray(4)
@@ -501,9 +548,19 @@ class StrokeEngine(
         var i = 0
         while (i < Tile.CHANNELS) {
             val o = if (f == null) op else op * f[i shr 2]
-            val sa = src[i + 3] * o
+            var sa = src[i + 3] * o
+            if (vis != null) sa = vis[i shr 2] * o
             if (sa > 0f) {
                 src.read(i, s)
+                if (vis != null) {
+                    // Adhesion (§1.7): the load alpha replaces the buffer alpha, the colour keeps its weight.
+                    val a = src[i + 3]
+                    val r = if (a > 0f) vis[i shr 2] / a else 0f
+                    s[0] *= r
+                    s[1] *= r
+                    s[2] *= r
+                    s[3] = vis[i shr 2]
+                }
                 dst.read(i, d)
                 val inv = 1f - sa
                 n[0] = s[0] * o + d[0] * inv
@@ -591,25 +648,56 @@ class StrokeEngine(
      * Live preview of buffer tile [key] (spec/tools/m2-brush.md §1.7): the buffer with the wet edge factors applied
      * to every channel, so the rim shows before the stroke is committed; null when the tile is absent. With
      * [EffectParams.wetEdges] 0 this is a plain copy of the buffer; the caller scales it by [previewOpacity].
+     * With adhesion (§1.7) the alpha comes from the load plane and the colour follows it, so build-up shows live.
      */
     fun previewTile(key: TileKey): Tile? {
         val src = buffer.get(key) ?: return null
         val out = src.copy()
-        if (wetEdges <= 0f) return out
-        val f = wetFactors(key)
+        val vis = if (load != null) visibleAlpha(key) else null
+        if (wetEdges <= 0f && vis == null) return out
+        val f = if (wetEdges > 0f) wetFactors(key) else null
         var i = 0
         var p = 0
         while (i < Tile.CHANNELS) {
-            val k = f[p]
-            out[i] = src[i] * k
-            out[i + 1] = src[i + 1] * k
-            out[i + 2] = src[i + 2] * k
-            out[i + 3] = src[i + 3] * k
+            val k = if (f == null) 1f else f[p]
+            val a = src[i + 3]
+            val rgbK = if (vis == null) k else if (a > 0f) k * (vis[p] / a) else 0f
+            out[i] = src[i] * rgbK
+            out[i + 1] = src[i + 1] * rgbK
+            out[i + 2] = src[i + 2] * rgbK
+            out[i + 3] = if (vis == null) a * k else vis[p] * k
             i += 4
             p++
         }
         out.markDirty()
         return out
+    }
+
+    /**
+     * Visible alpha of buffer tile [key] with adhesion (spec/tools/m2-brush.md §1.7): `smoothstep(a, 1, L)` of the
+     * load plane, one value per pixel in reading order; 0 where the load tile is missing. Reuses one scratch plane.
+     */
+    private fun visibleAlpha(key: TileKey): FloatArray {
+        val s = loadScratch ?: LoadScratch().also { loadScratch = it }
+        val out = s.alpha
+        java.util.Arrays.fill(out, 0f)
+        val t = load!!.get(key) ?: return out
+        val a = adhesion
+        val inv = 1f / (1f - a)
+        var i = 3
+        var p = 0
+        while (p < out.size) {
+            val v = ((t[i] - a) * inv).coerceIn(0f, 1f)
+            out[p] = v * v * (3f - 2f * v)
+            i += 4
+            p++
+        }
+        return out
+    }
+
+    /** Scratch of [visibleAlpha]: the adhesion alpha of one buffer tile. */
+    private class LoadScratch {
+        val alpha = FloatArray(Tile.SIZE * Tile.SIZE)
     }
 
     private fun commitMask(grid: MaskGrid): StrokeCommit? {
@@ -627,8 +715,9 @@ class StrokeEngine(
                 val old = existing?.copy()
                 val t = existing ?: grid.getOrCreate(key)
                 val data = t.data
+                val vis = if (load != null) visibleAlpha(key) else null
                 for (p in 0 until Tile.SIZE * Tile.SIZE) {
-                    val a = src[p * 4 + 3] * op
+                    val a = (if (vis == null) src[p * 4 + 3] else vis[p]) * op
                     if (a <= 0f) continue
                     val m = (data[p].toInt() and 0xFF) / 255f
                     val v = if (erase) m * (1f - a) else m + a * (lum - m)
