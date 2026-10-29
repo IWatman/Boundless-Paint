@@ -1,0 +1,63 @@
+{
+  "category": "pens",
+  "id": "pens.calligraphy",
+  "name": {
+    "en": "Calligraphy pen",
+    "ru": "Каллиграфическое перо"
+  },
+  "params": {
+    "flow": 0.95,
+    "hardness": 0.9,
+    "head": {
+      "angle": -40.0,
+      "aspect": 0.8,
+      "rotationMode": "fixed",
+      "source": "bitmap"
+    },
+    "jitter": {
+      "size": 0.02
+    },
+    "opacity": 1.0,
+    "pressureToFlow": {
+      "min": 0.0,
+      "points": [
+        [
+          0.0,
+          0.35
+        ],
+        [
+          1.0,
+          1.0
+        ]
+      ]
+    },
+    "pressureToSize": {
+      "min": 0.6,
+      "points": [
+        [
+          0.0,
+          0.0
+        ],
+        [
+          1.0,
+          1.0
+        ]
+      ]
+    },
+    "size": 20.0,
+    "sizeMax": 150.0,
+    "sizeMin": 2.0,
+    "spacing": 0.02
+  },
+  "resources": {
+    "head": "asset:heads/rounded_square.png"
+  },
+  "schema": 1,
+  "tags": [
+    "каллиграфия",
+    "calligraphy",
+    "flat",
+    "леттеринг",
+    "lettering"
+  ]
+}

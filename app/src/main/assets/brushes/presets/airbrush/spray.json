@@ -1,0 +1,99 @@
+{
+  "category": "airbrush",
+  "id": "airbrush.spray",
+  "name": {
+    "en": "Spray",
+    "ru": "Распылитель"
+  },
+  "params": {
+    "dynamics": [
+      {
+        "curve": {
+          "min": 0.0,
+          "points": [
+            [
+              0.0,
+              0.2
+            ],
+            [
+              1.0,
+              1.0
+            ]
+          ]
+        },
+        "source": "PRESSURE",
+        "target": "FLOW"
+      },
+      {
+        "curve": {
+          "min": 0.0,
+          "points": [
+            [
+              0.0,
+              1.0
+            ],
+            [
+              1.0,
+              0.3
+            ]
+          ]
+        },
+        "source": "VELOCITY",
+        "target": "SCATTER"
+      }
+    ],
+    "flow": 0.35,
+    "hardness": 0.85,
+    "head": {
+      "rotationMode": "random",
+      "source": "bitmap"
+    },
+    "jitter": {
+      "scatter": 0.35,
+      "size": 0.5
+    },
+    "opacity": 0.6,
+    "pressureToFlow": {
+      "min": 0.0,
+      "points": [
+        [
+          0.0,
+          0.1
+        ],
+        [
+          1.0,
+          1.0
+        ]
+      ]
+    },
+    "pressureToSize": {
+      "min": 0.25,
+      "points": [
+        [
+          0.0,
+          0.0
+        ],
+        [
+          1.0,
+          1.0
+        ]
+      ]
+    },
+    "size": 60.0,
+    "sizeMax": 300.0,
+    "sizeMin": 6.0,
+    "spacing": 0.12
+  },
+  "resources": {
+    "head": "asset:heads/spray.png"
+  },
+  "schema": 1,
+  "tags": [
+    "спрей",
+    "spray",
+    "брызги",
+    "splatter",
+    "тонер",
+    "tone"
+  ]
+}

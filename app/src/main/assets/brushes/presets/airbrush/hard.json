@@ -1,0 +1,84 @@
+{
+  "category": "airbrush",
+  "id": "airbrush.hard",
+  "name": {
+    "en": "Hard airbrush",
+    "ru": "Жёсткий аэрограф"
+  },
+  "params": {
+    "dynamics": [
+      {
+        "curve": {
+          "min": 0.0,
+          "points": [
+            [
+              0.0,
+              0.3
+            ],
+            [
+              1.0,
+              1.0
+            ]
+          ]
+        },
+        "source": "PRESSURE",
+        "target": "FLOW"
+      }
+    ],
+    "flow": 0.45,
+    "hardness": 0.8,
+    "head": {
+      "source": "bitmap"
+    },
+    "jitter": {
+      "scatter": 0.01,
+      "size": 0.03
+    },
+    "opacity": 0.85,
+    "pressureToFlow": {
+      "min": 0.0,
+      "points": [
+        [
+          0.0,
+          0.15
+        ],
+        [
+          1.0,
+          1.0
+        ]
+      ]
+    },
+    "pressureToSize": {
+      "min": 0.15,
+      "points": [
+        [
+          0.0,
+          0.0
+        ],
+        [
+          0.6,
+          0.6
+        ],
+        [
+          1.0,
+          1.0
+        ]
+      ]
+    },
+    "size": 26.0,
+    "sizeMax": 200.0,
+    "sizeMin": 2.0,
+    "spacing": 0.04
+  },
+  "resources": {
+    "head": "asset:heads/soft_disk.png"
+  },
+  "schema": 1,
+  "tags": [
+    "аэрограф",
+    "airbrush",
+    "hard",
+    "плотный",
+    "opaque"
+  ]
+}

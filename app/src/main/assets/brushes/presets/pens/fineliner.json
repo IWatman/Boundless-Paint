@@ -1,0 +1,58 @@
+{
+  "category": "pens",
+  "id": "pens.fineliner",
+  "name": {
+    "en": "Fineliner",
+    "ru": "Линер"
+  },
+  "params": {
+    "flow": 0.95,
+    "hardness": 0.95,
+    "head": {
+      "source": "round"
+    },
+    "jitter": {
+      "size": 0.01
+    },
+    "opacity": 1.0,
+    "pressureToFlow": {
+      "min": 0.0,
+      "points": [
+        [
+          0.0,
+          0.7
+        ],
+        [
+          1.0,
+          1.0
+        ]
+      ]
+    },
+    "pressureToSize": {
+      "min": 0.8,
+      "points": [
+        [
+          0.0,
+          0.0
+        ],
+        [
+          1.0,
+          1.0
+        ]
+      ]
+    },
+    "size": 2.2,
+    "sizeMax": 12.0,
+    "sizeMin": 0.8,
+    "spacing": 0.03
+  },
+  "resources": {},
+  "schema": 1,
+  "tags": [
+    "линер",
+    "fineliner",
+    "ink",
+    "контур",
+    "lineart"
+  ]
+}

@@ -25,6 +25,45 @@
         "en": "Erasers",
         "ru": "Ластики"
       }
+    },
+    {
+      "brushes": [
+        "pens.fineliner",
+        "pens.ballpoint",
+        "pens.brush_pen",
+        "pens.technical",
+        "pens.calligraphy"
+      ],
+      "id": "pens",
+      "name": {
+        "en": "Pens",
+        "ru": "Ручки"
+      }
+    },
+    {
+      "brushes": [
+        "markers.chisel",
+        "markers.round",
+        "markers.highlighter",
+        "markers.felt_tip"
+      ],
+      "id": "markers",
+      "name": {
+        "en": "Markers",
+        "ru": "Маркеры"
+      }
+    },
+    {
+      "brushes": [
+        "airbrush.soft",
+        "airbrush.hard",
+        "airbrush.spray"
+      ],
+      "id": "airbrush",
+      "name": {
+        "en": "Airbrushes",
+        "ru": "Аэрографы"
+      }
     }
   ],
   "favorites": {

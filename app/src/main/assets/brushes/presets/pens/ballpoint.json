@@ -1,0 +1,66 @@
+{
+  "category": "pens",
+  "id": "pens.ballpoint",
+  "name": {
+    "en": "Ballpoint pen",
+    "ru": "Шариковая ручка"
+  },
+  "params": {
+    "flow": 0.7,
+    "hardness": 0.85,
+    "head": {
+      "source": "round"
+    },
+    "jitter": {
+      "angle": 0.3,
+      "size": 0.02
+    },
+    "opacity": 0.92,
+    "pressureToFlow": {
+      "min": 0.0,
+      "points": [
+        [
+          0.0,
+          0.2
+        ],
+        [
+          1.0,
+          1.0
+        ]
+      ]
+    },
+    "pressureToSize": {
+      "min": 0.55,
+      "points": [
+        [
+          0.0,
+          0.0
+        ],
+        [
+          0.4,
+          0.5
+        ],
+        [
+          1.0,
+          1.0
+        ]
+      ]
+    },
+    "size": 2.6,
+    "sizeMax": 10.0,
+    "sizeMin": 0.8,
+    "spacing": 0.04,
+    "taperEnd": 5.0,
+    "taperOpacity": 0.25,
+    "taperStart": 1.5
+  },
+  "resources": {},
+  "schema": 1,
+  "tags": [
+    "ручка",
+    "pen",
+    "ballpoint",
+    "скетч",
+    "sketch"
+  ]
+}

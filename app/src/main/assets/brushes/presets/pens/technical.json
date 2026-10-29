@@ -1,0 +1,55 @@
+{
+  "category": "pens",
+  "id": "pens.technical",
+  "name": {
+    "en": "Technical pen",
+    "ru": "Рапидограф"
+  },
+  "params": {
+    "flow": 1.0,
+    "hardness": 1.0,
+    "head": {
+      "source": "round"
+    },
+    "opacity": 1.0,
+    "pressureToFlow": {
+      "min": 0.0,
+      "points": [
+        [
+          0.0,
+          1.0
+        ],
+        [
+          1.0,
+          1.0
+        ]
+      ]
+    },
+    "pressureToSize": {
+      "min": 0.0,
+      "points": [
+        [
+          0.0,
+          1.0
+        ],
+        [
+          1.0,
+          1.0
+        ]
+      ]
+    },
+    "size": 1.6,
+    "sizeMax": 8.0,
+    "sizeMin": 0.5,
+    "spacing": 0.025
+  },
+  "resources": {},
+  "schema": 1,
+  "tags": [
+    "рапидограф",
+    "technical",
+    "constant",
+    "чертёж",
+    "drafting"
+  ]
+}
