@@ -51,8 +51,38 @@ class InputCalibration(
         auto = false
     }
 
+    /**
+     * Persistable state (spec/tools/m2-brush.md §4.4): the range, the mode and the peak samples the
+     * automatic range is computed from. The app keeps one per input device in `files/settings/input.json`.
+     */
+    data class Snapshot(
+        val maxPressure: Float,
+        val minPressure: Float,
+        val auto: Boolean,
+        val peaks: List<Float>,
+        val weakThreshold: Float,
+        val pressureCurve: Curve,
+    )
+
+    /** Copy of the current state, see [restore]. */
+    fun snapshot(): Snapshot =
+        Snapshot(maxPressure, minPressure, auto, peaks.toList(), weakThreshold, pressureCurve)
+
+    /** Applies [Snapshot]; the downward EMA restarts as if the restored peaks were just observed. */
+    fun restore(s: Snapshot) {
+        pressureCurve = s.pressureCurve
+        minPressure = s.minPressure.coerceIn(0f, MAX_MIN)
+        maxPressure = s.maxPressure.coerceIn(minPressure + 1e-3f, 1f)
+        auto = s.auto
+        weakThreshold = s.weakThreshold.coerceIn(0f, 1f)
+        peaks.clear()
+        for (p in s.peaks.takeLast(HISTORY)) if (p > 0f) peaks.addLast(p.coerceIn(0f, 1f))
+        observed = peaks.size
+    }
+
     private companion object {
         const val HISTORY = 20
         const val MIN_MAX = 0.4f
+        const val MAX_MIN = 0.999f
     }
 }

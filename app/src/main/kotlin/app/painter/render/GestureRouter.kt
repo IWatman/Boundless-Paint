@@ -54,6 +54,8 @@ class GestureRouter(private val view: View, private val host: Host) {
     private val downY = FloatArray(MAX_IDS)
 
     private var strokeId = -1
+    /** `InputDevice.descriptor` of the device that started the current stroke, see [CanvasInputListener]. */
+    private var strokeDescriptor = CanvasInputListener.DEVICE_DEFAULT
     private var strokeStart = 0L
     private var strokeMaxMove = 0f
     private val pending = ArrayList<InputPoint>()
@@ -142,6 +144,7 @@ class GestureRouter(private val view: View, private val host: Host) {
         maxPointers = 1
         recordDown(e, 0)
         strokeId = e.getPointerId(0)
+        strokeDescriptor = e.device?.descriptor ?: CanvasInputListener.DEVICE_DEFAULT
         strokeStart = e.eventTime
         strokeMaxMove = 0f
         val tool = e.getToolType(0)
@@ -158,7 +161,7 @@ class GestureRouter(private val view: View, private val host: Host) {
             view.postDelayed(longPressRunnable, LONG_PRESS_MS)
         } else {
             state = State.STROKE
-            host.listener?.onStrokeBegin(point(e, 0, -1, false))
+            host.listener?.onStrokeBegin(point(e, 0, -1, false), strokeDescriptor)
         }
     }
 
@@ -203,7 +206,7 @@ class GestureRouter(private val view: View, private val host: Host) {
                     strokeStart = e.eventTime
                     val l = host.listener
                     if (l != null) {
-                        l.onStrokeBegin(pending[0])
+                        l.onStrokeBegin(pending[0], strokeDescriptor)
                         if (pending.size > 1) l.onStrokeMove(ArrayList(pending.subList(1, pending.size)))
                     }
                     pending.clear()
@@ -280,7 +283,7 @@ class GestureRouter(private val view: View, private val host: Host) {
         when (state) {
             State.PENDING -> {
                 if (pending.isNotEmpty() && l != null) {
-                    l.onStrokeBegin(pending[0])
+                    l.onStrokeBegin(pending[0], strokeDescriptor)
                     if (pending.size > 1) l.onStrokeMove(ArrayList(pending.subList(1, pending.size)))
                     l.onStrokeEnd()
                     traceStroke("end(tap)")

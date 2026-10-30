@@ -86,6 +86,7 @@ import app.painter.core.stroke.BrushResources
 import app.painter.core.stroke.CloneSource
 import app.painter.core.stroke.FillSpec
 import app.painter.core.stroke.HashRng
+import app.painter.core.stroke.InputCalibration
 import app.painter.core.stroke.InputPoint
 import app.painter.core.stroke.StrokeCommit
 import app.painter.core.stroke.StrokeContext
@@ -158,10 +159,15 @@ import java.util.Locale
 
 /**
  * Owns the open document and wires UI actions, the canvas view and the core engines. [prefs] carries the
- * tool settings that outlive a session (color, palette, per-mode brush preset with its size and opacity);
- * null keeps them in memory only, which is what tests want.
+ * tool settings that outlive a session (color, palette, per-mode brush preset with its size and opacity), and
+ * [input] the per-device stylus calibration (spec/tools/m2-brush.md §4.3–4.4).
+ * Null keeps either of them in memory only, which is what tests want.
  */
-class StudioViewModel(app: Application, private val prefs: ToolPrefs? = null) :
+class StudioViewModel(
+    app: Application,
+    private val prefs: ToolPrefs? = null,
+    private val input: InputSettings? = null,
+) :
     AndroidViewModel(app), StudioActions, CanvasInputListener {
 
     companion object {
@@ -172,12 +178,15 @@ class StudioViewModel(app: Application, private val prefs: ToolPrefs? = null) :
         fun factory(app: Application): ViewModelProvider.Factory = object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>): T =
-                StudioViewModel(app, ToolPrefs(app)) as T
+                StudioViewModel(app, ToolPrefs(app), InputSettings(app)) as T
         }
     }
 
     private val store = ProjectStore(app.filesDir.resolve("projects").apply { mkdirs() })
     private val ioLock = Mutex()
+
+    /** Pressure calibration of every input device seen so far, keyed by `InputDevice.descriptor`. */
+    private val calibrations = HashMap<String, InputCalibration>()
 
     private var doc: Document = Document.create(1, 1)
     /** Guides, symmetry and grid settings of [doc]; symmetry is view state, so it is never undone. */
@@ -189,6 +198,8 @@ class StudioViewModel(app: Application, private val prefs: ToolPrefs? = null) :
     private var autosaveJob: Job? = null
     private var strokeCounter = 0L
     private var strokeOnMask = false
+    /** Descriptor of the device of the running stylus stroke; saved when the stroke ends, null otherwise. */
+    private var strokeDevice: String? = null
     /** In-flight marching-ants contour computation of the selection mask. */
     private var contourJob: Job? = null
     /** Bumped for every contour request so a stale result is never published later. */
@@ -229,6 +240,7 @@ class StudioViewModel(app: Application, private val prefs: ToolPrefs? = null) :
     init {
         history.onChanged = { lastFill = null; markDirty(); refreshLayers() }
         restoreToolPrefs()
+        restoreInputSettings()
         syncBrushState()
         viewModelScope.launch(Dispatchers.IO) { ioLock.withLock { store.recoverInterrupted() } }
         refreshProjects()
@@ -330,7 +342,7 @@ class StudioViewModel(app: Application, private val prefs: ToolPrefs? = null) :
         if (canvas === view) canvas = null
     }
 
-    override fun onStrokeBegin(p: InputPoint) {
+    override fun onStrokeBegin(p: InputPoint, deviceDescriptor: String) {
         val node = doc.activeNode ?: return
         if (!node.visible || node.effectivelyLocked) return
         val maskTarget = doc.activeTarget == EditTarget.MASK && node.mask != null
@@ -346,11 +358,14 @@ class StudioViewModel(app: Application, private val prefs: ToolPrefs? = null) :
             BrushModeUi.PAINT -> StrokeMode.PAINT
         }
         val brush = if (clone != null) paintStrokeBrush() else strokeBrush()
+        val calibration = calibrationFor(deviceDescriptor)
+        strokeDevice = if (p.isStylus) deviceDescriptor else null
         val vs = canvas?.viewState?.value
         val zoom = vs?.zoom ?: 1f
         val ctx = StrokeContext(
             zoom = zoom,
             clone = clone,
+            calibration = calibration,
             viewRotation = Math.toRadians((vs?.rotationDeg ?: 0f).toDouble()).toFloat(),
             seed = HashRng.strokeSeed(strokeCounter++, STUDIO_BRUSH_ID),
             threads = STROKE_THREADS,
@@ -407,6 +422,7 @@ class StudioViewModel(app: Application, private val prefs: ToolPrefs? = null) :
         stroke = null
         val layerId = doc.activeId ?: return
         val commit = engine.end()
+        saveInputSettings()
         if (strokeOnMask) {
             (commit as? StrokeCommit.Mask)?.let { history.push(MaskPatchCommand(it.patch)) }
             canvas?.invalidate(null, null)
@@ -422,6 +438,7 @@ class StudioViewModel(app: Application, private val prefs: ToolPrefs? = null) :
     }
 
     override fun onStrokeCancel() {
+        strokeDevice = null
         val engine = stroke ?: return
         stroke = null
         engine.cancel()
@@ -2227,6 +2244,26 @@ class StudioViewModel(app: Application, private val prefs: ToolPrefs? = null) :
     }
 
     // ---- persisted tool settings ----
+
+    // ---- stylus input: the pressure calibration of every device (spec/tools/m2-brush.md §4.3) ----
+    /** Loads the per-device stylus calibration saved by [saveInputSettings] before the first stroke. */
+    private fun restoreInputSettings() {
+        val s = input ?: return
+        calibrations.putAll(s.load())
+    }
+
+    /** Calibration of input device [descriptor]; a device seen for the first time starts from the defaults. */
+    private fun calibrationFor(descriptor: String): InputCalibration =
+        calibrations.getOrPut(descriptor) { InputCalibration() }
+
+    /** Writes the calibration of the device that drew the finished stylus stroke (spec §4.4), off the main thread. */
+    private fun saveInputSettings() {
+        val descriptor = strokeDevice ?: return
+        strokeDevice = null
+        val settings = input ?: return
+        val snapshot = calibrations.toMap()
+        viewModelScope.launch(Dispatchers.IO) { ioLock.withLock { settings.save(snapshot) } }
+    }
 
     /** Restores the color and the palette at start-up; the per-mode brushes follow in [loadBrushes]. */
     private fun restoreToolPrefs() {
