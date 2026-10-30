@@ -56,6 +56,18 @@
     },
     {
       "brushes": [
+        "watercolor.wet_wash",
+        "watercolor.light",
+        "watercolor.dense"
+      ],
+      "id": "watercolor",
+      "name": {
+        "en": "Watercolour",
+        "ru": "Акварель"
+      }
+    },
+    {
+      "brushes": [
         "effects.blur_soft",
         "effects.blur_strong",
         "effects.sharpen",

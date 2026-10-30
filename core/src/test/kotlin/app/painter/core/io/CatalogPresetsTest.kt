@@ -8,6 +8,7 @@ import app.painter.core.stroke.HarmonyParams
 import app.painter.core.stroke.HarmonyVariant
 import app.painter.core.stroke.ParticlesParams
 import app.painter.core.stroke.ScreentoneParams
+import app.painter.core.stroke.WatercolorParams
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonArray
@@ -86,6 +87,7 @@ class CatalogPresetsTest {
                     special is FillBrushParams ||
                     special is ParticlesParams ||
                     special is ScreentoneParams ||
+                    special is WatercolorParams ||
                     (special is HarmonyParams && special.variant in harmonyVariants),
                 "${f.path}: unexpected special engine $special",
             )

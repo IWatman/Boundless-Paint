@@ -254,9 +254,15 @@ class StrokeEngine(
         tex = params.texture, texImage = res.texture, brushSize = params.size,
     )
 
+    /** Watercolor (§1.9) of a buffered paint stroke: the dabs wet the grid of [WetSimulation], its pigment is the buffer. */
+    private val watercolor: WetSimulation? = if (directToLayer || mode != StrokeMode.PAINT) null else
+        (params.special as? WatercolorParams)?.let { WetSimulation(it, doc.width, doc.height, options.clip) }
+
     /** Adhesion (spec/tools/m2-brush.md §1.7) of the buffered stroke; 0 keeps the plain composite path. */
     private val adhesion: Float =
-        if (directToLayer || screentone != null || harmony != null || threeD != null || particles != null) 0f else params.effects.adhesion.coerceIn(0f, 1f)
+        if (directToLayer || screentone != null || harmony != null || threeD != null || particles != null ||
+            params.special is WatercolorParams
+        ) 0f else params.effects.adhesion.coerceIn(0f, 1f)
 
     /** Load plane `L` of adhesion (§1.7), `L = over(L, m·flow)` per dab; allocated only with adhesion > 0. */
     private val load: TileGrid? = if (adhesion > 0f) TileGrid(doc.width, doc.height, precise = true) else null
@@ -324,6 +330,10 @@ class StrokeEngine(
     private var rerender = false
     private var active = false
     private var peakRaw = 0f
+
+    /** Event time of the latest input point and the time the watercolor grid was advanced to, ms; −1 before the first. */
+    private var inputTimeMs = -1L
+    private var simTimeMs = -1L
     private var stylus = false
 
     /** Starts the stroke at [p]. */
@@ -358,6 +368,9 @@ class StrokeEngine(
         flush()
         if (rerender || params.afterSmoothing > 0f) rerender()
         if (fillSpec != null) fill()
+        // Watercolor (§1.9): the stroke dries (at most 4 s of simulated time) before it is committed.
+        // TODO(S8b): dry on a timer after pen-up so the spreading is visible.
+        watercolor?.let { it.dry(); it.write(access) }
         if (stylus) ctx.calibration?.observeStrokePeak(peakRaw)
         val commit: StrokeCommit? = when {
             mask != null -> commitMask(mask)
@@ -455,8 +468,10 @@ class StrokeEngine(
             if (!started) {
                 started = true
                 recorded.add(ArrayList<InputPoint>().also { it.add(p) })
+                inputTimeMs = p.timeMs
                 walker.begin(p)
             } else {
+                inputTimeMs = p.timeMs
                 recorded.last().add(p)
                 walker.add(p)
             }
@@ -497,6 +512,8 @@ class StrokeEngine(
         harmony?.reset()
         threeD?.reset()
         particleSystem?.reset()
+        watercolor?.reset()
+        simTimeMs = -1L
         generator = newGenerator()
         walker = newWalker(generator, replay = true)
         for (sub in recorded) {
@@ -542,6 +559,16 @@ class StrokeEngine(
                 }
             }
             fanned
+        }
+        val wc = watercolor
+        if (wc != null) {
+            // Watercolor (§1.9): the dabs wet the grid; the grid runs on the input clock and its pigment is the buffer.
+            wc.deposit(out)
+            if (simTimeMs >= 0 && inputTimeMs > simTimeMs) wc.advance(inputTimeMs - simTimeMs)
+            if (inputTimeMs >= 0) simTimeMs = inputTimeMs
+            wc.write(access)
+            batch.clear()
+            return
         }
         val hm = harmony
         val st = screentone
