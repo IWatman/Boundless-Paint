@@ -68,7 +68,8 @@ import kotlin.math.sqrt
  * [HarmonyParams] brush paints no dabs of its own: it keeps the points of its path and draws lines to the
  * earlier ones by the rule of its variant ([HarmonyEffect], §1.11). A [ParticlesParams] brush draws none of its
  * path dabs either: they drive a particle system that stamps the stroke with the particle head ([ParticleSystem],
- * §1.10). All of them are no-ops for every other
+ * §1.10). A [ThreeDParams] brush stamps a shaded tube, ribbon or twisty disk through a `z` plane instead of the
+ * plain dabs ([ThreeDEffect], §1.17). All of them are no-ops for every other
  * brush.
  *
  * The smudge and the paint kernel take the direct path, so [takeDirty] reports layer tiles and [cancel] restores
@@ -221,6 +222,20 @@ class StrokeEngine(
         }
     }
 
+    /** 3D stamp (§1.17) of a buffered stroke; null (or the direct path) keeps the plain dab composite. */
+    private val threeD: ThreeDEffect? = if (directToLayer) {
+        null
+    } else {
+        (params.special as? ThreeDParams)?.let { ThreeDEffect(it, doc.width, doc.height, color, options.clip) }
+    }
+
+    /** Brush handed to [DabGenerator]: a 3D brush is stamped at most [THREE_D_SPACING] of the dab size apart (§1.17). */
+    private val genBrush: Brush = if (threeD != null && params.spacing > THREE_D_SPACING) {
+        brush.copy(params = params.copy(spacing = THREE_D_SPACING))
+    } else {
+        brush
+    }
+
     /** Particles (spec/tools/m2-brush.md §1.10) of a buffered stroke; null (or the direct path) keeps the plain dabs. */
     private val particles: ParticlesParams? = if (directToLayer) null else params.special as? ParticlesParams
 
@@ -241,7 +256,7 @@ class StrokeEngine(
 
     /** Adhesion (spec/tools/m2-brush.md §1.7) of the buffered stroke; 0 keeps the plain composite path. */
     private val adhesion: Float =
-        if (directToLayer || screentone != null || harmony != null || particles != null) 0f else params.effects.adhesion.coerceIn(0f, 1f)
+        if (directToLayer || screentone != null || harmony != null || threeD != null || particles != null) 0f else params.effects.adhesion.coerceIn(0f, 1f)
 
     /** Load plane `L` of adhesion (§1.7), `L = over(L, m·flow)` per dab; allocated only with adhesion > 0. */
     private val load: TileGrid? = if (adhesion > 0f) TileGrid(doc.width, doc.height, precise = true) else null
@@ -454,7 +469,7 @@ class StrokeEngine(
         }
     }
 
-    private fun newGenerator() = DabGenerator(brush, res, ctx, color)
+    private fun newGenerator() = DabGenerator(genBrush, res, ctx, color)
 
     private fun newWalker(gen: DabGenerator, replay: Boolean): PathWalker = PathWalker(
         params,
@@ -480,6 +495,7 @@ class StrokeEngine(
         }
         screentone?.reset()
         harmony?.reset()
+        threeD?.reset()
         particleSystem?.reset()
         generator = newGenerator()
         walker = newWalker(generator, replay = true)
@@ -529,12 +545,16 @@ class StrokeEngine(
         }
         val hm = harmony
         val st = screentone
+        val th = threeD
         if (hm != null) {
             // Harmony (§1.11): the dabs paint nothing of their own, the effect draws the path and the links.
             hm.add(out, access)
         } else if (st != null) {
             // Screentone (§1.14): the dabs only raise node coverage; each grown node draws its dot.
             st.add(out, access)
+        } else if (th != null) {
+            // 3D stamp (§1.17): the dabs paint nothing of their own; each writes its shaded disk through a z plane.
+            th.add(out, access)
         } else {
             val psp = particleSystem
             if (psp != null) {
@@ -914,6 +934,9 @@ class StrokeEngine(
         }
 
         const val MAX_PER_SAMPLE = 16
+
+        /** Largest spacing of a 3D brush, as a fraction of the dab size (§1.17: at most 5% of `d`). */
+        const val THREE_D_SPACING = 0.05f
 
         /** Radius of the wet edge box blur (§1.7); a buffer tile is read with a halo of this many pixels. */
         const val WET_HALO = 4
