@@ -15,6 +15,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -53,11 +54,20 @@ internal fun BrushBrowser(state: StudioUiState, actions: StudioActions, modifier
     val categoryList = rememberLazyListState(initialFirstVisibleItemIndex = (home - 2).coerceAtLeast(0))
     PanelSurface(modifier.width(BrowserWidth).height(BrowserHeight)) {
         Column {
-            Text(
-                stringResource(R.string.brush_browser),
-                style = MaterialTheme.typography.titleSmall,
-                modifier = Modifier.padding(start = 12.dp, top = 12.dp, bottom = 8.dp),
-            )
+            Row(
+                Modifier.fillMaxWidth().padding(start = 12.dp, top = 4.dp, end = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    stringResource(R.string.brush_browser),
+                    style = MaterialTheme.typography.titleSmall,
+                    modifier = Modifier.weight(1f),
+                )
+                // Edits the brush of the current mode; the editor closes the browser and opens on the right (§4.2).
+                TextButton(onClick = { actions.openBrushEditor() }) {
+                    Text(stringResource(R.string.brush_edit))
+                }
+            }
             Row(Modifier.fillMaxWidth().weight(1f)) {
                 LazyColumn(Modifier.width(CategoryWidth), state = categoryList) {
                     itemsIndexed(categories) { i, category ->

@@ -232,6 +232,10 @@ class StudioViewModel(
     /** Preset the PAINT and ERASE modes paint with, null until the library has picked its favourites. */
     private var paintBrush: Brush? = null
     private var eraseBrush: Brush? = null
+    /** Preset parameters the open brush editor resets to, captured when the editor opens (spec §4.2). */
+    private var editorBaseParams = BrushParams()
+    /** Pending debounced render of the editor preview; a new change cancels the previous one. */
+    private var editorRenderJob: Job? = null
 
     private val _state = MutableStateFlow(StudioUiState(palette = DefaultPalette.colors, layerPanelOpen = false))
     val state: StateFlow<StudioUiState> = _state
@@ -538,6 +542,72 @@ class StudioViewModel(
     }
 
     override fun toggleBrushBrowser() = _state.update { it.copy(brushBrowserOpen = !it.brushBrowserOpen) }
+
+    // ---- brush editor (spec/tools/m2-brush.md §4.2) ----
+
+    /**
+     * Opens the editor on a working copy of the current mode's brush. The browser closes, and the preset the
+     * Reset button restores is captured now: the preset's parameters for Paint and Erase, the studio Blend tip
+     * for Blend, which has no preset. Edits stay in memory for this session (saving comes in part 4).
+     */
+    override fun openBrushEditor() {
+        editorBaseParams = currentBrush?.params ?: blendParams
+        _state.update {
+            it.copy(
+                brushBrowserOpen = false,
+                editorParams = currentParams(),
+                editorPreview = null,
+                editorBrushName = currentBrush?.name?.get(Locale.getDefault().language).orEmpty(),
+            )
+        }
+        scheduleEditorPreview(delayMs = 0)
+    }
+
+    override fun updateEditor(params: BrushParams) {
+        if (_state.value.editorParams == null) return
+        _state.update { it.copy(editorParams = params) }
+        scheduleEditorPreview()
+    }
+
+    override fun resetEditor() {
+        if (_state.value.editorParams == null) return
+        _state.update { it.copy(editorParams = editorBaseParams) }
+        scheduleEditorPreview()
+    }
+
+    override fun confirmEditor() {
+        val params = _state.value.editorParams ?: return
+        updateParams { params }
+        closeBrushEditor()
+    }
+
+    override fun cancelEditor() = closeBrushEditor()
+
+    /** Drops the working copy and the pending preview; the current brush keeps its parameters. */
+    private fun closeBrushEditor() {
+        editorRenderJob?.cancel()
+        editorRenderJob = null
+        _state.update { it.copy(editorParams = null, editorPreview = null, editorBrushName = "") }
+    }
+
+    /**
+     * Renders the editor preview off the main thread, [delayMs] after the last change; the previous render is
+     * cancelled, so a fast drag of a slider only paints once it settles. A result whose parameters are no longer
+     * the working copy is dropped.
+     */
+    private fun scheduleEditorPreview(delayMs: Long = EDITOR_PREVIEW_DELAY_MS) {
+        editorRenderJob?.cancel()
+        val params = _state.value.editorParams ?: return
+        val brush = strokeBrush(params)
+        val resources = currentBrush?.let { brushes.resources(it) } ?: BrushResources.EMPTY
+        editorRenderJob = viewModelScope.launch {
+            if (delayMs > 0) delay(delayMs)
+            val bitmap = withContext(Dispatchers.Default) {
+                runCatching { BrushPreviewRenderer.render(brush, resources) }.getOrNull()
+            } ?: return@launch
+            _state.update { if (it.editorParams == params) it.copy(editorPreview = bitmap.asImageBitmap()) else it }
+        }
+    }
 
     override fun toggleStylusPanel() {
         publishCalibration()
@@ -2665,6 +2735,9 @@ private const val MAX_LAZY_RADIUS = 200f
 
 /** Minimum delay between two live transform previews (about 30 fps). */
 private const val PREVIEW_FRAME_MS = 33L
+
+/** Debounce of the brush editor live preview: re-render 100 ms after the last change (spec §4.2). */
+private const val EDITOR_PREVIEW_DELAY_MS = 100L
 
 /** Distance of the transform rotate handle from the top edge, in dp on screen. */
 private const val ROTATE_HANDLE_DP = 26f

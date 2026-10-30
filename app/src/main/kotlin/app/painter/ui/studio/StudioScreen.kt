@@ -246,6 +246,20 @@ fun StudioScreen(
                 }
             }
 
+            if (state.editorParams != null) {
+                Popup(
+                    alignment = Alignment.TopEnd,
+                    onDismissRequest = { actions.cancelEditor() },
+                    properties = PopupProperties(focusable = true),
+                ) {
+                    BrushEditor(
+                        state = state,
+                        actions = actions,
+                        modifier = Modifier.padding(top = 56.dp, end = 8.dp, bottom = 8.dp),
+                    )
+                }
+            }
+
             if (state.colorPanelOpen) {
                 val offsetX = with(LocalDensity.current) { 72.dp.roundToPx() }
                 Popup(

@@ -13,6 +13,7 @@ import app.painter.core.guide.OverlayRole
 import app.painter.core.history.MaskInit
 import app.painter.core.perspective.PerspectiveType
 import app.painter.core.shape.ShapeTool
+import app.painter.core.stroke.BrushParams
 import app.painter.core.symmetry.MirrorAxes
 import app.painter.core.symmetry.SymmetryType
 import app.painter.studio.StylusSettings
@@ -206,6 +207,12 @@ data class StudioUiState(
     val currentBrushId: String? = null,
     /** The brush browser popup is open. */
     val brushBrowserOpen: Boolean = false,
+    /** Working copy of the brush parameters while the brush editor is open, null when it is closed (§4.2). */
+    val editorParams: BrushParams? = null,
+    /** Preview of [editorParams] rendered by the stroke engine; null until the first render finishes. */
+    val editorPreview: ImageBitmap? = null,
+    /** Localized name of the brush the editor edits; empty for the Blend mode, which has no preset. */
+    val editorBrushName: String = "",
 )
 
 /**
@@ -386,6 +393,16 @@ interface StudioActions {
 
     /** Picks the built-in preset [id] for the current mode and closes the browser. */
     fun selectBrush(id: String) {}
+    /** Opens the brush editor on the current mode's brush (spec/tools/m2-brush.md §4.2). */
+    fun openBrushEditor() {}
+    /** Replaces the working copy of the brush editor; the preview re-renders 100 ms after the last change. */
+    fun updateEditor(params: BrushParams) {}
+    /** Restores the preset parameters in the editor. */
+    fun resetEditor() {}
+    /** Applies the working copy to the current mode's brush and closes the editor. */
+    fun confirmEditor() {}
+    /** Closes the editor without applying the working copy. */
+    fun cancelEditor() {}
 
     /** Sets the brush color. [commit] is false for live updates during a drag. */
     fun setColor(color: Rgba, commit: Boolean = true)

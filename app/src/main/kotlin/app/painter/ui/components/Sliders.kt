@@ -82,12 +82,13 @@ fun LinearSlider(
     unit: String = "",
     displayScale: Float = 1f,
     decimals: Int = 0,
+    valueText: ((Float) -> String)? = null,
     labelHighlighted: Boolean = false,
     onLabelClick: (() -> Unit)? = null,
     onValueChangeFinished: () -> Unit = {},
 ) {
     var inputOpen by remember { mutableStateOf(false) }
-    val valueText = formatSliderValue(value, displayScale, decimals)
+    val fmt = valueText ?: { v: Float -> formatSliderValue(v, displayScale, decimals) }
     Column(modifier.fillMaxWidth().padding(vertical = 2.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
             val labelColor = if (labelHighlighted) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
@@ -102,7 +103,7 @@ fun LinearSlider(
                     .padding(vertical = 4.dp, horizontal = 4.dp),
             )
             Text(
-                if (unit.isEmpty()) valueText else "$valueText $unit",
+                if (unit.isEmpty()) fmt(value) else "${fmt(value)} $unit",
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier
@@ -119,7 +120,7 @@ fun LinearSlider(
                 value = value,
                 onValueChange = onValueChange,
                 valueRange = valueRange,
-                bubbleText = { v -> formatSliderValue(v, displayScale, decimals) },
+                bubbleText = { v -> fmt(v) },
                 onValueChangeFinished = onValueChangeFinished,
                 modifier = Modifier.weight(1f),
             )
@@ -131,7 +132,7 @@ fun LinearSlider(
     if (inputOpen) {
         NumberInputDialog(
             title = label,
-            initial = valueText,
+            initial = fmt(value),
             unit = unit,
             onDismiss = { inputOpen = false },
             onConfirm = { typed ->
