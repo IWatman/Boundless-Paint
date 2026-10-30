@@ -6,17 +6,20 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** Pen button mapping of spec/tools/m2-brush.md §4.3 (defaults, not configurable yet). */
+/** Pen button mapping of spec/tools/m2-brush.md §4.3: the default assignments and user-chosen ones. */
 class PenButtonsTest {
+
+    private val defaults = PenButtons()
+
     @Test
     fun primaryButtonIsTheEyedropper() {
         assertEquals(
             PenAction.EYEDROPPER,
-            PenButtons.action(MotionEvent.TOOL_TYPE_STYLUS, MotionEvent.BUTTON_STYLUS_PRIMARY),
+            defaults.action(MotionEvent.TOOL_TYPE_STYLUS, MotionEvent.BUTTON_STYLUS_PRIMARY),
         )
         assertEquals(
             PenAction.EYEDROPPER,
-            PenButtons.holdAction(MotionEvent.TOOL_TYPE_STYLUS, MotionEvent.BUTTON_STYLUS_PRIMARY),
+            defaults.holdAction(MotionEvent.TOOL_TYPE_STYLUS, MotionEvent.BUTTON_STYLUS_PRIMARY),
         )
     }
 
@@ -24,16 +27,16 @@ class PenButtonsTest {
     fun secondaryButtonIsUndo() {
         assertEquals(
             PenAction.UNDO,
-            PenButtons.clickAction(MotionEvent.TOOL_TYPE_STYLUS, MotionEvent.BUTTON_STYLUS_SECONDARY),
+            defaults.clickAction(MotionEvent.TOOL_TYPE_STYLUS, MotionEvent.BUTTON_STYLUS_SECONDARY),
         )
         // A click action never arms the hold state, and a hold action never fires on press.
         assertEquals(
             PenAction.NONE,
-            PenButtons.holdAction(MotionEvent.TOOL_TYPE_STYLUS, MotionEvent.BUTTON_STYLUS_SECONDARY),
+            defaults.holdAction(MotionEvent.TOOL_TYPE_STYLUS, MotionEvent.BUTTON_STYLUS_SECONDARY),
         )
         assertEquals(
             PenAction.NONE,
-            PenButtons.clickAction(MotionEvent.TOOL_TYPE_STYLUS, MotionEvent.BUTTON_STYLUS_PRIMARY),
+            defaults.clickAction(MotionEvent.TOOL_TYPE_STYLUS, MotionEvent.BUTTON_STYLUS_PRIMARY),
         )
     }
 
@@ -42,26 +45,64 @@ class PenButtonsTest {
         // A driver in mouse mode reports the pen as TOOL_TYPE_STYLUS with BUTTON_SECONDARY/BUTTON_TERTIARY.
         assertEquals(
             PenAction.EYEDROPPER,
-            PenButtons.action(MotionEvent.TOOL_TYPE_STYLUS, MotionEvent.BUTTON_SECONDARY),
+            defaults.action(MotionEvent.TOOL_TYPE_STYLUS, MotionEvent.BUTTON_SECONDARY),
         )
         assertEquals(
             PenAction.UNDO,
-            PenButtons.action(MotionEvent.TOOL_TYPE_STYLUS, MotionEvent.BUTTON_TERTIARY),
+            defaults.action(MotionEvent.TOOL_TYPE_STYLUS, MotionEvent.BUTTON_TERTIARY),
         )
     }
 
     @Test
     fun primaryWinsWhileBothButtonsAreDown() {
         val both = MotionEvent.BUTTON_STYLUS_PRIMARY or MotionEvent.BUTTON_STYLUS_SECONDARY
-        assertEquals(PenAction.EYEDROPPER, PenButtons.action(MotionEvent.TOOL_TYPE_STYLUS, both))
+        assertEquals(PenAction.EYEDROPPER, defaults.action(MotionEvent.TOOL_TYPE_STYLUS, both))
+        assertEquals(PenAction.ERASE, PenButtons(PenAction.ERASE, PenAction.REDO).action(MotionEvent.TOOL_TYPE_STYLUS, both))
     }
 
     @Test
     fun releasedButtonLeavesNoAction() {
         // After the release getButtonState() no longer holds the button: nothing stays armed.
-        assertEquals(PenAction.NONE, PenButtons.action(MotionEvent.TOOL_TYPE_STYLUS, 0))
-        assertEquals(PenAction.NONE, PenButtons.holdAction(MotionEvent.TOOL_TYPE_STYLUS, 0))
-        assertEquals(PenAction.NONE, PenButtons.clickAction(MotionEvent.TOOL_TYPE_STYLUS, 0))
+        assertEquals(PenAction.NONE, defaults.action(MotionEvent.TOOL_TYPE_STYLUS, 0))
+        assertEquals(PenAction.NONE, defaults.holdAction(MotionEvent.TOOL_TYPE_STYLUS, 0))
+        assertEquals(PenAction.NONE, defaults.clickAction(MotionEvent.TOOL_TYPE_STYLUS, 0))
+    }
+
+    @Test
+    fun assignedActionsReplaceTheDefaults() {
+        val buttons = PenButtons(PenAction.ERASE, PenAction.REDO)
+        // Erase is a hold action: it arms the temporary Erase mode and never fires on the press.
+        assertEquals(PenAction.ERASE, buttons.holdAction(MotionEvent.TOOL_TYPE_STYLUS, MotionEvent.BUTTON_STYLUS_PRIMARY))
+        assertEquals(PenAction.NONE, buttons.clickAction(MotionEvent.TOOL_TYPE_STYLUS, MotionEvent.BUTTON_STYLUS_PRIMARY))
+        // Redo is a click action, also for a driver in mouse mode.
+        assertEquals(PenAction.REDO, buttons.clickAction(MotionEvent.TOOL_TYPE_STYLUS, MotionEvent.BUTTON_STYLUS_SECONDARY))
+        assertEquals(PenAction.NONE, buttons.holdAction(MotionEvent.TOOL_TYPE_STYLUS, MotionEvent.BUTTON_STYLUS_SECONDARY))
+        assertEquals(PenAction.ERASE, buttons.action(MotionEvent.TOOL_TYPE_STYLUS, MotionEvent.BUTTON_SECONDARY))
+        assertEquals(PenAction.REDO, buttons.action(MotionEvent.TOOL_TYPE_STYLUS, MotionEvent.BUTTON_TERTIARY))
+    }
+
+    @Test
+    fun brushBrowserIsAClickAction() {
+        val buttons = PenButtons(PenAction.BRUSH_BROWSER, PenAction.UNDO)
+        assertEquals(PenAction.BRUSH_BROWSER, buttons.clickAction(MotionEvent.TOOL_TYPE_STYLUS, MotionEvent.BUTTON_STYLUS_PRIMARY))
+        assertEquals(PenAction.NONE, buttons.holdAction(MotionEvent.TOOL_TYPE_STYLUS, MotionEvent.BUTTON_STYLUS_PRIMARY))
+    }
+
+    @Test
+    fun unassignedButtonDoesNothing() {
+        val none = PenButtons(PenAction.NONE, PenAction.NONE)
+        for (state in intArrayOf(MotionEvent.BUTTON_STYLUS_PRIMARY, MotionEvent.BUTTON_STYLUS_SECONDARY, 0)) {
+            assertEquals(PenAction.NONE, none.action(MotionEvent.TOOL_TYPE_STYLUS, state))
+            assertEquals(PenAction.NONE, none.holdAction(MotionEvent.TOOL_TYPE_STYLUS, state))
+            assertEquals(PenAction.NONE, none.clickAction(MotionEvent.TOOL_TYPE_STYLUS, state))
+        }
+    }
+
+    @Test
+    fun onlyEyedropperAndEraseAreHoldActions() {
+        for (action in PenAction.values()) {
+            assertEquals(action.name, action == PenAction.EYEDROPPER || action == PenAction.ERASE, action.hold)
+        }
     }
 
     @Test
@@ -72,8 +113,8 @@ class PenButtonsTest {
             MotionEvent.TOOL_TYPE_ERASER,
             MotionEvent.TOOL_TYPE_UNKNOWN,
         )) {
-            assertEquals(PenAction.NONE, PenButtons.action(tool, MotionEvent.BUTTON_STYLUS_PRIMARY))
-            assertEquals(PenAction.NONE, PenButtons.action(tool, MotionEvent.BUTTON_TERTIARY))
+            assertEquals(PenAction.NONE, defaults.action(tool, MotionEvent.BUTTON_STYLUS_PRIMARY))
+            assertEquals(PenAction.NONE, defaults.action(tool, MotionEvent.BUTTON_TERTIARY))
         }
     }
 

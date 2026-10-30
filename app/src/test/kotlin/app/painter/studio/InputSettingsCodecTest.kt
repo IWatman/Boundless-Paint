@@ -17,22 +17,23 @@ class InputSettingsCodecTest {
         val finger = InputCalibration()
         finger.setManual(0.1f, 0.6f)
 
-        val decoded = InputSettingsCodec.decode(InputSettingsCodec.encode(mapOf("xp-pen" to pen, "default" to finger)))
+        val stored = InputSettings.Stored(mapOf("xp-pen" to pen, "default" to finger))
+        val decoded = InputSettingsCodec.decode(InputSettingsCodec.encode(stored))
 
-        assertEquals(setOf("xp-pen", "default"), decoded.keys)
-        assertEquals(pen.snapshot(), decoded.getValue("xp-pen").snapshot())
-        assertEquals(pen.pressure(0.78f), decoded.getValue("xp-pen").pressure(0.78f))
-        assertEquals(finger.snapshot(), decoded.getValue("default").snapshot())
+        assertEquals(setOf("xp-pen", "default"), decoded.devices.keys)
+        assertEquals(pen.snapshot(), decoded.devices.getValue("xp-pen").snapshot())
+        assertEquals(pen.pressure(0.78f), decoded.devices.getValue("xp-pen").pressure(0.78f))
+        assertEquals(finger.snapshot(), decoded.devices.getValue("default").snapshot())
     }
 
     @Test
     fun damagedEntriesFallBackToDefaults() {
-        assertTrue(InputSettingsCodec.decode("not json").isEmpty())
-        assertTrue(InputSettingsCodec.decode("""{"devices":42}""").isEmpty())
+        assertTrue(InputSettingsCodec.decode("not json").devices.isEmpty())
+        assertTrue(InputSettingsCodec.decode("""{"devices":42}""").devices.isEmpty())
 
         val devices = InputSettingsCodec.decode(
             """{"devices":{"pen":{"maxPressure":"broken","minPressure":0,"auto":false,"peaks":[0.5,"x"],"pressureCurve":"nope"}}}""",
-        )
+        ).devices
         val pen = devices.getValue("pen")
         val s = pen.snapshot()
         assertEquals(1f, s.maxPressure)
@@ -44,7 +45,7 @@ class InputSettingsCodecTest {
 
     @Test
     fun emptyFileEncodesNoDevices() {
-        val text = InputSettingsCodec.encode(emptyMap())
-        assertTrue(InputSettingsCodec.decode(text).isEmpty())
+        val text = InputSettingsCodec.encode(InputSettings.Stored())
+        assertTrue(InputSettingsCodec.decode(text).devices.isEmpty())
     }
 }

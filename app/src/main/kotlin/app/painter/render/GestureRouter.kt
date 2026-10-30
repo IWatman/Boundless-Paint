@@ -6,6 +6,7 @@ import android.view.MotionEvent
 import android.view.View
 import androidx.input.motionprediction.MotionEventPredictor
 import app.painter.core.stroke.InputPoint
+import app.painter.studio.StylusSettings
 import kotlin.math.atan2
 import kotlin.math.hypot
 import kotlin.math.max
@@ -30,7 +31,11 @@ import kotlin.math.max
  * - Pen buttons (spec/tools/m2-brush.md §4.3, [PenButtons]): while the primary button is held a pen touch
  *   samples the colour ([CanvasInputListener.onPickColor]) instead of drawing; a click of the secondary
  *   button undoes. The back of the pen (TOOL_TYPE_ERASER) starts an eraser stroke
- *   ([CanvasInputListener.onStrokeBegin] with `penEraser`).
+ *   ([CanvasInputListener.onStrokeBegin] with `penEraser`). The actions assigned in [stylusSettings] replace
+ *   those defaults, and a button assigned to erase arms the same temporary Erase mode.
+ * - Finger and palm (spec §4.3, [FingerGate]): once a pen was seen in the session, [StylusSettings.palm] and
+ *   [StylusSettings.fingerWithStylus] turn a finger into navigation only, and HOVER_REJECT also rejects finger
+ *   touches while the pen hovers and 300 ms after.
  *
  * Must be used on the main thread.
  */
@@ -46,6 +51,26 @@ class GestureRouter(private val view: View, private val host: Host) {
 
     /** Emits motion-predicted points (predicted = true) after the real samples of each move. */
     var predictionEnabled: Boolean = true
+
+    /**
+     * Stylus settings of the session (spec/tools/m2-brush.md §4.3): the pen button assignments, the finger
+     * rule and the palm mode. The studio keeps it in step with its own settings flow.
+     */
+    var stylusSettings: StylusSettings = StylusSettings()
+        set(value) {
+            field = value
+            penButtons = PenButtons(value.primaryAction, value.secondaryAction)
+        }
+
+    /** Mapping of the pen buttons, rebuilt whenever [stylusSettings] changes. */
+    private var penButtons = PenButtons()
+
+    /** True once a pen (tip, back of the pen or hover) was seen in this session: the finger rule applies then. */
+    private var penSeen = false
+    /** True while the pen is in the air above the screen, i.e. between ACTION_HOVER_ENTER and _EXIT. */
+    private var penHovering = false
+    /** `eventTime` the pen last left hover, −1 while that never happened (see [FingerGate.HOVER_REJECT_MS]). */
+    private var hoverLeftAt = -1L
 
     private enum class State { IDLE, PENDING, STROKE, PICK, TOOL, NAV, IGNORE }
 
@@ -140,6 +165,8 @@ class GestureRouter(private val view: View, private val host: Host) {
             MotionEvent.ACTION_POINTER_UP -> onPointerUp(e)
             MotionEvent.ACTION_UP -> onUp(e)
             MotionEvent.ACTION_CANCEL -> onCancel()
+            MotionEvent.ACTION_HOVER_ENTER, MotionEvent.ACTION_HOVER_MOVE -> onHover(e, true)
+            MotionEvent.ACTION_HOVER_EXIT -> onHover(e, false)
             MotionEvent.ACTION_BUTTON_PRESS, MotionEvent.ACTION_BUTTON_RELEASE -> onPenButton(e)
         }
         return true
@@ -147,6 +174,21 @@ class GestureRouter(private val view: View, private val host: Host) {
 
     /** Aborts any gesture in progress (cancels an active stroke). */
     fun reset() = onCancel()
+
+    /**
+     * Pen hover ([hovering] = ACTION_HOVER_ENTER/MOVE, else ACTION_HOVER_EXIT): only the palm rule of
+     * [FingerGate] needs it, a hovering pen never starts a stroke. Hover also counts as "the pen was seen",
+     * the stylus section of the settings appears after the first stylus/eraser event (§4.3).
+     */
+    private fun onHover(e: MotionEvent, hovering: Boolean) {
+        if (!isPen(e.getToolType(0))) return
+        penSeen = true
+        penHovering = hovering
+        if (!hovering) hoverLeftAt = e.eventTime
+    }
+
+    private fun isPen(tool: Int): Boolean =
+        tool == MotionEvent.TOOL_TYPE_STYLUS || tool == MotionEvent.TOOL_TYPE_ERASER
 
     private fun onDown(e: MotionEvent) {
         view.removeCallbacks(longPressRunnable)
@@ -169,7 +211,12 @@ class GestureRouter(private val view: View, private val host: Host) {
             host.listener?.onToolDown(p.x, p.y)
             return
         }
-        if (penAction(tool, e) == PenAction.EYEDROPPER) {
+        if (isPen(tool)) {
+            penSeen = true
+            penHovering = false
+        }
+        val action = penAction(tool, e)
+        if (action == PenAction.EYEDROPPER) {
             // Primary pen button held: the pen touch samples the colour instead of drawing (§4.3).
             state = State.PICK
             pick(e, 0)
@@ -177,12 +224,20 @@ class GestureRouter(private val view: View, private val host: Host) {
         }
         if (penClick(tool, e)) return
         if (tool == MotionEvent.TOOL_TYPE_FINGER || tool == MotionEvent.TOOL_TYPE_UNKNOWN) {
+            // Finger and palm rule of §4.3: once the pen was seen the finger may only navigate.
+            if (fingerMode(tool, e.eventTime) == FingerMode.NAVIGATE) {
+                trace("finger navigate")
+                enterNav(e)
+                return
+            }
             state = State.PENDING
             pending.add(point(e, 0, -1, false))
             view.postDelayed(longPressRunnable, LONG_PRESS_MS)
         } else {
             state = State.STROKE
-            host.listener?.onStrokeBegin(point(e, 0, -1, false), strokeDescriptor, PenButtons.isEraserEnd(tool))
+            // The back of the pen and a button assigned to erase both draw in Erase for this stroke only.
+            val erase = PenButtons.isEraserEnd(tool) || action == PenAction.ERASE
+            host.listener?.onStrokeBegin(point(e, 0, -1, false), strokeDescriptor, erase)
         }
     }
 
@@ -368,16 +423,29 @@ class GestureRouter(private val view: View, private val host: Host) {
                 MotionEvent.TOOL_TYPE_STYLUS
             else -> MotionEvent.TOOL_TYPE_UNKNOWN
         }
-        penHold = PenButtons.holdAction(tool, e.buttonState)
+        penHold = penButtons.holdAction(tool, e.buttonState)
         // On release the button is already gone from getButtonState(); actionButton names it.
         val mask = if (pressed) e.buttonState else e.buttonState or e.actionButton
-        val click = PenButtons.clickAction(tool, mask)
+        val click = penButtons.clickAction(tool, mask)
         if (pressed && click != PenAction.NONE && state == State.IDLE) fireClick(click, e.eventTime)
     }
 
+    /**
+     * Finger rule of §4.3 for a touch of [tool] at [time]: [FingerMode.NAVIGATE] locks the finger to
+     * navigation, [FingerMode.DRAW] keeps today's stroke behaviour.
+     */
+    private fun fingerMode(tool: Int, time: Long): FingerMode =
+        FingerGate.mode(
+            stylusSettings,
+            tool,
+            penSeen,
+            penHovering,
+            if (hoverLeftAt < 0) -1L else time - hoverLeftAt,
+        )
+
     /** Hold action of pointer 0 in [e]: its own button state now, or a button pressed earlier in hover. */
     private fun penAction(tool: Int, e: MotionEvent): PenAction {
-        val now = PenButtons.action(tool, e.buttonState)
+        val now = penButtons.action(tool, e.buttonState)
         if (now != PenAction.NONE) return now
         return if (tool == MotionEvent.TOOL_TYPE_STYLUS) penHold else PenAction.NONE
     }
@@ -387,7 +455,7 @@ class GestureRouter(private val view: View, private val host: Host) {
      * hover button events); true when the touch is consumed and no stroke starts.
      */
     private fun penClick(tool: Int, e: MotionEvent): Boolean {
-        val click = PenButtons.clickAction(tool, e.buttonState)
+        val click = penButtons.clickAction(tool, e.buttonState)
         if (click == PenAction.NONE) return false
         state = State.IGNORE
         // A touch right after the same button fired in hover must not undo twice.
@@ -395,12 +463,14 @@ class GestureRouter(private val view: View, private val host: Host) {
         return true
     }
 
-    /** Fires a click action of a pen button; secondary = undo for now. */
+    /** Fires a click action of a pen button: undo, redo or the brush browser (§4.3 "Button actions"). */
     private fun fireClick(click: PenAction, time: Long) {
         lastPenClick = time
         trace("pen button ${click.name}")
         when (click) {
             PenAction.UNDO -> host.listener?.onUndoGesture()
+            PenAction.REDO -> host.listener?.onRedoGesture()
+            PenAction.BRUSH_BROWSER -> host.listener?.onBrushBrowserToggle()
             else -> Unit
         }
     }

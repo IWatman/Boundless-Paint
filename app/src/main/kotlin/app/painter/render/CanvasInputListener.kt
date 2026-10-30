@@ -40,6 +40,12 @@ interface CanvasInputListener {
     /** The tool drag was aborted (second finger, system cancel). */
     fun onToolCancel() {}
 
+    /**
+     * A pen button assigned to the brush browser was clicked (spec/tools/m2-brush.md §4.3): the studio toggles
+     * the brush browser exactly like its toolbar button does.
+     */
+    fun onBrushBrowserToggle() {}
+
     companion object {
         /** Descriptor used when the event carries no [android.view.InputDevice] (mouse, synthetic input). */
         const val DEVICE_DEFAULT = "default"

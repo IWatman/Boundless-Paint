@@ -9,6 +9,7 @@ import app.painter.core.doc.Document
 import app.painter.core.raster.Tile
 import app.painter.core.raster.TileGrid
 import app.painter.core.raster.TileKey
+import app.painter.studio.StylusSettings
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -24,6 +25,16 @@ class CanvasView(context: Context) : GLSurfaceView(context) {
 
     /** Receives strokes and canvas gestures. */
     var inputListener: CanvasInputListener? = null
+
+    /**
+     * Stylus settings of the session (spec/tools/m2-brush.md §4.3): pen button assignments, the finger rule
+     * and the palm mode. Set by the studio from its own settings flow; the router applies them per event.
+     */
+    var stylusSettings: StylusSettings
+        get() = router.stylusSettings
+        set(value) {
+            router.stylusSettings = value
+        }
 
     private val _viewState = MutableStateFlow(ViewState(1f, 0f))
 

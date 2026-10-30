@@ -160,7 +160,7 @@ import java.util.Locale
 /**
  * Owns the open document and wires UI actions, the canvas view and the core engines. [prefs] carries the
  * tool settings that outlive a session (color, palette, per-mode brush preset with its size and opacity), and
- * [input] the per-device stylus calibration (spec/tools/m2-brush.md §4.3–4.4).
+ * [input] the per-device stylus calibration and the global stylus settings (spec/tools/m2-brush.md §4.3–4.4).
  * Null keeps either of them in memory only, which is what tests want.
  */
 class StudioViewModel(
@@ -187,6 +187,11 @@ class StudioViewModel(
 
     /** Pressure calibration of every input device seen so far, keyed by `InputDevice.descriptor`. */
     private val calibrations = HashMap<String, InputCalibration>()
+
+    /** Stylus and input settings of the session (spec/tools/m2-brush.md §4.3); see [setStylusSettings]. */
+    private val _stylusSettings = MutableStateFlow(StylusSettings())
+    /** Pen buttons, finger rule, palm mode and pressure curve preset of the session. */
+    val stylusSettings: StateFlow<StylusSettings> = _stylusSettings
 
     private var doc: Document = Document.create(1, 1)
     /** Guides, symmetry and grid settings of [doc]; symmetry is view state, so it is never undone. */
@@ -327,6 +332,7 @@ class StudioViewModel(
     fun attachCanvas(view: CanvasView) {
         canvas = view
         view.inputListener = this
+        view.stylusSettings = _stylusSettings.value
         view.setDocument(doc)
         viewModelScope.launch {
             view.viewState.collect { vs ->
@@ -428,7 +434,7 @@ class StudioViewModel(
         stroke = null
         val layerId = doc.activeId ?: return
         val commit = engine.end()
-        saveInputSettings()
+        saveInputSettingsAfterStroke()
         if (strokeOnMask) {
             (commit as? StrokeCommit.Mask)?.let { history.push(MaskPatchCommand(it.patch)) }
             canvas?.invalidate(null, null)
@@ -463,6 +469,9 @@ class StudioViewModel(
 
     override fun onUndoGesture() = undo()
     override fun onRedoGesture() = redo()
+
+    /** A pen button assigned to the brush browser was clicked (spec/tools/m2-brush.md §4.3). */
+    override fun onBrushBrowserToggle() = toggleBrushBrowser()
 
     override fun onLongPress(docX: Float, docY: Float) {
         // In the clone tool the long press picks the clone source instead of an eyedropper sample.
@@ -2285,11 +2294,27 @@ class StudioViewModel(
 
     // ---- persisted tool settings ----
 
-    // ---- stylus input: the pressure calibration of every device (spec/tools/m2-brush.md §4.3) ----
-    /** Loads the per-device stylus calibration saved by [saveInputSettings] before the first stroke. */
+    // ---- stylus input: the calibration of every device and the stylus settings (spec/tools/m2-brush.md §4.3) ----
+    /** Loads the per-device stylus calibration and the stylus settings saved by [saveInputSettings] at start-up. */
     private fun restoreInputSettings() {
         val s = input ?: return
-        calibrations.putAll(s.load())
+        val stored = s.load()
+        calibrations.putAll(stored.devices)
+        _stylusSettings.value = stored.stylus
+        // The stored curve preset is the source of truth for the pressure curve of every device (§4.3).
+        stored.stylus.applyTo(calibrations.values)
+    }
+
+    /**
+     * Replaces the stylus settings (spec/tools/m2-brush.md §4.3): the pen buttons, the finger rule and the palm
+     * mode reach the router at once, the curve preset is written into the calibration of every known device and
+     * the result is saved for the next session. Called by the Settings → Stylus screen.
+     */
+    fun setStylusSettings(settings: StylusSettings) {
+        _stylusSettings.value = settings
+        settings.applyTo(calibrations.values)
+        canvas?.stylusSettings = settings
+        saveInputSettings()
     }
 
     /** Calibration of input device [descriptor]; a device seen for the first time starts from the defaults. */
@@ -2297,12 +2322,17 @@ class StudioViewModel(
         calibrations.getOrPut(descriptor) { InputCalibration() }
 
     /** Writes the calibration of the device that drew the finished stylus stroke (spec §4.4), off the main thread. */
-    private fun saveInputSettings() {
-        val descriptor = strokeDevice ?: return
+    private fun saveInputSettingsAfterStroke() {
+        if (strokeDevice == null) return
         strokeDevice = null
+        saveInputSettings()
+    }
+
+    /** Writes the calibrations and the stylus settings of the session to `input.json` (spec §4.4). */
+    private fun saveInputSettings() {
         val settings = input ?: return
-        val snapshot = calibrations.toMap()
-        viewModelScope.launch(Dispatchers.IO) { ioLock.withLock { settings.save(snapshot) } }
+        val stored = InputSettings.Stored(calibrations.toMap(), _stylusSettings.value)
+        viewModelScope.launch(Dispatchers.IO) { ioLock.withLock { settings.save(stored) } }
     }
 
     /** Restores the color and the palette at start-up; the per-mode brushes follow in [loadBrushes]. */
