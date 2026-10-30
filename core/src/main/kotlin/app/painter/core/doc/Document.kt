@@ -52,10 +52,10 @@ class Document(
     fun layerCount(): Int { var n = 0; root.walk { if (it is RasterLayer) n++ }; return n }
 
     companion object {
-        /** Creates a document with one empty raster layer, set active. */
-        fun create(width: Int, height: Int, name: String = "Untitled"): Document {
+        /** Creates a document with one empty raster layer named [layerName] and set active. */
+        fun create(width: Int, height: Int, name: String = "Untitled", layerName: String = "Layer 1"): Document {
             val d = Document(width, height, name = name)
-            val l = d.newRasterLayer("Layer 1")
+            val l = d.newRasterLayer(layerName)
             d.root.add(l)
             d.activeId = l.id
             return d

@@ -185,12 +185,20 @@ private fun ProjectCard(
                 .fillMaxWidth()
                 .aspectRatio(1f)
                 .clip(MaterialTheme.shapes.medium)
-                .checkerboard(PainterTheme.colors.checkerLight, PainterTheme.colors.checkerDark, 8.dp),
+                .background(MaterialTheme.colorScheme.surface),
             contentAlignment = Alignment.Center,
         ) {
             val thumb = project.thumbnail
             if (thumb != null) {
-                Image(thumb, project.name, contentScale = ContentScale.Fit, modifier = Modifier.fillMaxSize())
+                // The checkerboard marks the document only: the letterbox around a wide canvas stays card-coloured.
+                Image(
+                    thumb,
+                    project.name,
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier
+                        .aspectRatio(thumb.width.toFloat() / thumb.height.coerceAtLeast(1))
+                        .checkerboard(PainterTheme.colors.checkerLight, PainterTheme.colors.checkerDark, 8.dp),
+                )
             } else {
                 Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surfaceContainerHighest), contentAlignment = Alignment.Center) {
                     Icon(Icons.Outlined.Image, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)

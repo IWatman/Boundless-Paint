@@ -73,7 +73,10 @@ fun Modifier.checkerboard(light: Color, dark: Color, cell: Dp = 6.dp): Modifier 
     for (y in 0 until rows) {
         for (x in 0 until cols) {
             if ((x + y) % 2 == 1) {
-                drawRect(dark, Offset(x * c, y * c), Size(c, c))
+                // drawBehind does not clip: the last row and column are cut to the bounds, or they bleed out.
+                val w = minOf(c, size.width - x * c)
+                val h = minOf(c, size.height - y * c)
+                if (w > 0f && h > 0f) drawRect(dark, Offset(x * c, y * c), Size(w, h))
             }
         }
     }

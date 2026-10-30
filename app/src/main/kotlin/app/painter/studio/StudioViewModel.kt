@@ -279,8 +279,8 @@ class StudioViewModel(
     }
 
     fun newDocument(name: String, width: Int, height: Int) {
-        val d = Document.create(width, height, name.ifBlank { "Untitled" })
-        d.root.children.firstOrNull()?.name = defaultLayerName(1)
+        val d = Document.create(width, height, name.ifBlank { "Untitled" }, defaultLayerName(1))
+        // The first layer already carries the localized default name; the layers panel opens collapsed.
         setDocument(d)
         _state.update { it.copy(layerPanelOpen = false) }
         dirtySinceSave = true
