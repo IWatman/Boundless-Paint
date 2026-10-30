@@ -15,7 +15,7 @@ enum class StrokeMode {
     /** Destination-out. */
     ERASE,
 
-    /** Copies pixels from a [CloneSource]. Kernel arrives in S5: the engine rejects it for now. */
+    /** Copies pixels from a [CloneSource] through a begin-of-stroke snapshot (spec/tools/m2-brush.md §1.18). */
     CLONE,
 }
 

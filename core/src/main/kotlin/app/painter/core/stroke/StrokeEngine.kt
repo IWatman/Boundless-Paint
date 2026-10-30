@@ -2,6 +2,7 @@ package app.painter.core.stroke
 
 import app.painter.core.blend.BlendMath
 import app.painter.core.blend.BlendMode
+import app.painter.core.blend.Compositor
 import app.painter.core.color.ColorConv
 import app.painter.core.color.Rgba
 import app.painter.core.doc.Document
@@ -55,7 +56,8 @@ import kotlin.math.sqrt
  *
  * [StrokeMode.BLEND] writes [SmudgeKernel] dabs straight into the layer (§1.8): no colour is deposited, the dab
  * drags the layer colours along. [StrokeMode.PAINT] with `mix_in`/`dilution` > 0 mixes the picked-up colours into
- * the [PaintMixKernel] deposit instead. [StrokeMode.CLONE] throws [UnsupportedOperationException] until S5.
+ * the [PaintMixKernel] deposit instead. A [FilterBrushParams] with `onStroke = false` (§1.16) filters the layer under
+ * each dab ([FilterKernel]). [StrokeMode.CLONE] copies a snapshot of the clone source ([CloneKernel], §1.18).
  *
  * The smudge and the paint kernel take the direct path, so [takeDirty] reports layer tiles and [cancel] restores
  * them; the layer alpha of an alpha-locked layer stays untouched and the reservoir restarts on a re-render.
@@ -85,14 +87,23 @@ class StrokeEngine(
 
     private val params = brush.params
 
-    init {
-        if (mode == StrokeMode.CLONE) {
-            throw UnsupportedOperationException("StrokeMode.CLONE kernel arrives in m2-brush S5")
-        }
-    }
-
     private val layer: RasterLayer? = (target as? StrokeTarget.Layer)?.let {
         requireNotNull(doc.findNode(it.id) as? RasterLayer) { "no raster layer ${it.id}" }
+    }
+
+    /** Snapshot of the clone source (§1.18), taken up front so that cloning into the source layer is safe. */
+    private val cloneSnapshot: TileGrid? = if (mode == StrokeMode.CLONE) snapshotCloneSource() else null
+
+    /** Clone source of the stroke (§1.18): the composite without paper ([CloneSource.allVisible]) or one layer. */
+    private fun snapshotCloneSource(): TileGrid {
+        val src = ctx.clone
+        if (src != null && src.allVisible) return Compositor.flatten(doc, includePaper = false)
+        val grid = if (src?.layerId != null) {
+            requireNotNull(doc.findNode(src.layerId) as? RasterLayer) { "no clone source ${src.layerId}" }.pixels
+        } else {
+            requireNotNull(layer) { "StrokeMode.CLONE needs a layer target" }.pixels
+        }
+        return grid.copy()
     }
 
     private val mask: MaskGrid? = when (target) {
@@ -134,12 +145,20 @@ class StrokeEngine(
     /** True when the stroke buffer is composited with [strokeBlend] instead of plain source-over. */
     private val blended: Boolean = blendStrength > 0f && strokeBlend != BlendMode.NORMAL && strokeBlend != BlendMode.PASSTHROUGH
 
+    /** Filter brush of the layer path (§1.16); the `onStroke` variant still takes the plain paint path. */
+    private val filterParams: FilterBrushParams? = if (mode == StrokeMode.PAINT && layer != null) {
+        (params.special as? FilterBrushParams)?.takeUnless { it.onStroke }
+    } else {
+        null
+    }
+
     /** Paint with colour pickup (§1.8, S4b): `mix_in`/`dilution` deposit the picked-up colours into the layer. */
     private val paintMix: Boolean =
         layer != null && mode == StrokeMode.PAINT && (params.paint.mixIn > 0f || params.paint.dilution > 0f)
 
-    /** True when dabs are written directly into the layer (build-up mode); a blend mode forces the buffer path. */
-    val directToLayer: Boolean = layer != null && (mode == StrokeMode.BLEND || paintMix || (params.buildup && !blended))
+    /** True when dabs are written directly into the layer (build-up, filter, clone); a blend mode forces the buffer path. */
+    val directToLayer: Boolean = layer != null &&
+        (mode == StrokeMode.BLEND || mode == StrokeMode.CLONE || filterParams != null || paintMix || (params.buildup && !blended))
 
     private val alphaLock = layer?.alphaLock ?: false
     private val inert = locked || (mode == StrokeMode.ERASE && alphaLock)
@@ -172,7 +191,15 @@ class StrokeEngine(
         null
     }
 
-    private val kernel: DabKernel = smudge ?: paintKernel ?: if (directToLayer) {
+    /** Clone kernel of [StrokeMode.CLONE] (§1.18): it deposits the snapshot through the dab mask. */
+    private val cloneKernel: CloneKernel? = cloneSnapshot?.let {
+        CloneKernel(it, ctx.clone?.offsetX ?: 0f, ctx.clone?.offsetY ?: 0f, alphaLock)
+    }
+
+    /** Filter kernel of the layer path (§1.16): it reads and rewrites the layer under every dab. */
+    private val filterKernel: FilterKernel? = filterParams?.let { FilterKernel(layer!!.pixels, it, alphaLock) }
+
+    private val kernel: DabKernel = smudge ?: paintKernel ?: cloneKernel ?: filterKernel ?: if (directToLayer) {
         MaskKernel(
             directOpOf(mode, alphaLock), head, params.head.antialias, params.head.depth, previewOpacity, ceiling = false,
             tex = params.texture, texImage = res.texture, brushSize = params.size,

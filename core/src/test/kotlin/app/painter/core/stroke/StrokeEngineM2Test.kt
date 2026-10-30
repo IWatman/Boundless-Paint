@@ -19,7 +19,6 @@ import kotlin.math.abs
 import kotlin.math.atan2
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
@@ -29,11 +28,18 @@ class StrokeEngineM2Test {
     private val hard = BrushParams(size = 20f, hardness = 1f, smoothing = 0f)
 
     @Test
-    fun cloneIsNotYetSupported() {
+    fun cloneModeIsSupported() {
         val doc = Document.create(64, 64)
-        for (m in listOf(StrokeMode.CLONE)) {
-            assertFailsWith<UnsupportedOperationException> { engine(doc, hard, mode = m) }
-        }
+        val px = doc.activeRaster!!.pixels
+        for (y in 0 until 64) for (x in 0 until 64) px.setPixel(x, y, 0.25f, 0.5f, 0.75f, 1f)
+        val e = engine(doc, hard, mode = StrokeMode.CLONE)
+        drawOpen(e, line(8f, 32f, 56f, 32f, 4f))
+        e.endPatch()
+        // Without a clone source the active layer is the source at a zero offset: the stroke re-deposits its pixels.
+        val p = FloatArray(4)
+        px.getPixel(32, 32, p)
+        assertEquals(0.25f, p[0], 1f / 255f, "clone keeps the source colour")
+        assertEquals(1f, p[3], 1f / 255f, "clone keeps the source alpha")
     }
 
     @Test
