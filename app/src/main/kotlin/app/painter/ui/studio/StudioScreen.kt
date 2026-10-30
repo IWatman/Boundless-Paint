@@ -80,6 +80,7 @@ fun StudioScreen(
         SelectionOverlay(state = state, modifier = Modifier.fillMaxSize())
         TransformOverlay(state = state, modifier = Modifier.fillMaxSize())
         GradientOverlay(state = state, modifier = Modifier.fillMaxSize())
+        CloneOverlay(state = state, modifier = Modifier.fillMaxSize())
         ShapeOverlay(state = state, modifier = Modifier.fillMaxSize())
         SymmetryOverlay(state = state, actions = actions, modifier = Modifier.fillMaxSize())
         GuidesOverlay(state = state, actions = actions, modifier = Modifier.fillMaxSize())
@@ -140,6 +141,19 @@ fun StudioScreen(
             }
 
             val adjustmentEditor = state.adjustmentEditor
+            if (state.tool == ToolUi.CLONE && state.cloneSource == null) {
+                PanelSurface(
+                    Modifier
+                        .align(Alignment.TopCenter)
+                        .padding(top = 64.dp),
+                ) {
+                    Text(
+                        stringResource(R.string.clone_hint),
+                        style = MaterialTheme.typography.labelLarge,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                    )
+                }
+            }
             val gradient = state.gradient
             if (gradient != null) {
                 GradientBar(
@@ -610,6 +624,13 @@ private fun StudioTopBar(state: StudioUiState, actions: StudioActions, modifier:
                             onClick = {
                                 toolsMenu = false
                                 actions.selectTool(ToolUi.GRADIENT)
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.tool_clone)) },
+                            onClick = {
+                                toolsMenu = false
+                                actions.selectTool(ToolUi.CLONE)
                             },
                         )
                         if (state.hasSelection) {

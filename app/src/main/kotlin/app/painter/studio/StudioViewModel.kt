@@ -81,6 +81,7 @@ import app.painter.core.symmetry.SymmetryType
 import app.painter.core.stroke.Brush
 import app.painter.core.stroke.BrushParams
 import app.painter.core.stroke.BrushResources
+import app.painter.core.stroke.CloneSource
 import app.painter.core.stroke.FillSpec
 import app.painter.core.stroke.HashRng
 import app.painter.core.stroke.InputPoint
@@ -266,6 +267,8 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
                 paperColor = d.paper.color,
                 paperVisible = d.paper.visible,
                 adjustmentEditor = null,
+                cloneSource = null,
+                cloneOffset = null,
                 symmetry = symmetryUi(),
                 ruler = rulerUi(),
                 ellipse = ellipseUi(),
@@ -314,17 +317,20 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
         if (!maskTarget && node !is RasterLayer) return // groups and adjustment layers have no pixels to paint
         val layer = if (maskTarget) null else doc.activeRaster ?: return
         val s = _state.value
-        val mode = when (s.mode) {
+        val clone = if (s.tool == ToolUi.CLONE) cloneStroke(layer, p.x, p.y) else null
+        if (s.tool == ToolUi.CLONE && clone == null) return // no source yet: the hint asks for a long-press
+        val mode = if (clone != null) StrokeMode.CLONE else when (s.mode) {
             BrushModeUi.ERASE -> StrokeMode.ERASE
             // Smudge reads and writes layer pixels; masks have none, so Blend on a mask paints as before.
             BrushModeUi.BLEND -> if (layer != null) StrokeMode.BLEND else StrokeMode.PAINT
             BrushModeUi.PAINT -> StrokeMode.PAINT
         }
-        val brush = strokeBrush()
+        val brush = if (clone != null) paintStrokeBrush() else strokeBrush()
         val vs = canvas?.viewState?.value
         val zoom = vs?.zoom ?: 1f
         val ctx = StrokeContext(
             zoom = zoom,
+            clone = clone,
             viewRotation = Math.toRadians((vs?.rotationDeg ?: 0f).toDouble()).toFloat(),
             seed = HashRng.strokeSeed(strokeCounter++, STUDIO_BRUSH_ID),
             threads = STROKE_THREADS,
@@ -350,6 +356,21 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
         }
     }
 
+    /**
+     * Clone source of a stroke started at ([x], [y]): null while no source point is picked or the target is a
+     * mask (clone needs layer pixels). The first stroke after the long-press fixes the offset, later strokes
+     * reuse it so the copy follows the brush ([CloneSource.aligned]).
+     */
+    private fun cloneStroke(layer: RasterLayer?, x: Float, y: Float): CloneSource? {
+        val s = _state.value
+        val source = s.cloneSource ?: return null
+        if (layer == null) return null
+        val offset = s.cloneOffset ?: PointUi(x - source.x, y - source.y).also { o ->
+            _state.update { it.copy(cloneOffset = o) }
+        }
+        return CloneSource(layerId = layer.id, offsetX = offset.x, offsetY = offset.y, aligned = true)
+    }
+
     override fun onStrokeMove(points: List<InputPoint>) {
         val engine = stroke ?: return
         engine.add(points)
@@ -372,7 +393,7 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
             history.push(TilePatchCommand(patch))
             canvas?.invalidate(patch.layerId, patch.after.keys)
         }
-        if (_state.value.mode == BrushModeUi.PAINT) rememberColor(_state.value.color)
+        if (_state.value.mode == BrushModeUi.PAINT && _state.value.tool != ToolUi.CLONE) rememberColor(_state.value.color)
     }
 
     override fun onStrokeCancel() {
@@ -395,6 +416,11 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
     override fun onRedoGesture() = redo()
 
     override fun onLongPress(docX: Float, docY: Float) {
+        // In the clone tool the long press picks the clone source instead of an eyedropper sample.
+        if (_state.value.tool == ToolUi.CLONE) {
+            _state.update { it.copy(cloneSource = PointUi(docX, docY), cloneOffset = null) }
+            return
+        }
         val layerId = doc.activeId
         viewModelScope.launch {
             val picked = withContext(Dispatchers.Default) {
@@ -471,6 +497,12 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
      */
     private fun strokeBrush(params: BrushParams = currentParams()): Brush =
         (currentBrush ?: Brush.of(params, STUDIO_BRUSH_ID)).copy(params = params)
+
+    /** Paint preset with the quick PAINT params; the clone tool paints with these whatever the brush mode. */
+    private fun paintStrokeBrush(): Brush {
+        val params = paintParams
+        return (paintBrush ?: Brush.of(params, STUDIO_BRUSH_ID)).copy(params = params)
+    }
 
     // ---- selection tools ----
 

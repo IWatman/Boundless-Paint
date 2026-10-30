@@ -129,6 +129,8 @@
     <string name="tool_transform">Трансформация</string>
     <string name="tool_fill">Заливка</string>
     <string name="tool_gradient">Градиент</string>
+    <string name="tool_clone">Клон-кисть</string>
+    <string name="clone_hint">Долгое нажатие — выбрать источник</string>
     <string name="gradient_linear">Линейный</string>
     <string name="gradient_radial">Радиальный</string>
     <string name="gradient_symmetric">Симметричный</string>

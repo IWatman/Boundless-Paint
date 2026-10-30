@@ -11,6 +11,12 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AutoFixNormal
 import androidx.compose.material.icons.outlined.BlurOn
 import androidx.compose.material.icons.outlined.Brush
+import androidx.compose.material.icons.outlined.Category
+import androidx.compose.material.icons.outlined.ContentCopy
+import androidx.compose.material.icons.outlined.FormatColorFill
+import androidx.compose.material.icons.outlined.Gradient
+import androidx.compose.material.icons.outlined.OpenWith
+import androidx.compose.material.icons.outlined.SelectAll
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -23,6 +29,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
@@ -94,12 +101,24 @@ internal fun MainToolbar(
     }
 
     PanelColumn(modifier.width(52.dp).padding(vertical = 4.dp)) {
+        // STATUS debt 19: the active tool sits above the brush modes; a tap returns to the brush.
+        if (state.tool != ToolUi.BRUSH) {
+            IconToggle(
+                activeToolIcon(state.tool), activeToolName(state.tool),
+                checked = true,
+                onCheckedChange = { actions.selectTool(ToolUi.BRUSH) },
+            )
+            HorizontalDivider(
+                Modifier.width(28.dp).padding(vertical = 4.dp),
+                color = MaterialTheme.colorScheme.outlineVariant,
+            )
+        }
         IconToggle(
             Icons.Outlined.Brush, stringResource(R.string.mode_paint),
-            checked = state.mode == BrushModeUi.PAINT,
+            checked = state.mode == BrushModeUi.PAINT && state.tool == ToolUi.BRUSH,
             onCheckedChange = {
                 // A tap on the active mode opens the brush browser instead of switching mode.
-                if (state.mode == BrushModeUi.PAINT) actions.toggleBrushBrowser() else actions.setMode(BrushModeUi.PAINT)
+                if (state.mode == BrushModeUi.PAINT && state.tool == ToolUi.BRUSH) actions.toggleBrushBrowser() else actions.setMode(BrushModeUi.PAINT)
             },
         )
         IconToggle(
@@ -282,6 +301,36 @@ internal fun MainToolbar(
     }
 }
 
+@Composable
+/** Icon of the active tool indicator of the main toolbar (STATUS debt 19). */
+private fun activeToolIcon(tool: ToolUi): ImageVector = when (tool) {
+    ToolUi.BRUSH -> Icons.Outlined.Brush
+    ToolUi.SELECT_RECT, ToolUi.SELECT_ELLIPSE, ToolUi.SELECT_LASSO, ToolUi.SELECT_WAND -> Icons.Outlined.SelectAll
+    ToolUi.TRANSFORM -> Icons.Outlined.OpenWith
+    ToolUi.FILL -> Icons.Outlined.FormatColorFill
+    ToolUi.GRADIENT -> Icons.Outlined.Gradient
+    ToolUi.SHAPE -> Icons.Outlined.Category
+    ToolUi.CLONE -> Icons.Outlined.ContentCopy
+}
+
+/** Localized name of [tool], the content description of the active tool indicator. */
+@Composable
+private fun activeToolName(tool: ToolUi): String = stringResource(
+    when (tool) {
+        ToolUi.BRUSH -> R.string.mode_paint
+        ToolUi.SELECT_RECT -> R.string.tool_rect_select
+        ToolUi.SELECT_ELLIPSE -> R.string.tool_ellipse_select
+        ToolUi.SELECT_LASSO -> R.string.tool_lasso_select
+        ToolUi.SELECT_WAND -> R.string.tool_magic_wand
+        ToolUi.TRANSFORM -> R.string.tool_transform
+        ToolUi.FILL -> R.string.tool_fill
+        ToolUi.GRADIENT -> R.string.tool_gradient
+        ToolUi.SHAPE -> R.string.shape_title
+        ToolUi.CLONE -> R.string.tool_clone
+    },
+)
+
+/** Square toolbar cell with an accent fill while [selected]; [description] is its content description. */
 @Composable
 private fun ToolbarButton(
     selected: Boolean,

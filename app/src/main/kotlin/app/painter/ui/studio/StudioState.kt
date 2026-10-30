@@ -26,7 +26,11 @@ import app.painter.core.symmetry.SymmetryType
  * two-stop gradient and applies it to the active layer. [SHAPE] drags, edits and stamps geometric shapes
  * of the selected [app.painter.core.shape.ShapeTool] on the active layer.
  */
-enum class ToolUi { BRUSH, SELECT_RECT, SELECT_ELLIPSE, SELECT_LASSO, SELECT_WAND, TRANSFORM, FILL, GRADIENT, SHAPE }
+enum class ToolUi {
+    BRUSH, SELECT_RECT, SELECT_ELLIPSE, SELECT_LASSO, SELECT_WAND, TRANSFORM, FILL, GRADIENT, SHAPE,
+    /** Paints copies of the active layer from a source point picked by a long-press on the canvas. */
+    CLONE,
+}
 
 /** True for the tools that build a selection instead of painting. */
 val ToolUi.isSelectionTool: Boolean
@@ -164,6 +168,10 @@ data class StudioUiState(
     val gradient: GradientUi? = null,
     /** Draft of the shape tool (outline and handles), null while the tool is idle. */
     val shape: ShapeUi? = null,
+    /** Clone source point in document pixels; null until the clone tool gets a long-press. */
+    val cloneSource: PointUi? = null,
+    /** Clone offset (stroke start − source) fixed by the first clone stroke, kept for later strokes. */
+    val cloneOffset: PointUi? = null,
     /** Ruler guide of the open document, null while the ruler is off. */
     val ruler: RulerUi? = null,
     /** Ellipse guide of the open document, null while the ellipse is off. */
