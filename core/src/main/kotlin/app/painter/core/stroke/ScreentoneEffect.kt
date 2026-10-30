@@ -161,7 +161,7 @@ internal class ScreentoneEffect(
     /** Grid step of [dab]; the first dab of the stroke locks the grid, later ones reuse it. */
     private fun gridOf(dab: Dab): Float {
         if (step <= 0f) {
-            val g = params.spacing.coerceAtLeast(1f)
+            val g = (if (params.spacing.isFinite()) params.spacing else 1f).coerceIn(1f, 512f)
             val s = if (params.scaleWithSize && brushSize > 0f) g * dab.d / brushSize else g
             step = s.coerceIn(1f, max(width, height).toFloat())
             val rad = params.angle * DEG

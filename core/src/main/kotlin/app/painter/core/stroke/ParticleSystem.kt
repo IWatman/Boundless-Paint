@@ -2,6 +2,7 @@ package app.painter.core.stroke
 
 import kotlin.math.PI
 import kotlin.math.atan2
+import kotlin.math.ceil
 import kotlin.math.cos
 import kotlin.math.sin
 import kotlin.math.sqrt
@@ -32,20 +33,21 @@ internal class ParticleSystem(
     scatter: Float,
 ) {
     /** Amplitude factor of the random impulse (the head's continuous scatter). */
-    private val impulse = scatter.coerceIn(0f, 1f)
+    // Brush files may come from outside (import), so every parameter is made finite and bounded here.
+    private val impulse = finite(scatter).coerceIn(0f, 1f)
 
     /** Attractors (1–64) and particles (1–400) of the system (spec §1.10). */
     private val attractors = params.attractors.coerceIn(1, MAX_ATTRACTORS)
     private val count = params.particles.coerceIn(1, MAX_PARTICLES)
 
     /** Spring damping `0.5 + 0.24·overshoot`; closer to 1 lets the particles overshoot the attractor. */
-    private val damp = (0.5f + 0.24f * params.overshoot).coerceIn(0f, 0.99f)
+    private val damp = (0.5f + 0.24f * finite(params.overshoot)).coerceIn(0f, 0.99f)
 
     /** Attractor offset as a multiple of `d/2` (spec `radius`). */
-    private val offset = params.radius.coerceAtLeast(0f)
+    private val offset = finite(params.radius).coerceIn(0f, MAX_RADIUS)
 
     /** Diameter of the stamped head as a fraction of the path diameter (spec `size`). */
-    private val headScale = params.size.coerceAtLeast(0f)
+    private val headScale = finite(params.size).coerceIn(0f, MAX_HEAD_SCALE)
 
     /** Fixed unit direction of every attractor, drawn once from the stroke seed. */
     private val dirX = FloatArray(attractors)
@@ -155,12 +157,14 @@ internal class ParticleSystem(
         val dx = nx - ox
         val dy = ny - oy
         val len = sqrt(dx * dx + dy * dy)
+        if (!len.isFinite() || !nx.isFinite() || !ny.isFinite()) return
         val angle = if (len > 1e-5f) atan2(dy, dx) else 0f
-        var s = 0f
-        while (s < len) {
-            val t = s / len
+        // An integer, capped stamp count: a float accumulator could stall on rounding, and a runaway particle
+        // must not flood the batch.
+        val n = if (spacing > 0f) ceil(len / spacing).toInt().coerceIn(0, MAX_STAMPS) else 0
+        for (i in 0 until n) {
+            val t = i.toFloat() / n
             emit(ox + dx * t, oy + dy * t, pd, angle, src, out)
-            s += spacing
         }
         emit(nx, ny, pd, angle, src, out)
     }
@@ -185,6 +189,14 @@ internal class ParticleSystem(
 
         /** Below this particle count the system takes every path step; above it, one step per `d/4`. */
         const val MAX_FREE = 100
+
+        /** Upper bounds for untrusted brush values: attractor offset (×d/2), head scale and stamps per segment. */
+        const val MAX_RADIUS = 16f
+        const val MAX_HEAD_SCALE = 4f
+        const val MAX_STAMPS = 64
+
+        /** [v], or 0 when it is NaN or infinite. */
+        fun finite(v: Float): Float = if (v.isFinite()) v else 0f
 
         /** Smallest stamped diameter, so a tiny particle still deposits a pixel. */
         const val MIN_DIAMETER = 0.5f

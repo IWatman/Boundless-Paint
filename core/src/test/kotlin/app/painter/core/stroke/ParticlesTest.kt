@@ -107,4 +107,13 @@ class ParticlesTest {
             "overshoot 2 must spray farther from the path: $splashing vs $settled",
         )
     }
+    /** Hostile values (as an imported brush could carry) are bounded: the stroke finishes quickly and paints. */
+    @Test
+    fun hostileParamsStayBounded() {
+        val special = ParticlesParams(particles = 400, radius = Float.NaN, size = 1e9f, overshoot = Float.POSITIVE_INFINITY)
+        val start = System.nanoTime()
+        render(brush(special), polyline(floatArrayOf(20f, 100f), floatArrayOf(180f, 100f)))
+        val seconds = (System.nanoTime() - start) / 1e9
+        assertTrue(seconds < 20.0, "hostile particle params took ${seconds}s")
+    }
 }

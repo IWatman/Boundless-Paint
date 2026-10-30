@@ -39,7 +39,8 @@ internal class HarmonyEffect(
     private val rule = ruleOf(params.variant)
 
     /** Link distance `R = R(variant) × spread`, px. */
-    private val radius = rule.radius * params.spread.coerceAtLeast(MIN_SPREAD)
+    // Brush files may come from outside (import): keep spread finite and bounded.
+    private val radius = rule.radius * (if (params.spread.isFinite()) params.spread else 1f).coerceIn(MIN_SPREAD, MAX_SPREAD)
 
     /** Link probability multiplier (`density`). */
     private val density = params.density.coerceAtLeast(0f)
@@ -164,6 +165,8 @@ internal class HarmonyEffect(
 
         /** Smallest `spread`, so that the cell of the hash never collapses. */
         const val MIN_SPREAD = 0.05f
+        /** Upper bound of the spread factor; links beyond a few hundred px are meaningless. */
+        const val MAX_SPREAD = 8f
 
         /** Random channel of the links; a private stream of this engine, not an [RngChannel]. */
         const val CH_LINK = 17
