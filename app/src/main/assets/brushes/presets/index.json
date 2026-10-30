@@ -135,6 +135,20 @@
     },
     {
       "brushes": [
+        "particles.sparks",
+        "particles.dust",
+        "particles.splatter",
+        "particles.smoke_trail",
+        "particles.droplets"
+      ],
+      "id": "particles",
+      "name": {
+        "en": "Particles",
+        "ru": "Частицы"
+      }
+    },
+    {
+      "brushes": [
         "erasers.hard",
         "erasers.soft",
         "erasers.grainy"

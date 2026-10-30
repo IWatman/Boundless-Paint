@@ -1,0 +1,74 @@
+{
+  "category": "particles",
+  "id": "particles.droplets",
+  "name": {
+    "en": "Droplets",
+    "ru": "Капли"
+  },
+  "params": {
+    "flow": 0.75,
+    "hardness": 0.7,
+    "head": {
+      "source": "round"
+    },
+    "jitter": {
+      "scatter": 0.02,
+      "size": 0.08
+    },
+    "opacity": 0.85,
+    "pressureToFlow": {
+      "min": 0.0,
+      "points": [
+        [
+          0.0,
+          0.3
+        ],
+        [
+          1.0,
+          1.0
+        ]
+      ]
+    },
+    "pressureToSize": {
+      "min": 0.2,
+      "points": [
+        [
+          0.0,
+          0.0
+        ],
+        [
+          1.0,
+          1.0
+        ]
+      ]
+    },
+    "size": 45.0,
+    "sizeMax": 160.0,
+    "sizeMin": 5.0,
+    "spacing": 0.05,
+    "special": {
+      "attractors": 8,
+      "overshoot": 1.0,
+      "particles": 30,
+      "radius": 1.0,
+      "size": 0.12,
+      "type": "particles"
+    },
+    "taperEnd": 0.0,
+    "taperStart": 0.0
+  },
+  "resources": {
+    "particle": "asset:particles/p_droplet.png"
+  },
+  "schema": 1,
+  "tags": [
+    "капли",
+    "droplets",
+    "частицы",
+    "particles",
+    "вода",
+    "water",
+    "дождь",
+    "rain"
+  ]
+}

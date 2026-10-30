@@ -6,6 +6,7 @@ import app.painter.core.stroke.FillBrushParams
 import app.painter.core.stroke.FilterBrushParams
 import app.painter.core.stroke.HarmonyParams
 import app.painter.core.stroke.HarmonyVariant
+import app.painter.core.stroke.ParticlesParams
 import app.painter.core.stroke.ScreentoneParams
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.int
@@ -74,7 +75,8 @@ class CatalogPresetsTest {
                 assertTrue(ref in refs, "${f.path}: unknown resource ref $ref")
             }
             // S6/S9 specials: the off-stroke filter, the colour stamp, the double outline, the fill,
-            // the screentone and the harmony bundle (of the variants the engine actually implements).
+            // the screentone, the particle cloud and the harmony bundle (of the variants the engine
+            // actually implements).
             val special = brush.params.special
             assertTrue(
                 special == null ||
@@ -82,6 +84,7 @@ class CatalogPresetsTest {
                     special is ColorStampParams ||
                     special is DoubleParams ||
                     special is FillBrushParams ||
+                    special is ParticlesParams ||
                     special is ScreentoneParams ||
                     (special is HarmonyParams && special.variant in harmonyVariants),
                 "${f.path}: unexpected special engine $special",
@@ -94,6 +97,14 @@ class CatalogPresetsTest {
                 assertTrue(
                     base != null && hexColor.matches(base),
                     "${f.path}: colour-stamp presets need a #rrggbb baseColor: $base",
+                )
+            }
+            // A particle brush seeds `resources.particle`: without the sprite the engine has no particle head.
+            if (special is ParticlesParams) {
+                val particle = brush.resources.particle
+                assertTrue(
+                    particle != null && particle in refs,
+                    "${f.path}: particle presets need a known resources.particle: $particle",
                 )
             }
             // S2a paper texture: the grain params are meaningless without the texture image next to them.

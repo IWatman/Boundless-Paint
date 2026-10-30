@@ -20,13 +20,17 @@ from . import (
     markers,
     outline,
     paints,
+    particles,
     pencils,
     pens,
     stamps,
 )
 
 #: Categories in index order.
-MODULES = (pencils, charcoal, chalk, paints, effects, outline, stamps, manga, harmony, erasers, pens, markers, airbrush)
+MODULES = (
+    pencils, charcoal, chalk, paints, effects, outline, stamps, manga, harmony, particles, erasers, pens, markers,
+    airbrush,
+)
 
 #: Prefilled mode favorites; `PAINT` up to 3 ids, `ERASE` one eraser id.
 FAVORITES = {

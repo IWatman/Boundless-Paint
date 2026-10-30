@@ -1,0 +1,74 @@
+{
+  "category": "particles",
+  "id": "particles.sparks",
+  "name": {
+    "en": "Sparks",
+    "ru": "Искры"
+  },
+  "params": {
+    "flow": 0.9,
+    "hardness": 0.9,
+    "head": {
+      "source": "round"
+    },
+    "jitter": {
+      "scatter": 0.02,
+      "size": 0.15
+    },
+    "opacity": 0.95,
+    "pressureToFlow": {
+      "min": 0.0,
+      "points": [
+        [
+          0.0,
+          0.3
+        ],
+        [
+          1.0,
+          1.0
+        ]
+      ]
+    },
+    "pressureToSize": {
+      "min": 0.2,
+      "points": [
+        [
+          0.0,
+          0.0
+        ],
+        [
+          1.0,
+          1.0
+        ]
+      ]
+    },
+    "size": 24.0,
+    "sizeMax": 120.0,
+    "sizeMin": 4.0,
+    "spacing": 0.04,
+    "special": {
+      "attractors": 10,
+      "overshoot": 1.5,
+      "particles": 120,
+      "radius": 1.2,
+      "size": 0.06,
+      "type": "particles"
+    },
+    "taperEnd": 0.0,
+    "taperStart": 0.0
+  },
+  "resources": {
+    "particle": "asset:particles/p_spark.png"
+  },
+  "schema": 1,
+  "tags": [
+    "искры",
+    "sparks",
+    "частицы",
+    "particles",
+    "огонь",
+    "fire",
+    "искра",
+    "spark"
+  ]
+}
