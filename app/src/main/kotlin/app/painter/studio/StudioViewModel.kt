@@ -7,6 +7,8 @@ import android.graphics.Bitmap
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import app.painter.R
 import app.painter.core.blend.BlendMode
@@ -154,8 +156,25 @@ import kotlinx.serialization.json.JsonObject
 import java.io.ByteArrayOutputStream
 import java.util.Locale
 
-/** Owns the open document and wires UI actions, the canvas view and the core engines. */
-class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, CanvasInputListener {
+/**
+ * Owns the open document and wires UI actions, the canvas view and the core engines. [prefs] carries the
+ * tool settings that outlive a session (color, palette, per-mode brush preset with its size and opacity);
+ * null keeps them in memory only, which is what tests want.
+ */
+class StudioViewModel(app: Application, private val prefs: ToolPrefs? = null) :
+    AndroidViewModel(app), StudioActions, CanvasInputListener {
+
+    companion object {
+        /**
+         * Factory for `by viewModels()`: the default `AndroidViewModelFactory` looks for an
+         * `(Application)` constructor, which the defaulted [prefs] parameter takes away.
+         */
+        fun factory(app: Application): ViewModelProvider.Factory = object : ViewModelProvider.Factory {
+            @Suppress("UNCHECKED_CAST")
+            override fun <T : ViewModel> create(modelClass: Class<T>): T =
+                StudioViewModel(app, ToolPrefs(app)) as T
+        }
+    }
 
     private val store = ProjectStore(app.filesDir.resolve("projects").apply { mkdirs() })
     private val ioLock = Mutex()
@@ -209,6 +228,7 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
 
     init {
         history.onChanged = { lastFill = null; markDirty(); refreshLayers() }
+        restoreToolPrefs()
         syncBrushState()
         viewModelScope.launch(Dispatchers.IO) { ioLock.withLock { store.recoverInterrupted() } }
         refreshProjects()
@@ -453,6 +473,7 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
         }
         syncBrushState()
         _state.update { it.copy(brushBrowserOpen = false) }
+        saveBrushPrefs()
     }
 
     /**
@@ -476,6 +497,7 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
                 eraseBrush = erase
                 eraseParams = erase.params
             }
+            restoreBrushPrefs()
             // Decoding the images of the initial presets happens here, not on the first stroke.
             listOfNotNull(paintBrush, eraseBrush).forEach { brushes.resources(it) }
             _state.update { it.copy(brushCategories = categories) }
@@ -1575,6 +1597,7 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
 
     override fun setBrushSize(size: Float) {
         updateParams { it.copy(size = size.coerceIn(it.sizeMin, it.sizeMax)) }
+        saveBrushPrefs()
         val p = currentParams()
         val zoom = _state.value.viewZoom
         showHud(HudUi("Size", "${p.size.toInt()} px", p.size * zoom, p.sizeMax * zoom))
@@ -1582,6 +1605,7 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
 
     override fun setOpacity(opacity: Float) {
         updateParams { it.copy(opacity = opacity.coerceIn(0f, 1f)) }
+        saveBrushPrefs()
         showHud(HudUi("Opacity", "${(opacity * 100).toInt()}%"))
     }
 
@@ -1597,6 +1621,7 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
 
     override fun setColor(color: Rgba, commit: Boolean) {
         _state.update { it.copy(color = color) }
+        prefs?.color = color
         val fill = lastFill
         if (fill != null && _state.value.tool == ToolUi.FILL) {
             fill.recolor(doc, color)
@@ -1605,8 +1630,9 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
         }
     }
 
-    override fun addColorToPalette(color: Rgba) = _state.update {
-        if (it.palette.contains(color)) it else it.copy(palette = it.palette + color)
+    override fun addColorToPalette(color: Rgba) {
+        _state.update { if (it.palette.contains(color)) it else it.copy(palette = it.palette + color) }
+        prefs?.palette = _state.value.palette
     }
 
     // ---- history ----
@@ -2189,6 +2215,42 @@ class StudioViewModel(app: Application) : AndroidViewModel(app), StudioActions, 
             )
         }
     }
+
+    // ---- persisted tool settings ----
+
+    /** Restores the color and the palette at start-up; the per-mode brushes follow in [loadBrushes]. */
+    private fun restoreToolPrefs() {
+        val p = prefs ?: return
+        val saved = p.palette
+        _state.update { it.copy(color = p.color, palette = saved.ifEmpty { it.palette }) }
+    }
+
+    /**
+     * Applies the saved preset and the size/opacity the user set to every brush mode. A preset id the
+     * catalog no longer has (the brush set changed between releases) is dropped silently, so the mode keeps
+     * the default preset it was seeded with.
+     */
+    private fun restoreBrushPrefs() {
+        val p = prefs ?: return
+        p.brushId(BrushModeUi.PAINT)?.let { id -> brushes.find(id)?.let { paintBrush = it; paintParams = it.params } }
+        p.brushId(BrushModeUi.ERASE)?.let { id -> brushes.find(id)?.let { eraseBrush = it; eraseParams = it.params } }
+        paintParams = paintParams.withSaved(p.brushSize(BrushModeUi.PAINT), p.brushOpacity(BrushModeUi.PAINT))
+        eraseParams = eraseParams.withSaved(p.brushSize(BrushModeUi.ERASE), p.brushOpacity(BrushModeUi.ERASE))
+        blendParams = blendParams.withSaved(p.brushSize(BrushModeUi.BLEND), p.brushOpacity(BrushModeUi.BLEND))
+    }
+
+    /** Writes the preset, size and opacity of the current mode to [prefs]. */
+    private fun saveBrushPrefs() {
+        val p = prefs ?: return
+        val params = currentParams()
+        p.saveBrush(_state.value.mode, currentBrush?.id, params.size, params.opacity)
+    }
+
+    /** [BrushParams] with the user's saved size/opacity applied on top of the preset, clamped to its limits. */
+    private fun BrushParams.withSaved(savedSize: Float?, savedOpacity: Float?): BrushParams = copy(
+        size = (savedSize ?: size).coerceIn(sizeMin, sizeMax),
+        opacity = (savedOpacity ?: opacity).coerceIn(0f, 1f),
+    )
 
     private var hudJob: Job? = null
 

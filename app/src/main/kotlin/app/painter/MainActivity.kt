@@ -33,7 +33,7 @@ import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
 
-    private val vm: StudioViewModel by viewModels()
+    private val vm: StudioViewModel by viewModels { StudioViewModel.factory(application) }
     private val updateVm: UpdateViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {

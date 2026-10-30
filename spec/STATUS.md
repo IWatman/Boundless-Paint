@@ -37,7 +37,7 @@ Found:
 | # | Issue | Plan |
 |---|---|---|
 | 1 | ✅ CPU layer tiles in half (8 B/px), stroke buffer float32, upload to the GPU as GL_HALF_FLOAT. Remaining: the limit formula accounts for GPU memory (debt 6). Was: the layer limit was conservative (14 for 2048² on the emulator). The formula did not account for tile sparseness, and CPU tiles were float32 = 16 B/px | store CPU tiles in half (ShortArray), limit based on actual memory |
-| 4 | Color, brush and palette are not persisted between sessions | save to settings or manifest |
+| 4 | ✅ Color, palette and the brush of each mode (preset, size, opacity) are restored from the `tool_prefs` SharedPreferences. Was: Color, brush and palette are not persisted between sessions | save to settings or manifest |
 | 5 | ✅ GPU↔CPU parity: androidTest `BlendParityTest` (33 modes, 13 adjustments) green on the emulator; ADD, INVERT, darker/lighter color fixed. Was: the ADD formula — shader and CPU could diverge on a semi-transparent background | a shared GPU↔CPU test vector |
 | 6 | GPU memory: a composite texture with mip levels for every document tile | atlas and LRU, lazy mips |
 | 7 | ✅ `list()` only reads, recovery happens in `recoverInterrupted()` on start. Was: `ProjectStore.list()` could delete the `.tmp` of a concurrent save | access serialized via a Mutex in the ViewModel. Remove the cleanup from list() |
