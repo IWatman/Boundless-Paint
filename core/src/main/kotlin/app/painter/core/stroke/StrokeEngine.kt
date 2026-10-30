@@ -59,6 +59,11 @@ import kotlin.math.sqrt
  * the [PaintMixKernel] deposit instead. A [FilterBrushParams] with `onStroke = false` (§1.16) filters the layer under
  * each dab ([FilterKernel]). [StrokeMode.CLONE] copies a snapshot of the clone source ([CloneKernel], §1.18).
  *
+ * Special engines: a [ColorStampParams] brush with a colour head takes its dab colour from the head pixels,
+ * shifted once per stroke from `base_color` to the brush colour ([ColorShift], §1.13). A [DoubleParams] brush
+ * composites the shadow of the buffered stroke under its body ([DoubleEffect], §1.12). Both are no-ops for
+ * every other brush.
+ *
  * The smudge and the paint kernel take the direct path, so [takeDirty] reports layer tiles and [cancel] restores
  * them; the layer alpha of an alpha-locked layer stays untouched and the reservoir restarts on a re-render.
  *
@@ -170,6 +175,21 @@ class StrokeEngine(
     private val scheduler = TileScheduler.shared(ctx.threads)
     private val head = if (params.head.source == HeadSource.BITMAP) res.head else null
 
+    /**
+     * Colour stamp (spec/tools/m2-brush.md §1.13): the dab colour is the sampled RGBA head pixel, shifted once
+     * per stroke from [HeadParams.baseColor] to the brush colour. Only colour-stamp brushes with a colour head
+     * get a shift; every other brush passes null to [MaskKernel] and keeps the plain dab colour.
+     */
+    private val colorShift: ColorShift? = (params.special as? ColorStampParams)?.let { cs ->
+        head?.takeIf { it.colored }?.let { h ->
+            val mix = if (cs.colorize > 0f) cs.colorize else params.head.colorize
+            ColorShift(params.head.baseColor?.let { ColorConv.parseHex(it) }, color, mix)
+        }
+    }
+
+    /** Double outline/shadow (§1.12) of a buffered stroke; null (or the direct path) keeps the plain composite. */
+    private val double: DoubleParams? = if (directToLayer) null else params.special as? DoubleParams
+
     /** Adhesion (spec/tools/m2-brush.md §1.7) of the buffered stroke; 0 keeps the plain composite path. */
     private val adhesion: Float = if (directToLayer) 0f else params.effects.adhesion.coerceIn(0f, 1f)
 
@@ -202,13 +222,13 @@ class StrokeEngine(
     private val kernel: DabKernel = smudge ?: paintKernel ?: cloneKernel ?: filterKernel ?: if (directToLayer) {
         MaskKernel(
             directOpOf(mode, alphaLock), head, params.head.antialias, params.head.depth, previewOpacity, ceiling = false,
-            tex = params.texture, texImage = res.texture, brushSize = params.size,
+            tex = params.texture, texImage = res.texture, brushSize = params.size, colorShift = colorShift,
         )
     } else {
         MaskKernel(
             MaskOp.OVER, head, params.head.antialias, params.head.depth, 1f, ceiling = true,
             glaze = params.effects.glaze.coerceIn(0f, 1f),
-            tex = params.texture, texImage = res.texture, brushSize = params.size,
+            tex = params.texture, texImage = res.texture, brushSize = params.size, colorShift = colorShift,
         )
     }
     private val directOp = directOpOf(mode, alphaLock)
@@ -526,6 +546,11 @@ class StrokeEngine(
         val op = previewOpacity
         if (op <= 0f) return
         val ws = working!!
+        // Double (§1.12): the shadow goes under the body, so it is composited first; erase and alpha lock stay plain.
+        val dbl = double
+        if (dbl != null && mode != StrokeMode.ERASE && !alphaLock) {
+            DoubleEffect.compositeShadow(buffer, dbl, op) { key -> ws.prepare(key, create = true) }
+        }
         val erase = mode == StrokeMode.ERASE
         for ((key, src) in buffer.entries()) {
             if (src.isEmpty()) continue

@@ -83,6 +83,10 @@ enum class MaskOp {
  *
  * With [ignoreOpacity] the dab opacity is left out of the alpha: the adhesion load plane (§1.7) accumulates
  * `m·flow` per pixel no matter how much the opacity cap would limit the buffer alpha itself.
+ *
+ * With [colorShift] (colour stamp, spec/tools/m2-brush.md §1.13) an RGBA head supplies the dab colour: every
+ * sampled head pixel is run through [ColorShift] and composited with its own colour instead of the dab colour.
+ * Other brushes take the untouched paths ([colorShift] null costs one null check per pixel).
  */
 class MaskKernel(
     private val op: MaskOp,
@@ -96,6 +100,7 @@ class MaskKernel(
     private val texImage: TextureImage? = null,
     private val brushSize: Float = 0f,
     private val ignoreOpacity: Boolean = false,
+    private val colorShift: ColorShift? = null,
 ) : DabKernel {
     override val createsTiles: Boolean get() = op == MaskOp.OVER
 
@@ -146,13 +151,19 @@ class MaskKernel(
         val g = dab.g
         val b = dab.b
         val data = tile
+        val shift = colorShift
+        val rgbaTmp = if (shift != null) FloatArray(4) else null
+        val colTmp = if (shift != null) FloatArray(3) else null
+        var su = 0f
+        var sv = 0f
 
         // Texture (§1.4): a per-pixel grain factor scales the dab alpha and, with a lower limit, the ceiling.
         // Textured dabs take the loop below; untextured ones fall through to the untouched M1 loop.
         val tp = tex
         val grainImage = texImage
         val tDepth = dab.texDepth.coerceIn(0f, 1f)
-        if (tp != null && grainImage != null && tDepth > 0f) {
+        // TODO(S6b): a colour-stamp brush with grain takes the colour path, the texture is not applied to its dabs yet.
+        if (tp != null && grainImage != null && tDepth > 0f && shift == null) {
             var angle = tp.angle * DEG
             var ox = 0f
             var oy = 0f
@@ -284,19 +295,50 @@ class MaskKernel(
                     } else {
                         var u = 0.5f + lx * invD
                         if (dab.flipX) u = 1f - u
-                        cov = pyr.sample(level, u, 0.5f + ly * invD)
+                        su = u
+                        sv = 0.5f + ly * invD
+                        cov = pyr.sample(level, su, sv)
                         if (kDepth > 0f) cov = ((cov - kDepth) / (1f - kDepth)).coerceIn(0f, 1f)
                         if (!antialias) cov = if (cov >= 0.5f) 1f else 0f
                     }
                 }
                 if (cov > 0f) {
                     val m = if (clip != null) clip.data[(py shl Tile.SHIFT) + px].toInt().and(0xFF) / 255f else clipValue
-                    if (m > 0f) blend(data, i, cov * peak, opac, m, r, g, b, 1f)
+                    if (m > 0f) {
+                        if (shift == null) {
+                            blend(data, i, cov * peak, opac, m, r, g, b, 1f)
+                        } else if (blendHead(shift, pyr!!, level, su, sv, rgbaTmp!!, colTmp!!)) {
+                            // Colour stamp (§1.13): the dab colour is the sampled head pixel, shifted once per stroke.
+                            blend(data, i, cov * peak, opac, m, colTmp!![0], colTmp!![1], colTmp!![2], 1f)
+                        }
+                    }
                 }
                 i += 4
             }
         }
         tile.markDirty()
+    }
+
+    /**
+     * Colour of the head pixel at ([u], [v]) for a colour-stamp brush (spec/tools/m2-brush.md §1.13): samples the
+     * premultiplied RGBA head, unpremultiplies it and runs it through [shift] into [out]; false for a fully
+     * transparent pixel, which deposits nothing.
+     */
+    private fun blendHead(
+        shift: ColorShift,
+        pyr: HeadPyramid,
+        level: Int,
+        u: Float,
+        v: Float,
+        rgba: FloatArray,
+        out: FloatArray,
+    ): Boolean {
+        pyr.sampleRgba(level, u, v, rgba)
+        val a = rgba[3]
+        if (a <= 0f) return false
+        val inv = 1f / a
+        shift.shift(rgba[0] * inv, rgba[1] * inv, rgba[2] * inv, out)
+        return true
     }
 
     private fun blend(d: Tile, i: Int, k: Float, opac: Float, m: Float, r: Float, g: Float, b: Float, cap: Float) {
