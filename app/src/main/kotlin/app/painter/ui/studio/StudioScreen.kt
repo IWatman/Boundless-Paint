@@ -230,6 +230,21 @@ fun StudioScreen(
                 }
             }
 
+            if (state.stylusPanelOpen) {
+                Popup(
+                    alignment = Alignment.TopEnd,
+                    onDismissRequest = { actions.toggleStylusPanel() },
+                    properties = PopupProperties(focusable = true),
+                ) {
+                    StylusSettingsPanel(
+                        settings = state.stylusSettings,
+                        actions = actions,
+                        onClose = { actions.toggleStylusPanel() },
+                        modifier = Modifier.padding(top = 56.dp, end = 8.dp),
+                    )
+                }
+            }
+
             if (state.colorPanelOpen) {
                 val offsetX = with(LocalDensity.current) { 72.dp.roundToPx() }
                 Popup(
@@ -721,6 +736,10 @@ private fun StudioTopBar(state: StudioUiState, actions: StudioActions, modifier:
                         DropdownMenuItem(
                             text = { Text(stringResource(R.string.settings)) },
                             onClick = { menuOpen = false; actions.openSettings() },
+                        )
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.stylus)) },
+                            onClick = { menuOpen = false; actions.toggleStylusPanel() },
                         )
                     }
                 }

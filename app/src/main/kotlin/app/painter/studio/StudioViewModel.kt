@@ -533,6 +533,8 @@ class StudioViewModel(
 
     override fun toggleBrushBrowser() = _state.update { it.copy(brushBrowserOpen = !it.brushBrowserOpen) }
 
+    override fun toggleStylusPanel() = _state.update { it.copy(stylusPanelOpen = !it.stylusPanelOpen) }
+
     override fun selectBrush(id: String) {
         val brush = brushes.find(id) ?: return
         if (_state.value.mode == BrushModeUi.ERASE) {
@@ -2301,6 +2303,7 @@ class StudioViewModel(
         val stored = s.load()
         calibrations.putAll(stored.devices)
         _stylusSettings.value = stored.stylus
+        _state.update { it.copy(stylusSettings = stored.stylus) }
         // The stored curve preset is the source of truth for the pressure curve of every device (§4.3).
         stored.stylus.applyTo(calibrations.values)
     }
@@ -2308,10 +2311,11 @@ class StudioViewModel(
     /**
      * Replaces the stylus settings (spec/tools/m2-brush.md §4.3): the pen buttons, the finger rule and the palm
      * mode reach the router at once, the curve preset is written into the calibration of every known device and
-     * the result is saved for the next session. Called by the Settings → Stylus screen.
+     * the result is saved for the next session. Called by the stylus settings panel.
      */
-    fun setStylusSettings(settings: StylusSettings) {
+    override fun setStylusSettings(settings: StylusSettings) {
         _stylusSettings.value = settings
+        _state.update { it.copy(stylusSettings = settings) }
         settings.applyTo(calibrations.values)
         canvas?.stylusSettings = settings
         saveInputSettings()

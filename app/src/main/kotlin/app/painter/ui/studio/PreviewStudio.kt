@@ -17,6 +17,7 @@ import app.painter.core.blend.BlendMode
 import app.painter.core.adjust.AdjustKind
 import app.painter.core.adjust.AdjustParams
 import app.painter.core.color.Rgba
+import app.painter.studio.StylusSettings
 import app.painter.ui.components.HsvUi
 import app.painter.ui.components.sameAs
 import app.painter.ui.components.toRgba
@@ -74,6 +75,8 @@ class FakeStudioController(projectName: String = "Demo") {
         override fun redo() = update { it.copy(canUndo = true, canRedo = false) }
         override fun toggleLayerPanel() = update { it.copy(layerPanelOpen = !it.layerPanelOpen) }
         override fun toggleColorPanel() = update { it.copy(colorPanelOpen = !it.colorPanelOpen) }
+        override fun toggleStylusPanel() = update { it.copy(stylusPanelOpen = !it.stylusPanelOpen) }
+        override fun setStylusSettings(settings: StylusSettings) = update { it.copy(stylusSettings = settings) }
         override fun addAdjustmentLayer(kind: String) {
             val params = AdjustKind.defaults(kind) ?: return
             val id = (nextId++).toString()

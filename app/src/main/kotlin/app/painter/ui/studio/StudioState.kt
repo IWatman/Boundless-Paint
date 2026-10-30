@@ -15,6 +15,7 @@ import app.painter.core.perspective.PerspectiveType
 import app.painter.core.shape.ShapeTool
 import app.painter.core.symmetry.MirrorAxes
 import app.painter.core.symmetry.SymmetryType
+import app.painter.studio.StylusSettings
 
 /** Brush mode of the main toolbar. */
 /**
@@ -137,6 +138,10 @@ data class StudioUiState(
     val canRedo: Boolean = false,
     val layerPanelOpen: Boolean = false,
     val colorPanelOpen: Boolean = false,
+    /** Stylus settings the [StylusSettingsPanel] shows (spec/tools/m2-brush.md §4.3). */
+    val stylusSettings: StylusSettings = StylusSettings(),
+    /** The stylus settings panel is open; it is the only way to set [stylusSettings] from the UI. */
+    val stylusPanelOpen: Boolean = false,
     val hud: HudUi? = null,
     val projectName: String = "",
     val layerLimit: Int = 32,
@@ -522,6 +527,10 @@ interface StudioActions {
     fun openOptions()
     fun openSettings() {}
     fun addColorToPalette(color: Rgba)
+    /** Replaces the stylus settings: the pen buttons, the finger rule, the palm mode and the pressure curve. */
+    fun setStylusSettings(settings: StylusSettings) {}
+    /** Opens or closes the stylus settings panel (spec/tools/m2-brush.md §4.3). */
+    fun toggleStylusPanel() {}
 }
 
 /** Adjustment editor session: node [nodeId] of [kind] showing [params]. */
@@ -586,4 +595,6 @@ open class NoOpStudioActions : StudioActions {
     override fun openEditingTools() {}
     override fun openOptions() {}
     override fun addColorToPalette(color: Rgba) {}
+    override fun setStylusSettings(settings: StylusSettings) {}
+    override fun toggleStylusPanel() {}
 }
