@@ -1620,8 +1620,9 @@ class StudioViewModel(
      * Live preview of the draft: the engine of the previous frame is cancelled and the shape is painted again
      * with a fresh [StrokeEngine] (a buffered stroke shows its buffer over the layer, a build-up brush paints the
      * layer directly and is restored by cancel). Throttled to about 30 fps while dragging and always redrawn on
-     * finger lift. The brush only outlines the shape — the fill is rasterised from the stroke path in `end()` —
-     * so a draft with the outline turned off is painted with a zero-flow brush, whose dabs never reach the target.
+     * finger lift. The engine closes and fills the path right away ([StrokeEngine.previewFinish], debt 17), so
+     * a closed shape shows its closing segment and its fill before Apply. With Outline off the dabs are drawn
+     * with a zero-flow brush and never reach the target, while the fill still shows.
      */
     private fun renderShape(force: Boolean) {
         val d = shapeDraft ?: return
@@ -1659,6 +1660,8 @@ class StudioViewModel(
         stroke = engine
         engine.begin(points.first())
         engine.add(points.drop(1))
+        // Debt 17: draw the closing segment and the closed-shape fill now, so the preview matches Apply.
+        engine.previewFinish()
         if (engine.directToLayer) {
             canvas?.invalidate(layerId, engine.takeDirty())
         } else {

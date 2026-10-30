@@ -348,6 +348,11 @@ class StrokeEngine(
     private var active = false
     private var peakRaw = 0f
 
+    /** True once [previewFinish] has closed and filled the path; [end] then repeats neither. */
+    private var previewEnded = false
+    /** True while the closed-shape fill is in the target pixels; [rerender] regrows the path and clears it. */
+    private var filled = false
+
     /** Event time of the latest input point and the time the watercolor grid was advanced to, ms; −1 before the first. */
     private var inputTimeMs = -1L
     private var simTimeMs = -1L
@@ -405,6 +410,28 @@ class StrokeEngine(
 
     /** M1 convenience: [end] for a layer target, returning the pixel patch. */
     fun endPatch(): TilePatch? = (end() as? StrokeCommit.Pixels)?.patch
+
+    /**
+     * Closes the recorded path and fills it in the pixels this stroke previews — [buffer] or, on a direct-to-layer
+     * brush, the layer's working set — without applying it to the target: no `working.commit`, so the caller can
+     * still [cancel] or [end] the stroke. The live preview of a shape draft calls it so a closed shape shows its
+     * closing segment and its fill before Apply (spec STATUS debt 17). [end] afterwards repeats neither the close
+     * nor the fill and commits the same pixels it would have committed without this call.
+     */
+    fun previewFinish() {
+        if (!active || previewEnded) return
+        previewEnded = true
+        if (options.stabilize) for (p in stabilizer.end()) feed(p)
+        endStages(0)
+        finalSink.lift()
+        flush()
+        if (rerender || params.afterSmoothing > 0f) {
+            rerender()
+            rerender = false
+        }
+        if (fillSpec != null) fill()
+        touchBuffer()
+    }
 
     /** Aborts the stroke without changing the target. */
     fun cancel() {
@@ -518,6 +545,7 @@ class StrokeEngine(
     )
 
     private fun rerender() {
+        filled = false
         smudge?.reset()
         paintKernel?.reset()
         loadAccess?.releaseAll()
@@ -616,6 +644,9 @@ class StrokeEngine(
 
     private fun fill() {
         val spec = fillSpec ?: return
+        // Already painted (previewFinish): painting it twice would double a semi-transparent fill.
+        if (filled) return
+        filled = true
         // TODO(S6b): FillContent.PATTERN and FillContent.PROCEDURAL fill like SOLID for now.
         val alpha = spec.opacity.coerceIn(0f, 1f) * color.a
         if (alpha <= 0f) return
