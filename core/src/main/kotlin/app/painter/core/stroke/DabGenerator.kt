@@ -110,6 +110,7 @@ class DabGenerator(brush: Brush, private val res: BrushResources, private val ct
             dab.sy = sy
             dab.flipX = false
             dab.angle = angleOf(s, pr, tiltN, di)
+            dab.s = s.distance
 
             var x = s.x
             var y = s.y

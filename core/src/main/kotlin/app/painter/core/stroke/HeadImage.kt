@@ -4,6 +4,7 @@ import kotlin.math.exp
 import kotlin.math.floor
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.sqrt
 
 /** Decoded image (the app decodes PNG): 8-bit [channels] = 1 (gray) or 4 (straight RGBA), row-major. */
 class ImageData(val width: Int, val height: Int, val channels: Int, val pixels: ByteArray) {
@@ -323,17 +324,22 @@ class HeadImage(src: ImageData, curve: Curve? = null, invert: Boolean = false) {
 
 /**
  * Tiling gray texture sampled bilinearly with wrap-around; `u, v` in texture periods. Sources longer than
- * [MAX_SOURCE_SIDE] are box-downscaled on load. Grain processing (curve, softness, stretch…) arrives with S2.
+ * [MAX_SOURCE_SIDE] are box-downscaled on load. [invert] and [softness] are applied once at build: softness is a
+ * periodic Gaussian blur (σ = softness·0.08·512, scaled to the actual size) that keeps the tile seamless
+ * (spec/tools/m2-brush.md §1.4). Softness 0 leaves the samples exactly as decoded.
  */
-class TextureImage(src: ImageData, invert: Boolean = false) {
+class TextureImage(src: ImageData, invert: Boolean = false, softness: Float = 0f) {
     private val image = limitSource(src)
     val width = image.width
     val height = image.height
-    private val v = FloatArray(width * height) { i ->
-        val raw = if (image.channels == 1) image.pixels[i] else image.pixels[i * 4]
-        val f = (raw.toInt() and 0xFF) / 255f
+    private val raw = FloatArray(width * height) { i ->
+        val g = if (image.channels == 1) image.pixels[i] else image.pixels[i * 4]
+        val f = (g.toInt() and 0xFF) / 255f
         if (invert) 1f - f else f
     }
+
+    /** Grain after [softness] (§1.4); the decoded values themselves when softness is 0. */
+    private val v = if (softness > 0f) wrapBlur(raw, width, height, softness * SOFT_SIGMA * max(width, height)) else raw
 
     /** Value 0..1 at ([u], [v]) in periods (1 = one texture width). */
     fun sample(u: Float, vv: Float): Float {
@@ -353,6 +359,49 @@ class TextureImage(src: ImageData, invert: Boolean = false) {
     }
 }
 
+/** σ per unit of softness, relative to a 512 px texture (spec/tools/m2-brush.md §1.4). */
+private const val SOFT_SIGMA = 0.08f
+
+/**
+ * Softening blur of a wrapping texture tile (§1.4): three separable box passes per axis (a box of variance
+ * `(k² − 1)/12` three times ≈ a Gaussian of [sigma]), so the cost does not grow with σ. Wrapped indexing keeps
+ * the tile seamless; σ ≤ 0 returns [src] unchanged.
+ */
+private fun wrapBlur(src: FloatArray, w: Int, h: Int, sigma: Float): FloatArray {
+    if (sigma <= 0f) return src
+    var box = (sqrt(4f * sigma * sigma + 1f) + 0.5f).toInt().coerceAtLeast(1)
+    if (box % 2 == 0) box++
+    var cur = src
+    repeat(3) {
+        cur = boxPass(cur, w, h, box, horizontal = true)
+        cur = boxPass(cur, w, h, box, horizontal = false)
+    }
+    return cur
+}
+
+/** One wrapped box pass of odd width [box] along x ([horizontal]) or y with a running sum; width 1 is a no-op. */
+private fun boxPass(src: FloatArray, w: Int, h: Int, box: Int, horizontal: Boolean): FloatArray {
+    val n = if (horizontal) w else h
+    val k = min(box, if (n % 2 == 0) n - 1 else n)
+    if (k <= 1) return src
+    val r = k / 2
+    val inv = 1f / k
+    val step = if (horizontal) 1 else w
+    val lines = if (horizontal) h else w
+    val out = FloatArray(src.size)
+    for (line in 0 until lines) {
+        val base = if (horizontal) line * w else line
+        var sum = 0f
+        for (j in -r..r) sum += src[base + Math.floorMod(j, n) * step]
+        for (i in 0 until n) {
+            out[base + i * step] = sum * inv
+            sum -= src[base + Math.floorMod(i - r, n) * step]
+            sum += src[base + Math.floorMod(i + r + 1, n) * step]
+        }
+    }
+    return out
+}
+
 /** Loads image references (`asset:heads/x.png`, `brush:head.png`); implemented by the app. */
 fun interface ResourceResolver {
     fun image(ref: String): ImageData
@@ -369,7 +418,7 @@ class BrushResources(val head: HeadImage? = null, val texture: TextureImage? = n
             val t = brush.params.texture
             return BrushResources(
                 head = brush.resources.head?.let { HeadImage(resolver.image(it), h.curve, h.invert) },
-                texture = brush.resources.texture?.let { TextureImage(resolver.image(it), t?.invert ?: false) },
+                texture = brush.resources.texture?.let { TextureImage(resolver.image(it), t?.invert ?: false, t?.softness ?: 0f) },
                 particle = brush.resources.particle?.let { HeadImage(resolver.image(it)) },
             )
         }

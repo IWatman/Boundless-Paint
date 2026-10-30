@@ -251,7 +251,7 @@ class StrokeEngine(
     private val particleKernel: MaskKernel? = if (particles == null) null else MaskKernel(
         MaskOp.OVER, res.particle, params.head.antialias, 0f, 1f, ceiling = true,
         glaze = params.effects.glaze.coerceIn(0f, 1f),
-        tex = params.texture, texImage = res.texture, brushSize = params.size,
+        tex = params.texture, texImage = res.texture, brushSize = params.size, seed = ctx.seed,
     )
 
     /** Watercolor (§1.9) of a buffered paint stroke: the dabs wet the grid of [WetSimulation], its pigment is the buffer. */
@@ -293,13 +293,13 @@ class StrokeEngine(
     private val kernel: DabKernel = smudge ?: paintKernel ?: cloneKernel ?: filterKernel ?: if (directToLayer) {
         MaskKernel(
             directOpOf(mode, alphaLock), head, params.head.antialias, params.head.depth, previewOpacity, ceiling = false,
-            tex = params.texture, texImage = res.texture, brushSize = params.size, colorShift = colorShift,
+            tex = params.texture, texImage = res.texture, brushSize = params.size, seed = ctx.seed, colorShift = colorShift,
         )
     } else {
         MaskKernel(
             MaskOp.OVER, head, params.head.antialias, params.head.depth, 1f, ceiling = true,
             glaze = params.effects.glaze.coerceIn(0f, 1f),
-            tex = params.texture, texImage = res.texture, brushSize = params.size, colorShift = colorShift,
+            tex = params.texture, texImage = res.texture, brushSize = params.size, seed = ctx.seed, colorShift = colorShift,
         )
     }
     private val directOp = directOpOf(mode, alphaLock)

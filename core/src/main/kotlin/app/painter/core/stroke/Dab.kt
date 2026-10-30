@@ -12,7 +12,8 @@ import kotlin.math.sin
  * the head horizontally in its own frame. Colour: straight [r], [g], [b] and colour alpha [a]. [flow] is the
  * per-dab alpha, [opacity] a per-dab ceiling the pixel alpha approaches (1 = plain source-over).
  * [texDepth], [mixIn], [dilution], [blur] carry dynamics results for later kernels. [index] is the dab's RNG
- * index (`pathIndex·16 + k`).
+ * index (`pathIndex·16 + k`). [s] is the arc length from the start of the (sub-)stroke to the dab centre; the
+ * grain of [TextureMode.WARP_ALONG_STROKE] uses it as the `u` coordinate (spec/tools/m2-brush.md §1.4).
  */
 class Dab {
     var x = 0f
@@ -35,12 +36,14 @@ class Dab {
     var dilution = 0f
     var blur = 0f
     var index = 0
+    var s = 0f
 
     fun set(o: Dab) {
         x = o.x; y = o.y; d = o.d; angle = o.angle; sx = o.sx; sy = o.sy; flipX = o.flipX
         flow = o.flow; opacity = o.opacity; hardness = o.hardness; pressure = o.pressure
         r = o.r; g = o.g; b = o.b; a = o.a
         texDepth = o.texDepth; mixIn = o.mixIn; dilution = o.dilution; blur = o.blur; index = o.index
+        s = o.s
     }
 
     /**

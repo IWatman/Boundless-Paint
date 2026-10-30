@@ -50,4 +50,9 @@ object RngChannel {
     const val INITIAL_HUE = 14
     const val INITIAL_SAT = 15
     const val INITIAL_BRI = 16
+
+    /** Per-stroke texture jitter (§1.4): the UV offset of u (index 0) and v (index 1), the scale factor and the angle. */
+    const val TEX_POS = 17
+    const val TEX_SCALE = 18
+    const val TEX_ANGLE = 19
 }

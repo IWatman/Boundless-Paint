@@ -22,6 +22,9 @@ private const val MIN_TEX_STRETCH = 1e-3f
 /** Degrees → radians. */
 private val DEG = (PI / 180.0).toFloat()
 
+/** Full turn in radians, for the per-stroke texture angle jitter (§1.4). */
+private val TWO_PI = (2.0 * PI).toFloat()
+
 /** Renders dabs into one tile at a time; see [TileScheduler]. */
 interface DabKernel {
     /** Reads pixels written by earlier dabs outside its own tile (smudge, filters): one dab per pass. */
@@ -77,9 +80,13 @@ enum class MaskOp {
  * With [tex] and [texImage] (spec/tools/m2-brush.md §1.4, S2) the grain scales the dab alpha and the ceiling
  * per pixel: `f = 1 − dab.texDepth·(1 − t)` with `t` sampled at the UV of [TextureParams.mode], and
  * `C = opacity·clip·cap`, `cap = L + (1 − L)·f` ([TextureParams.lowerLimit] L < 1). The ceiling makes repeated
- * dabs of one stroke saturate at `cap` instead of 1. [TextureMode.WARP_ALONG_STROKE] renders as CANVAS_FIXED
- * for now; softness, gradation and texture jitter arrive with S2b. Without a texture the kernel takes exactly
- * the untextured path (one branch per dab, no per-pixel texture work).
+ * dabs of one stroke saturate at `cap` instead of 1. The UV of [TextureMode.WARP_ALONG_STROKE] comes from the
+ * dab-local frame (`u = dab.s` + the dab-local x, `v` = the dab-local y), so at a large stretch the grain runs as
+ * fibres along the path. [TextureParams.gradation] scales the depth along the tilt axis of the dab (τ = 0 at its −x
+ * end, 1 at its +x end), and the texture jitter (`jitterPos`/`jitterScale`/`jitterAngle`) shifts the UV, the scale
+ * and the angle once per stroke from [seed], which hides the 512 px repeat between strokes. [TextureParams.softness]
+ * is baked into [TextureImage]. Without a texture the kernel takes exactly the untextured path (one branch per dab,
+ * no per-pixel texture work).
  *
  * With [ignoreOpacity] the dab opacity is left out of the alpha: the adhesion load plane (§1.7) accumulates
  * `m·flow` per pixel no matter how much the opacity cap would limit the buffer alpha itself.
@@ -101,10 +108,21 @@ class MaskKernel(
     private val brushSize: Float = 0f,
     private val ignoreOpacity: Boolean = false,
     private val colorShift: ColorShift? = null,
+    private val seed: Long = 0L,
 ) : DabKernel {
     override val createsTiles: Boolean get() = op == MaskOp.OVER
 
     override fun extent(dab: Dab): Float = dab.halfExtent(square = head != null)
+
+    /**
+     * Per-stroke texture jitter (spec/tools/m2-brush.md §1.4), drawn once from [seed]: the UV offset in texture
+     * periods, the scale factor 0.7..1.4 and the angle 0..2π. The constants are neutral when the flags are off.
+     */
+    private val texJitU = if (tex?.jitterPos == true) HashRng.rnd(seed, RngChannel.TEX_POS, 0) else 0f
+    private val texJitV = if (tex?.jitterPos == true) HashRng.rnd(seed, RngChannel.TEX_POS, 1) else 0f
+    private val texJitScale =
+        if (tex?.jitterScale == true) 0.7f + 0.7f * HashRng.rnd(seed, RngChannel.TEX_SCALE, 0) else 1f
+    private val texJitAngle = if (tex?.jitterAngle == true) TWO_PI * HashRng.rnd(seed, RngChannel.TEX_ANGLE, 0) else 0f
 
     override fun renderTile(tile: Tile, tx: Int, ty: Int, canvasW: Int, canvasH: Int, dab: Dab, clip: MaskTile?, clipValue: Float) {
         val alpha = dab.flow * dab.a * alphaScale
@@ -164,12 +182,20 @@ class MaskKernel(
         val tDepth = dab.texDepth.coerceIn(0f, 1f)
         // TODO(S6b): a colour-stamp brush with grain takes the colour path, the texture is not applied to its dabs yet.
         if (tp != null && grainImage != null && tDepth > 0f && shift == null) {
-            var angle = tp.angle * DEG
+            var angle = tp.angle * DEG + texJitAngle
             var ox = 0f
             var oy = 0f
+            // Shift of the UV origin in px along the texture axes; warp-along-stroke moves it by the arc length.
+            var shiftU = 0f
+            var shiftV = 0f
             when (tp.mode) {
-                // TODO(S2b): warp-along-stroke (u = s, v = signed distance to the path) renders as canvas-fixed.
-                TextureMode.CANVAS_FIXED, TextureMode.WARP_ALONG_STROKE -> Unit
+                // u = the arc length + the dab-local x, v = the dab-local y (§1.4): the grain follows the path.
+                TextureMode.WARP_ALONG_STROKE -> {
+                    angle += dab.angle
+                    ox = cx
+                    oy = cy
+                }
+                TextureMode.CANVAS_FIXED -> Unit
                 TextureMode.ROTATE_WITH_STROKE -> {
                     angle += dab.angle
                     ox = cx
@@ -180,21 +206,31 @@ class MaskKernel(
                     oy = cy
                 }
             }
-            var sc = tp.scale
+            var sc = tp.scale * texJitScale
             if (tp.scaleWithSize && brushSize > 0f) sc *= dab.d / brushSize
             val period = TEXTURE_PERIOD * max(sc, MIN_TEX_SCALE)
             val inU = 1f / (period * max(tp.stretch, MIN_TEX_STRETCH))
             val inV = 1f / period
             val ca = cos(angle)
             val sa = sin(angle)
+            if (tp.mode == TextureMode.WARP_ALONG_STROKE) {
+                // The path start is the origin of u: the arc length runs along the dab's own x axis, which the
+                // texture angle (not the dab angle) turns away from the texture u axis.
+                val ta = tp.angle * DEG + texJitAngle
+                shiftU = dab.s * cos(ta)
+                shiftV = -dab.s * sin(ta)
+            }
             // Affine UV in periods: u = x·tXU + y·tYU + tCU, v = x·tXV + y·tYV + tCV.
             val tXU = ca * inU
             val tYU = sa * inU
-            val tCU = -(ox * ca + oy * sa) * inU
+            val tCU = -(ox * ca + oy * sa) * inU + shiftU * inU + texJitU
             val tXV = -sa * inV
             val tYV = ca * inV
-            val tCV = (ox * sa - oy * ca) * inV
+            val tCV = (ox * sa - oy * ca) * inV + shiftV * inV + texJitV
             val tLow = tp.lowerLimit.coerceIn(0f, 1f)
+            val grad = tp.gradation.coerceIn(0f, 1f)
+            // τ of the gradation runs over the dab diameter along its x axis (−r → 0, +r → 1).
+            val invSpan = if (grad > 0f) 0.5f / radius else 0f
             for (py in py0..py1) {
                 val dy = baseY + py + 0.5f - cy
                 val dy2 = dy * dy
@@ -246,7 +282,13 @@ class MaskKernel(
                         if (m > 0f) {
                             val xc = baseX + px + 0.5f
                             val t = grainImage.sample(xc * tXU + rowU, xc * tXV + rowV)
-                            val f = 1f - tDepth * (1f - t)
+                            var dEff = tDepth
+                            if (grad > 0f) {
+                                // Gradation (§1.4): depth ×(1 − g·τ), τ = 0 at the −x end of the dab, 1 at the +x end.
+                                val tau = ((dx * cs + dy * sn) * invSpan + 0.5f).coerceIn(0f, 1f)
+                                dEff *= 1f - grad * tau
+                            }
+                            val f = 1f - dEff * (1f - t)
                             blend(data, i, cov * peak, opac, m, r, g, b, if (tLow < 1f) tLow + (1f - tLow) * f else f)
                         }
                     }
