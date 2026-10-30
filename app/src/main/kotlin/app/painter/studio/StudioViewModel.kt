@@ -374,6 +374,8 @@ class StudioViewModel(app: Application, private val prefs: ToolPrefs? = null) :
             canvas?.setStrokePreview(
                 layer.id, engine.buffer, mode == StrokeMode.ERASE, engine.previewOpacity,
                 engine.previewBlend, engine.previewBlendStrength,
+                // Wet edges and adhesion (§1.7) are per pixel: upload the processed preview, not the raw buffer.
+                if (engine.previewNeedsProcessing) engine::previewTile else null,
             )
             canvas?.invalidateStroke(engine.takeDirty())
         }
@@ -1409,6 +1411,8 @@ class StudioViewModel(app: Application, private val prefs: ToolPrefs? = null) :
             canvas?.setStrokePreview(
                 layerId, engine.buffer, mode == StrokeMode.ERASE, engine.previewOpacity,
                 engine.previewBlend, engine.previewBlendStrength,
+                // Wet edges and adhesion (§1.7) are per pixel: upload the processed preview, not the raw buffer.
+                if (engine.previewNeedsProcessing) engine::previewTile else null,
             )
             canvas?.invalidateStroke(engine.takeDirty())
         }

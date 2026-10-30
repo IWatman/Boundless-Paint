@@ -13,6 +13,7 @@ import kotlin.math.abs
 import kotlin.math.max
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /**
@@ -128,6 +129,16 @@ class EffectsTest {
         val centre = t[t.index(150, 110) + 3]
         e.cancel()
         assertTrue(rim >= centre * 1.3f, "preview rim $rim vs centre $centre")
+    }
+
+    @Test
+    fun previewNeedsProcessingOnlyWithWetEdgesOrAdhesion() {
+        // Without a per-pixel effect the renderer uploads the raw buffer, byte-identical to the earlier path.
+        fun needs(effects: EffectParams) =
+            engine(Document.create(200, 200), flatBrush.copy(effects = effects)).previewNeedsProcessing
+        assertFalse(needs(EffectParams()), "plain effects must keep the raw buffer preview")
+        assertTrue(needs(EffectParams(wetEdges = 0.5f)), "wet edges need the processed preview")
+        assertTrue(needs(EffectParams(adhesion = 0.5f)), "adhesion needs the processed preview")
     }
 
     /** Light buffered brush: 10 px between dabs against a 40 px head, so a pixel collects ~4 dabs per pass. */

@@ -6,6 +6,7 @@ import android.opengl.GLSurfaceView
 import android.view.MotionEvent
 import app.painter.core.blend.BlendMode
 import app.painter.core.doc.Document
+import app.painter.core.raster.Tile
 import app.painter.core.raster.TileGrid
 import app.painter.core.raster.TileKey
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -38,6 +39,7 @@ class CanvasView(context: Context) : GLSurfaceView(context) {
 
     private var previewLayerId: String? = null
     private var previewBuffer: TileGrid? = null
+    private var previewSource: ((TileKey) -> Tile?)? = null
     private var previewErase = false
     private var previewOpacity = 1f
     private var previewBlend = BlendMode.NORMAL
@@ -87,6 +89,10 @@ class CanvasView(context: Context) : GLSurfaceView(context) {
      * an eraser mask when [erase]. [blend] with [blendStrength] is the brush blend mode of the buffered
      * stroke (spec/tools/m2-brush.md §1.7), so the preview matches the composite on pen-up. Pass
      * `buffer = null` to remove the preview.
+     *
+     * [tileSource] returns the pixels of one uploaded buffer tile: the engine's processed preview
+     * ([StrokeEngine.previewTile], §1.7 wet edges and adhesion), so the rim and the build-up show live. It is
+     * called on the main thread for every tile that is read, like the raw path; null uploads [buffer] as is.
      */
     fun setStrokePreview(
         layerId: String,
@@ -95,6 +101,7 @@ class CanvasView(context: Context) : GLSurfaceView(context) {
         opacity: Float,
         blend: BlendMode = BlendMode.NORMAL,
         blendStrength: Float = 0f,
+        tileSource: ((TileKey) -> Tile?)? = null,
     ) {
         if (buffer == null) {
             if (previewBuffer != null) {
@@ -105,12 +112,13 @@ class CanvasView(context: Context) : GLSurfaceView(context) {
             }
             return
         }
-        val replace = buffer !== previewBuffer || layerId != previewLayerId
+        val replace = buffer !== previewBuffer || layerId != previewLayerId || tileSource !== previewSource
         previewLayerId = layerId
         previewErase = erase
         previewOpacity = opacity
         previewBlend = blend
         previewBlendStrength = blendStrength
+        previewSource = tileSource
         val uploads = ArrayList<TileUpload>()
         val dirty: LongArray
         if (replace) {
@@ -119,7 +127,7 @@ class CanvasView(context: Context) : GLSurfaceView(context) {
             previewBuffer = buffer
             for ((k, t) in buffer.entries()) {
                 if (!buffer.isInBounds(k.tx, k.ty)) continue
-                uploads.add(TileUpload(layerId, k.tx, k.ty, sync.copyTile(t)))
+                uploads.add(TileUpload(layerId, k.tx, k.ty, sync.copyTile(tileSource?.invoke(k) ?: t)))
                 previewSent.add(k)
             }
             dirty = old + keysToLongs(previewSent)
@@ -130,16 +138,22 @@ class CanvasView(context: Context) : GLSurfaceView(context) {
         requestRender()
     }
 
-    /** Re-reads stroke-buffer tiles at [keys] after the stroke engine changed them. */
+    /**
+     * Re-reads stroke-buffer tiles at [keys] after the stroke engine changed them. With a [previewSource] the
+     * processed tiles are uploaded (§1.7 wet edges/adhesion) together with the eight neighbours of every key,
+     * because the wet edge blur of a tile reads the buffer ring around it.
+     */
     fun invalidateStroke(keys: Collection<TileKey>) {
         val buffer = previewBuffer ?: return
         val id = previewLayerId ?: return
-        val uploads = ArrayList<TileUpload>(keys.size)
-        val dirty = LongArray(keys.size)
+        val source = previewSource
+        val pending = if (source == null) keys else withNeighbours(buffer, keys)
+        val uploads = ArrayList<TileUpload>(pending.size)
+        val dirty = LongArray(pending.size)
         var n = 0
-        for (k in keys) {
+        for (k in pending) {
             if (!buffer.isInBounds(k.tx, k.ty)) continue
-            val t = buffer.get(k)
+            val t = if (source == null) buffer.get(k) else source.invoke(k)
             if (t != null) {
                 uploads.add(TileUpload(id, k.tx, k.ty, sync.copyTile(t)))
                 previewSent.add(k)
@@ -199,7 +213,7 @@ class CanvasView(context: Context) : GLSurfaceView(context) {
         val buf = previewBuffer
         if (id != null && buf != null) {
             previewBuffer = null
-            setStrokePreview(id, buf, previewErase, previewOpacity, previewBlend, previewBlendStrength)
+            setStrokePreview(id, buf, previewErase, previewOpacity, previewBlend, previewBlendStrength, previewSource)
         }
         renderer.setView(transform)
         requestRender()
@@ -208,6 +222,7 @@ class CanvasView(context: Context) : GLSurfaceView(context) {
     private fun clearPreviewState() {
         previewLayerId = null
         previewBuffer = null
+        previewSource = null
         previewSent.clear()
     }
 
@@ -215,6 +230,24 @@ class CanvasView(context: Context) : GLSurfaceView(context) {
         val out = LongArray(keys.size)
         var i = 0
         for (k in keys) out[i++] = k.packed
+        return out
+    }
+
+    /**
+     * [keys] plus the neighbours of every key that exist in [buffer]: the wet edge blur (§1.7) of a tile reads the
+     * ring of buffer tiles around it, so a changed tile also changes the processed preview of its eight neighbours.
+     */
+    private fun withNeighbours(buffer: TileGrid, keys: Collection<TileKey>): Collection<TileKey> {
+        val out = LinkedHashSet<TileKey>(keys.size * 4)
+        for (k in keys) {
+            out.add(k)
+            for (dy in -1..1) {
+                for (dx in -1..1) {
+                    if (dx == 0 && dy == 0) continue
+                    if (buffer.get(k.tx + dx, k.ty + dy) != null) out.add(TileKey(k.tx + dx, k.ty + dy))
+                }
+            }
+        }
         return out
     }
 }

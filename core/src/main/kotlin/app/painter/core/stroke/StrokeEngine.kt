@@ -278,6 +278,12 @@ class StrokeEngine(
     /** Load plane `L` of adhesion (§1.7), `L = over(L, m·flow)` per dab; allocated only with adhesion > 0. */
     private val load: TileGrid? = if (adhesion > 0f) TileGrid(doc.width, doc.height, precise = true) else null
 
+    /**
+     * True when the live preview of [buffer] needs [previewTile] instead of the raw buffer tiles: the wet edge rim
+     * and the adhesion alpha are applied per pixel (spec/tools/m2-brush.md §1.7).
+     */
+    val previewNeedsProcessing: Boolean = wetEdges > 0f || load != null
+
     /** Smudge kernel of [StrokeMode.BLEND] (§1.8); it samples the layer, so it needs a layer target. */
     private val smudge: SmudgeKernel? = if (mode == StrokeMode.BLEND) SmudgeKernel(
         requireNotNull(layer) { "StrokeMode.BLEND needs a layer target" }.pixels,
@@ -860,6 +866,7 @@ class StrokeEngine(
      * to every channel, so the rim shows before the stroke is committed; null when the tile is absent. With
      * [EffectParams.wetEdges] 0 this is a plain copy of the buffer; the caller scales it by [previewOpacity].
      * With adhesion (§1.7) the alpha comes from the load plane and the colour follows it, so build-up shows live.
+     * Reuses one scratch plane, so it is not reentrant: call it on the thread that owns the stroke.
      */
     fun previewTile(key: TileKey): Tile? {
         val src = buffer.get(key) ?: return null
