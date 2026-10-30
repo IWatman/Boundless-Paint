@@ -16,6 +16,9 @@ Version tested: ______  Date: ______
 | 1.1 | Full range after warm-up | Fresh install. Pencil HB. Draw 5 strong strokes, then one at full pressure | The 6th stroke reaches the full size/opacity of the brush (spec: p_cal ≥ 0.98) | | |
 | 1.2 | Light pressure | Draw with the lightest touch that still registers | A thin, faint line; no gaps, no dots at the start | | |
 | 1.3 | Calibration survives restart | Force-stop the app, reopen, draw at full pressure at once | Full range without a new warm-up | | |
+| 1.5 | Calibration wizard | Options → Stylus → Calibrate: 3 light, then 3 hard presses on the pad | State becomes "Fixed: min … max …"; a light stroke is visible, a hard one reaches full size | | |
+| 1.6 | Reset to auto | Options → Stylus → Reset to auto | State "Auto range"; the warm-up of 1.1 applies again | | |
+| 1.7 | Curve presets | Soft, then Firm; draw the same light stroke | Soft: thicker/darker at light pressure; Firm: thinner | | |
 | 1.4 | Finger is not calibrated | Draw with a finger | Constant full pressure, unchanged by the pen calibration | | |
 
 ## 2. Pen buttons and the eraser end (debt 12)

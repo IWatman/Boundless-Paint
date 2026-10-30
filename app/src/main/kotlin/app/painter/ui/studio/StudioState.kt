@@ -86,6 +86,17 @@ data class BrushItemUi(val id: String, val name: String)
 @Immutable
 data class BrushCategoryUi(val id: String, val name: String, val brushes: List<BrushItemUi>)
 
+/**
+ * Pressure calibration as the stylus panel shows it: [auto] follows the peaks of the last strokes, else the
+ * range is the fixed [min]…[max] that the calibration wizard found (spec/tools/m2-brush.md §4.3).
+ */
+@Immutable
+data class CalibrationUi(
+    val auto: Boolean = true,
+    val min: Float = 0f,
+    val max: Float = 1f,
+)
+
 /** One row of the layer panel. [depth] is the group nesting level (0 = root). */
 @Immutable
 data class LayerUi(
@@ -140,6 +151,8 @@ data class StudioUiState(
     val colorPanelOpen: Boolean = false,
     /** Stylus settings the [StylusSettingsPanel] shows (spec/tools/m2-brush.md §4.3). */
     val stylusSettings: StylusSettings = StylusSettings(),
+    /** Pressure calibration of the pen the [StylusSettingsPanel] reports (spec/tools/m2-brush.md §4.3). */
+    val calibration: CalibrationUi = CalibrationUi(),
     /** The stylus settings panel is open; it is the only way to set [stylusSettings] from the UI. */
     val stylusPanelOpen: Boolean = false,
     val hud: HudUi? = null,
@@ -529,6 +542,14 @@ interface StudioActions {
     fun addColorToPalette(color: Rgba)
     /** Replaces the stylus settings: the pen buttons, the finger rule, the palm mode and the pressure curve. */
     fun setStylusSettings(settings: StylusSettings) {}
+    /**
+     * Fixes the pressure range of device [descriptor] from the calibration wizard and turns its auto off
+     * (spec/tools/m2-brush.md §4.3). A null [descriptor] (the pointer carried no `InputDevice`) applies the
+     * range to every known pen.
+     */
+    fun applyCalibration(descriptor: String?, min: Float, max: Float) {}
+    /** "Reset to auto": every known pen goes back to the automatic range, min 0, max 1. */
+    fun resetCalibration() {}
     /** Opens or closes the stylus settings panel (spec/tools/m2-brush.md §4.3). */
     fun toggleStylusPanel() {}
 }
@@ -595,6 +616,8 @@ open class NoOpStudioActions : StudioActions {
     override fun openEditingTools() {}
     override fun openOptions() {}
     override fun addColorToPalette(color: Rgba) {}
+    override fun applyCalibration(descriptor: String?, min: Float, max: Float) {}
+    override fun resetCalibration() {}
     override fun setStylusSettings(settings: StylusSettings) {}
     override fun toggleStylusPanel() {}
 }

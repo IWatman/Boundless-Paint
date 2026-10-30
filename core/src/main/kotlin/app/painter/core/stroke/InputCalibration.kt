@@ -44,6 +44,15 @@ class InputCalibration(
         }
     }
 
+    /** "Reset to auto": the full range, [auto] on and the peak samples of the old range dropped. */
+    fun resetToAuto() {
+        auto = true
+        minPressure = 0f
+        maxPressure = 1f
+        peaks.clear()
+        observed = 0
+    }
+
     /** Manual calibration from the wizard: fixes the range and turns auto off. */
     fun setManual(min: Float, max: Float) {
         minPressure = min.coerceIn(0f, 1f)

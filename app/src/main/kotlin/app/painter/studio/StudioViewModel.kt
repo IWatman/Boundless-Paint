@@ -122,6 +122,7 @@ import app.painter.ui.studio.AdjustEditorUi
 import app.painter.ui.studio.BrushCategoryUi
 import app.painter.ui.studio.BrushItemUi
 import app.painter.ui.studio.BrushModeUi
+import app.painter.ui.studio.CalibrationUi
 import app.painter.ui.studio.CanvasTransformUi
 import app.painter.ui.studio.EllipseUi
 import app.painter.ui.studio.GradientStopUi
@@ -371,6 +372,11 @@ class StudioViewModel(
         val brush = if (clone != null) paintStrokeBrush() else strokeBrush()
         val calibration = calibrationFor(deviceDescriptor)
         strokeDevice = if (p.isStylus) deviceDescriptor else null
+        // The stylus panel reports the pen that drew last, so its state line follows the device in use.
+        if (p.isStylus) {
+            panelDevice = deviceDescriptor
+            if (_state.value.stylusPanelOpen) publishCalibration()
+        }
         val vs = canvas?.viewState?.value
         val zoom = vs?.zoom ?: 1f
         val ctx = StrokeContext(
@@ -533,7 +539,10 @@ class StudioViewModel(
 
     override fun toggleBrushBrowser() = _state.update { it.copy(brushBrowserOpen = !it.brushBrowserOpen) }
 
-    override fun toggleStylusPanel() = _state.update { it.copy(stylusPanelOpen = !it.stylusPanelOpen) }
+    override fun toggleStylusPanel() {
+        publishCalibration()
+        _state.update { it.copy(stylusPanelOpen = !it.stylusPanelOpen) }
+    }
 
     override fun selectBrush(id: String) {
         val brush = brushes.find(id) ?: return
@@ -2306,6 +2315,8 @@ class StudioViewModel(
         _state.update { it.copy(stylusSettings = stored.stylus) }
         // The stored curve preset is the source of truth for the pressure curve of every device (§4.3).
         stored.stylus.applyTo(calibrations.values)
+        panelDevice = stored.devices.keys.firstOrNull()
+        publishCalibration()
     }
 
     /**
@@ -2319,6 +2330,45 @@ class StudioViewModel(
         settings.applyTo(calibrations.values)
         canvas?.stylusSettings = settings
         saveInputSettings()
+    }
+
+    /**
+     * Device whose calibration the stylus panel reports: the last pen that drew or was calibrated. Null until
+     * the first pen stroke, when the panel shows the defaults.
+     */
+    private var panelDevice: String? = null
+
+    /**
+     * Fixes the pressure range the calibration wizard found (spec/tools/m2-brush.md §4.3) and saves it: auto
+     * off, so the range holds until [resetCalibration]. A null [descriptor] means the pad could not read an
+     * `InputDevice`; the range then goes to every known pen, which is all that is left to identify it by.
+     */
+    override fun applyCalibration(descriptor: String?, min: Float, max: Float) {
+        if (descriptor == null && calibrations.isEmpty()) calibrationFor(CanvasInputListener.DEVICE_DEFAULT)
+        val targets: Collection<InputCalibration> =
+            if (descriptor == null) calibrations.values else listOf(calibrationFor(descriptor))
+        targets.forEach { it.setManual(min, max) }
+        panelDevice = descriptor ?: panelDevice ?: calibrations.keys.firstOrNull()
+        publishCalibration()
+        saveInputSettings()
+    }
+
+    /** "Reset to auto" (spec §4.3): every known pen back to the full automatic range, then saved. */
+    override fun resetCalibration() {
+        calibrations.values.forEach { it.resetToAuto() }
+        publishCalibration()
+        saveInputSettings()
+    }
+
+    /** Publishes the calibration of [panelDevice] to the stylus panel; the defaults while no pen is known. */
+    private fun publishCalibration() {
+        val device = panelDevice?.let { calibrations[it] }
+        val ui = if (device == null) {
+            CalibrationUi()
+        } else {
+            CalibrationUi(device.auto, device.minPressure, device.maxPressure)
+        }
+        _state.update { it.copy(calibration = ui) }
     }
 
     /** Calibration of input device [descriptor]; a device seen for the first time starts from the defaults. */

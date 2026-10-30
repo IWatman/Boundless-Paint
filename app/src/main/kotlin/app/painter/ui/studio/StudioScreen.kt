@@ -238,6 +238,7 @@ fun StudioScreen(
                 ) {
                     StylusSettingsPanel(
                         settings = state.stylusSettings,
+                        calibration = state.calibration,
                         actions = actions,
                         onClose = { actions.toggleStylusPanel() },
                         modifier = Modifier.padding(top = 56.dp, end = 8.dp),
