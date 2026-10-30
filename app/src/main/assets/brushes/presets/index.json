@@ -6,7 +6,8 @@
         "pencils.2b",
         "pencils.6b_soft",
         "pencils.mechanical",
-        "pencils.colored"
+        "pencils.colored",
+        "pencils.shading"
       ],
       "id": "pencils",
       "name": {
@@ -202,7 +203,8 @@
         "pens.ballpoint",
         "pens.brush_pen",
         "pens.technical",
-        "pens.calligraphy"
+        "pens.calligraphy",
+        "pens.calligraphy_tilt"
       ],
       "id": "pens",
       "name": {

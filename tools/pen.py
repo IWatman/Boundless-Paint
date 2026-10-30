@@ -189,6 +189,11 @@ def scenario(name: str, w: int, h: int, peak: float, row: float | None = None) -
     elif name == "tilt":
         s.stroke(x0, h * 0.35, x1, h * 0.35, peak, tilt=(-90, 0), profile="flat")
         s.stroke(x0, h * 0.65, x1, h * 0.65, peak, tilt=(90, 0), profile="flat")
+    elif name == "tiltramp":
+        # Upright, half and steep tilt to the right, then steep tilt the other way (azimuth turned by 180°).
+        for i, t in enumerate((0, 40, 80)):
+            s.stroke(x0, h * (0.3 + 0.15 * i), x1, h * (0.3 + 0.15 * i), peak, tilt=(t, 0), profile="flat")
+        s.stroke(x0, h * 0.75, x1, h * 0.75, peak, tilt=(0, 80), profile="flat")
     elif name == "hover":
         s.enter(w * 0.5, h * 0.5)
         for i in range(60):

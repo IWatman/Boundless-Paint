@@ -109,8 +109,34 @@ COLORED = preset(
     resources={"head": "asset:heads/grain_disk_04.png", "texture": "asset:textures/paper_smooth.png"},
 )
 
+SHADING = preset(
+    "pencils.shading",
+    "Shading pencil",
+    "Растушёвочный карандаш",
+    ["графит", "graphite", "штриховка", "shading", "наклон", "tilt", "тон", "tone"],
+    "pencil",
+    params={
+        "size": 24.0,
+        "sizeMax": 120.0,
+        "opacity": 0.9,
+        "flow": 0.7,
+        "spacing": 0.05,
+        "hardness": 0.5,
+        "taperStart": 4.0,
+        "taperEnd": 12.0,
+        "jitter": {"size": 0.05, "angle": 0.6, "scatter": 0.02},
+        "texture": {"mode": "canvas-fixed", "depth": 0.75, "lowerLimit": 0.35, "scale": 0.85},
+        # Laid on its side the lead draws a wide, light band; held upright, a thin dark line.
+        "dynamics": [
+            link("TILT", "SIZE", [(0.0, 0.3), (1.0, 1.0)]),
+            link("TILT", "FLOW", [(0.0, 1.0), (1.0, 0.45)]),
+        ],
+    },
+    resources={"head": "asset:heads/charcoal_disk_01.png", "texture": "asset:textures/paper_rough.png"},
+)
+
 CATEGORY = {
     "id": "pencils",
     "name": {"en": "Pencils", "ru": "Карандаши"},
-    "brushes": [HB, TWO_B, SIX_B_SOFT, MECHANICAL, COLORED],
+    "brushes": [HB, TWO_B, SIX_B_SOFT, MECHANICAL, COLORED, SHADING],
 }

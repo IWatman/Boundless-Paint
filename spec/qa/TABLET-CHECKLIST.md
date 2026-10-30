@@ -12,7 +12,7 @@ Version tested: ______  Date: ______
 
 **Already checked on the emulator with the virtual pen** (`tools/pen.py`, a uinput pen like the XP-Pen: pressure
 0..16383 peaking at 0.78, tilt, two buttons, eraser end; 2026-10-30, v0.1.9+): 1.1, 1.2, 1.3, 2.1, 2.2, 2.3, 2.4,
-2.5, 4.4, 4.5 (during hover; the 300 ms tail is covered by JVM tests). Found and fixed on the way: a pen button
+2.5, 3.1 (shading pencil, tilt calligraphy), 4.4, 4.5 (during hover; the 300 ms tail is covered by JVM tests). Found and fixed on the way: a pen button
 click in hover never reached the app (Android 14 drops hover ACTION_BUTTON_PRESS and Compose filters hover
 events of an embedded view). On the tablet these rows still need a real-pen pass, but they are expected to
 pass; the rest of the list is untested.
@@ -40,7 +40,7 @@ pass; the rest of the list is untested.
 ## 3. Tilt and azimuth
 | # | Check | Steps | Expected | Result | Notes |
 |---|---|---|---|---|---|
-| 3.1 | Tilt brushes | A brush with head rotation "stylus-tilt" (e.g. chisel marker, flat oil); draw with the pen tilted left, then right | The head turns with the tilt direction | | |
+| 3.1 | Tilt brushes | Shading pencil and "Calligraphy, tilt nib"; draw upright, tilted, tilted the other way | Pencil: wider and lighter when tilted. Nib: turns with the tilt direction | | |
 | 3.2 | Texture gradation | A textured pencil, tilted pen | Grain fades along the tilt axis (only if a preset uses gradation) | | |
 
 ## 4. Palm and finger

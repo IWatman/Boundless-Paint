@@ -116,8 +116,30 @@ CALLIGRAPHY = preset(
     resources={"head": "asset:heads/rounded_square.png"},
 )
 
+CALLIGRAPHY_TILT = preset(
+    "pens.calligraphy_tilt",
+    "Calligraphy, tilt nib",
+    "Каллиграфия, перо по наклону",
+    ["каллиграфия", "calligraphy", "наклон", "tilt", "перо", "nib", "леттеринг", "lettering"],
+    "ink",
+    params={
+        "size": 20.0,
+        "sizeMin": 2.0,
+        "sizeMax": 150.0,
+        "opacity": 1.0,
+        "flow": 0.95,
+        "spacing": 0.02,
+        "hardness": 0.9,
+        "pressureToSize": curve([(0.0, 0.0), (1.0, 1.0)], 0.6),
+        # The nib turns with the direction the pen leans, as a held broad nib does.
+        "head": {"source": "bitmap", "aspect": 0.8, "angle": 0.0, "rotationMode": "stylus-azimuth"},
+        "jitter": {"size": 0.02},
+    },
+    resources={"head": "asset:heads/rounded_square.png"},
+)
+
 CATEGORY = {
     "id": "pens",
     "name": {"en": "Pens", "ru": "Ручки"},
-    "brushes": [FINELINER, BALLPOINT, BRUSH_PEN, TECHNICAL, CALLIGRAPHY],
+    "brushes": [FINELINER, BALLPOINT, BRUSH_PEN, TECHNICAL, CALLIGRAPHY, CALLIGRAPHY_TILT],
 }

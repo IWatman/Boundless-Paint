@@ -1,0 +1,66 @@
+{
+  "category": "pens",
+  "id": "pens.calligraphy_tilt",
+  "name": {
+    "en": "Calligraphy, tilt nib",
+    "ru": "Каллиграфия, перо по наклону"
+  },
+  "params": {
+    "flow": 0.95,
+    "hardness": 0.9,
+    "head": {
+      "angle": 0.0,
+      "aspect": 0.8,
+      "rotationMode": "stylus-azimuth",
+      "source": "bitmap"
+    },
+    "jitter": {
+      "size": 0.02
+    },
+    "opacity": 1.0,
+    "pressureToFlow": {
+      "min": 0.0,
+      "points": [
+        [
+          0.0,
+          0.35
+        ],
+        [
+          1.0,
+          1.0
+        ]
+      ]
+    },
+    "pressureToSize": {
+      "min": 0.6,
+      "points": [
+        [
+          0.0,
+          0.0
+        ],
+        [
+          1.0,
+          1.0
+        ]
+      ]
+    },
+    "size": 20.0,
+    "sizeMax": 150.0,
+    "sizeMin": 2.0,
+    "spacing": 0.02
+  },
+  "resources": {
+    "head": "asset:heads/rounded_square.png"
+  },
+  "schema": 1,
+  "tags": [
+    "каллиграфия",
+    "calligraphy",
+    "наклон",
+    "tilt",
+    "перо",
+    "nib",
+    "леттеринг",
+    "lettering"
+  ]
+}
