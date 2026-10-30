@@ -52,6 +52,7 @@
       "particles": 60,
       "radius": 1.5,
       "size": 0.08,
+      "trail": false,
       "type": "particles"
     },
     "taperEnd": 0.0,

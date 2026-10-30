@@ -55,8 +55,8 @@ DUST = preset(
         "size": 90.0,
         "sizeMin": 10.0,
         "sizeMax": 320.0,
-        "opacity": 0.5,
-        "flow": 0.35,
+        "opacity": 0.6,
+        "flow": 0.6,
         "spacing": 0.05,
         "hardness": 0.15,
         "pressureToSize": curve([(0.0, 0.0), (0.5, 0.55), (1.0, 1.0)], 0.25),
@@ -67,6 +67,7 @@ DUST = preset(
         "jitter": {"scatter": 0.05, "size": 0.1},
         "special": {
             "type": "particles",
+            "trail": False,
             "attractors": 6,
             "particles": 200,
             "radius": 2.5,
@@ -99,6 +100,7 @@ SPLATTER = preset(
         "jitter": {"scatter": 0.03, "size": 0.2},
         "special": {
             "type": "particles",
+            "trail": False,
             "attractors": 12,
             "particles": 60,
             "radius": 1.5,
@@ -163,6 +165,7 @@ DROPLETS = preset(
         "jitter": {"scatter": 0.02, "size": 0.08},
         "special": {
             "type": "particles",
+            "trail": False,
             "attractors": 8,
             "particles": 30,
             "radius": 1.0,

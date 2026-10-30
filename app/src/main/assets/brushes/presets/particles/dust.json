@@ -6,7 +6,7 @@
     "ru": "Пыль"
   },
   "params": {
-    "flow": 0.35,
+    "flow": 0.6,
     "hardness": 0.15,
     "head": {
       "source": "round"
@@ -15,7 +15,7 @@
       "scatter": 0.05,
       "size": 0.1
     },
-    "opacity": 0.5,
+    "opacity": 0.6,
     "pressureToFlow": {
       "min": 0.0,
       "points": [
@@ -56,6 +56,7 @@
       "particles": 200,
       "radius": 2.5,
       "size": 0.09,
+      "trail": false,
       "type": "particles"
     },
     "taperEnd": 0.0,

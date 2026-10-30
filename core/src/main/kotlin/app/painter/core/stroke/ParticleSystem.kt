@@ -147,7 +147,16 @@ internal class ParticleSystem(
             ys[j] = ny
             vxs[j] = vx
             vys[j] = vy
-            stamp(ox, oy, nx, ny, pd, spacing, src, out)
+            if (params.trail) {
+                stamp(ox, oy, nx, ny, pd, spacing, src, out)
+            } else if (HashRng.rnd(seed, CH_EMIT, key) < EMIT_CHANCE) {
+                // Without a trail a particle drops a stamp only now and then, so dots scatter instead of lining up
+                // along each particle's track; a small random offset breaks up the parallel tracks of the
+                // particles bound to one attractor.
+                val jx = d * EMIT_JITTER * HashRng.signed(seed, CH_EMIT_OFFSET, key * 2)
+                val jy = d * EMIT_JITTER * HashRng.signed(seed, CH_EMIT_OFFSET, key * 2 + 1)
+                emit(nx + jx, ny + jy, pd, 0f, src, out)
+            }
         }
         step++
     }
@@ -194,6 +203,16 @@ internal class ParticleSystem(
         const val MAX_RADIUS = 16f
         const val MAX_HEAD_SCALE = 4f
         const val MAX_STAMPS = 64
+
+        /** Chance per step that a trail-less particle drops a stamp. */
+        const val EMIT_CHANCE = 0.12f
+
+        /** Offset of a trail-less stamp from its particle, as a fraction of the path diameter. */
+        const val EMIT_JITTER = 0.2f
+
+        /** Random channels of the trail-less emission: whether to stamp, and the stamp offset. */
+        const val CH_EMIT = 22
+        const val CH_EMIT_OFFSET = 23
 
         /** [v], or 0 when it is NaN or infinite. */
         fun finite(v: Float): Float = if (v.isFinite()) v else 0f

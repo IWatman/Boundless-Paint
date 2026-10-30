@@ -201,6 +201,8 @@ data class ParticlesParams(
     val radius: Float = 1f,
     val size: Float = 0.05f,
     val overshoot: Float = 0.5f,
+    /** True: each particle leaves a continuous trail (sparks, smoke); false: one stamp per step (dust, splatter). */
+    val trail: Boolean = true,
 ) : SpecialParams
 
 @Serializable
