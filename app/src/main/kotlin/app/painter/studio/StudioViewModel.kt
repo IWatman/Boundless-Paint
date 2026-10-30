@@ -198,6 +198,8 @@ class StudioViewModel(
     private var autosaveJob: Job? = null
     private var strokeCounter = 0L
     private var strokeOnMask = false
+    /** Mode that was active before a stroke of the back of the pen switched to Erase; null outside such a stroke. */
+    private var modeBeforePenEraser: BrushModeUi? = null
     /** Descriptor of the device of the running stylus stroke; saved when the stroke ends, null otherwise. */
     private var strokeDevice: String? = null
     /** In-flight marching-ants contour computation of the selection mask. */
@@ -342,7 +344,10 @@ class StudioViewModel(
         if (canvas === view) canvas = null
     }
 
-    override fun onStrokeBegin(p: InputPoint, deviceDescriptor: String) {
+    override fun onStrokeBegin(p: InputPoint, deviceDescriptor: String, penEraser: Boolean) {
+        // The back of the pen (TOOL_TYPE_ERASER) erases with the erase brush for this stroke only (§4.3);
+        // the previous mode comes back in onStrokeEnd/onStrokeCancel, also when the stroke is dropped.
+        if (penEraser) enterPenEraserMode()
         val node = doc.activeNode ?: return
         if (!node.visible || node.effectivelyLocked) return
         val maskTarget = doc.activeTarget == EditTarget.MASK && node.mask != null
@@ -418,6 +423,7 @@ class StudioViewModel(
     }
 
     override fun onStrokeEnd() {
+        restorePenEraserMode()
         val engine = stroke ?: return
         stroke = null
         val layerId = doc.activeId ?: return
@@ -438,6 +444,7 @@ class StudioViewModel(
     }
 
     override fun onStrokeCancel() {
+        restorePenEraserMode()
         strokeDevice = null
         val engine = stroke ?: return
         stroke = null
@@ -470,6 +477,39 @@ class StudioViewModel(
             }
             picked?.let { setColor(it, commit = true) }
         }
+    }
+
+    /**
+     * Eyedropper sampled by a pen touch with the primary button held (spec/tools/m2-brush.md §4.3): the same
+     * sample as the finger long press, without its clone-source special case.
+     */
+    override fun onPickColor(x: Float, y: Float) {
+        val layerId = doc.activeId
+        viewModelScope.launch {
+            val picked = withContext(Dispatchers.Default) {
+                Eyedropper(doc, PickSource.CANVAS, layerId, diameter = 1).sample(x, y)
+            }
+            picked?.let { setColor(it, commit = true) }
+        }
+    }
+
+    // ---- pen ----
+
+    /** Switches to Erase for a stroke of the back of the pen; [restorePenEraserMode] brings the tip's mode back. */
+    private fun enterPenEraserMode() {
+        val mode = _state.value.mode
+        if (mode == BrushModeUi.ERASE) return
+        modeBeforePenEraser = mode
+        _state.update { it.copy(mode = BrushModeUi.ERASE) }
+        syncBrushState()
+    }
+
+    /** Restores the mode of the tip after a stroke of the back of the pen; no-op outside such a stroke. */
+    private fun restorePenEraserMode() {
+        val mode = modeBeforePenEraser ?: return
+        modeBeforePenEraser = null
+        _state.update { it.copy(mode = mode) }
+        syncBrushState()
     }
 
     // ---- brush ----

@@ -1,6 +1,7 @@
 package app.painter.render
 
 import android.util.Log
+import android.view.InputDevice
 import android.view.MotionEvent
 import android.view.View
 import androidx.input.motionprediction.MotionEventPredictor
@@ -26,6 +27,11 @@ import kotlin.math.max
  *   ([CanvasInputListener.onToolDown]/[onToolMove]/[onToolUp]) instead of a stroke; a second finger
  *   cancels the tool drag and navigates, and two/three-finger taps still undo/redo.
  *
+ * - Pen buttons (spec/tools/m2-brush.md §4.3, [PenButtons]): while the primary button is held a pen touch
+ *   samples the colour ([CanvasInputListener.onPickColor]) instead of drawing; a click of the secondary
+ *   button undoes. The back of the pen (TOOL_TYPE_ERASER) starts an eraser stroke
+ *   ([CanvasInputListener.onStrokeBegin] with `penEraser`).
+ *
  * Must be used on the main thread.
  */
 class GestureRouter(private val view: View, private val host: Host) {
@@ -41,7 +47,7 @@ class GestureRouter(private val view: View, private val host: Host) {
     /** Emits motion-predicted points (predicted = true) after the real samples of each move. */
     var predictionEnabled: Boolean = true
 
-    private enum class State { IDLE, PENDING, STROKE, TOOL, NAV, IGNORE }
+    private enum class State { IDLE, PENDING, STROKE, PICK, TOOL, NAV, IGNORE }
 
     private var state = State.IDLE
     private val predictor: MotionEventPredictor? by lazy {
@@ -60,6 +66,13 @@ class GestureRouter(private val view: View, private val host: Host) {
     private var strokeMaxMove = 0f
     private val pending = ArrayList<InputPoint>()
     private val docTmp = FloatArray(2)
+
+    /** Hold action armed by a stylus button press, [PenAction.NONE] while no such button is down. */
+    private var penHold = PenAction.NONE
+    /** `eventTime` of the last button click, so a touch with the same button held does not fire it twice. */
+    private var lastPenClick = 0L
+    /** `eventTime` of the last eyedropper sample; samples of a drag are throttled to [PICK_INTERVAL_MS]. */
+    private var lastPick = 0L
 
     private var extraId = -1
     private var extraDown = 0L
@@ -127,6 +140,7 @@ class GestureRouter(private val view: View, private val host: Host) {
             MotionEvent.ACTION_POINTER_UP -> onPointerUp(e)
             MotionEvent.ACTION_UP -> onUp(e)
             MotionEvent.ACTION_CANCEL -> onCancel()
+            MotionEvent.ACTION_BUTTON_PRESS, MotionEvent.ACTION_BUTTON_RELEASE -> onPenButton(e)
         }
         return true
     }
@@ -155,13 +169,20 @@ class GestureRouter(private val view: View, private val host: Host) {
             host.listener?.onToolDown(p.x, p.y)
             return
         }
+        if (penAction(tool, e) == PenAction.EYEDROPPER) {
+            // Primary pen button held: the pen touch samples the colour instead of drawing (§4.3).
+            state = State.PICK
+            pick(e, 0)
+            return
+        }
+        if (penClick(tool, e)) return
         if (tool == MotionEvent.TOOL_TYPE_FINGER || tool == MotionEvent.TOOL_TYPE_UNKNOWN) {
             state = State.PENDING
             pending.add(point(e, 0, -1, false))
             view.postDelayed(longPressRunnable, LONG_PRESS_MS)
         } else {
             state = State.STROKE
-            host.listener?.onStrokeBegin(point(e, 0, -1, false), strokeDescriptor)
+            host.listener?.onStrokeBegin(point(e, 0, -1, false), strokeDescriptor, PenButtons.isEraserEnd(tool))
         }
     }
 
@@ -186,6 +207,7 @@ class GestureRouter(private val view: View, private val host: Host) {
                     extraValid = true
                 }
             }
+            State.PICK -> enterNav(e)
             State.NAV -> reanchor(e, -1)
             State.TOOL -> { host.listener?.onToolCancel(); enterNav(e) }
             else -> Unit
@@ -193,6 +215,12 @@ class GestureRouter(private val view: View, private val host: Host) {
     }
 
     private fun onMove(e: MotionEvent) {
+        if (state == State.PICK) {
+            // Dragging with the primary pen button held keeps sampling the colour.
+            val idx = e.findPointerIndex(strokeId)
+            if (idx >= 0 && e.eventTime - lastPick >= PICK_INTERVAL_MS) pick(e, idx)
+            return
+        }
         when (state) {
             State.PENDING -> {
                 val idx = e.findPointerIndex(strokeId)
@@ -325,6 +353,63 @@ class GestureRouter(private val view: View, private val host: Host) {
             host.listener?.onToolCancel()
         }
         clear()
+    }
+
+    /**
+     * Stylus button press/release (spec/tools/m2-brush.md §4.3), delivered in hover too: a hold action is
+     * armed for the next touch, a click action fires at once.
+     */
+    private fun onPenButton(e: MotionEvent) {
+        val pressed = e.actionMasked == MotionEvent.ACTION_BUTTON_PRESS
+        val tool = when {
+            e.pointerCount > 0 -> e.getToolType(0)
+            // A pen in hover may carry no pointer: fall back to the device source (mouse mode included).
+            e.isFromSource(InputDevice.SOURCE_STYLUS) || e.isFromSource(InputDevice.SOURCE_MOUSE) ->
+                MotionEvent.TOOL_TYPE_STYLUS
+            else -> MotionEvent.TOOL_TYPE_UNKNOWN
+        }
+        penHold = PenButtons.holdAction(tool, e.buttonState)
+        // On release the button is already gone from getButtonState(); actionButton names it.
+        val mask = if (pressed) e.buttonState else e.buttonState or e.actionButton
+        val click = PenButtons.clickAction(tool, mask)
+        if (pressed && click != PenAction.NONE && state == State.IDLE) fireClick(click, e.eventTime)
+    }
+
+    /** Hold action of pointer 0 in [e]: its own button state now, or a button pressed earlier in hover. */
+    private fun penAction(tool: Int, e: MotionEvent): PenAction {
+        val now = PenButtons.action(tool, e.buttonState)
+        if (now != PenAction.NONE) return now
+        return if (tool == MotionEvent.TOOL_TYPE_STYLUS) penHold else PenAction.NONE
+    }
+
+    /**
+     * Runs a click action of a pen button that is down while the pen touches the screen (drivers without
+     * hover button events); true when the touch is consumed and no stroke starts.
+     */
+    private fun penClick(tool: Int, e: MotionEvent): Boolean {
+        val click = PenButtons.clickAction(tool, e.buttonState)
+        if (click == PenAction.NONE) return false
+        state = State.IGNORE
+        // A touch right after the same button fired in hover must not undo twice.
+        if (e.eventTime - lastPenClick > CLICK_DEBOUNCE_MS) fireClick(click, e.eventTime)
+        return true
+    }
+
+    /** Fires a click action of a pen button; secondary = undo for now. */
+    private fun fireClick(click: PenAction, time: Long) {
+        lastPenClick = time
+        trace("pen button ${click.name}")
+        when (click) {
+            PenAction.UNDO -> host.listener?.onUndoGesture()
+            else -> Unit
+        }
+    }
+
+    /** Samples the colour under pointer [idx] with the studio eyedropper; samples of a drag are throttled. */
+    private fun pick(e: MotionEvent, idx: Int) {
+        lastPick = e.eventTime
+        val p = point(e, idx, -1, false)
+        host.listener?.onPickColor(p.x, p.y)
     }
 
     private fun clear() {
@@ -464,6 +549,10 @@ class GestureRouter(private val view: View, private val host: Host) {
         const val TAP_SLOP_PX = 20f
         const val FINGER_START_SLOP_PX = 4f
         const val QUICK_PINCH_RATIO = 0.8f
+        /** Minimum interval between two eyedropper samples of one pen drag. */
+        const val PICK_INTERVAL_MS = 40L
+        /** Window after a pen button click in which a touch with the same button does not fire it again. */
+        const val CLICK_DEBOUNCE_MS = 400L
         private const val MAX_IDS = 32
         private const val TRACE_TAG = "PainterInput"
     }
