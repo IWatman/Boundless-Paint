@@ -69,6 +69,13 @@ class GestureRouter(private val view: View, private val host: Host) {
     private var penSeen = false
     /** True while the pen is in the air above the screen, i.e. between ACTION_HOVER_ENTER and _EXIT. */
     private var penHovering = false
+
+    /**
+     * Pen buttons held in hover, as the hover events report them. Android 14 drops ACTION_BUTTON_PRESS/RELEASE
+     * of a touchscreen pen that is not down ("pointer is not down"), so a click in hover shows up only as a
+     * change of the hover events' button state.
+     */
+    private var hoverButtons = 0
     /** `eventTime` the pen last left hover, −1 while that never happened (see [FingerGate.HOVER_REJECT_MS]). */
     private var hoverLeftAt = -1L
 
@@ -157,7 +164,10 @@ class GestureRouter(private val view: View, private val host: Host) {
 
     /** Handles one touch event; always consumes it. */
     fun onTouchEvent(e: MotionEvent): Boolean {
-        if (predictionEnabled) predictor?.record(e)
+        // Hover and button events arrive here too (CanvasView.onPenInAir); the predictor
+        // only takes the touch stream.
+        val touch = e.actionMasked !in HOVER_OR_BUTTON
+        if (predictionEnabled && touch) predictor?.record(e)
         when (e.actionMasked) {
             MotionEvent.ACTION_DOWN -> onDown(e)
             MotionEvent.ACTION_POINTER_DOWN -> onPointerDown(e)
@@ -181,10 +191,25 @@ class GestureRouter(private val view: View, private val host: Host) {
      * the stylus section of the settings appears after the first stylus/eraser event (§4.3).
      */
     private fun onHover(e: MotionEvent, hovering: Boolean) {
-        if (!isPen(e.getToolType(0))) return
+        val tool = e.getToolType(0)
+        if (!isPen(tool)) return
         penSeen = true
+        if (hovering != penHovering) trace("pen hover ${if (hovering) "enter" else "exit"}")
         penHovering = hovering
         if (!hovering) hoverLeftAt = e.eventTime
+        val buttons = if (hovering) e.buttonState else 0
+        if (buttons != hoverButtons) onHoverButtons(tool, buttons, e.eventTime)
+    }
+
+    /** Pen buttons of a hovering pen changed to [buttons]: arms the hold action and fires the click of a new press. */
+    private fun onHoverButtons(tool: Int, buttons: Int, time: Long) {
+        val pressed = buttons and hoverButtons.inv()
+        hoverButtons = buttons
+        penHold = penButtons.holdAction(tool, buttons)
+        if (pressed == 0) return
+        trace("pen button press in hover state=$buttons")
+        val click = penButtons.clickAction(tool, pressed)
+        if (click != PenAction.NONE && state == State.IDLE) fireClick(click, time)
     }
 
     private fun isPen(tool: Int): Boolean =
@@ -423,6 +448,8 @@ class GestureRouter(private val view: View, private val host: Host) {
                 MotionEvent.TOOL_TYPE_STYLUS
             else -> MotionEvent.TOOL_TYPE_UNKNOWN
         }
+        // Keep the hover tracking in step, so a driver that sends both events does not fire twice.
+        hoverButtons = e.buttonState
         penHold = penButtons.holdAction(tool, e.buttonState)
         // On release the button is already gone from getButtonState(); actionButton names it.
         val mask = if (pressed) e.buttonState else e.buttonState or e.actionButton
@@ -619,6 +646,11 @@ class GestureRouter(private val view: View, private val host: Host) {
         const val TAP_SLOP_PX = 20f
         const val FINGER_START_SLOP_PX = 4f
         const val QUICK_PINCH_RATIO = 0.8f
+        /** Pen-in-the-air actions that reach the router besides the touch stream. */
+        val HOVER_OR_BUTTON = setOf(
+            MotionEvent.ACTION_HOVER_ENTER, MotionEvent.ACTION_HOVER_MOVE, MotionEvent.ACTION_HOVER_EXIT,
+            MotionEvent.ACTION_BUTTON_PRESS, MotionEvent.ACTION_BUTTON_RELEASE,
+        )
         /** Minimum interval between two eyedropper samples of one pen drag. */
         const val PICK_INTERVAL_MS = 40L
         /** Window after a pen button click in which a touch with the same button does not fire it again. */

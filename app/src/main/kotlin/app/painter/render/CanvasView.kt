@@ -193,6 +193,31 @@ class CanvasView(context: Context) : GLSurfaceView(context) {
     @SuppressLint("ClickableViewAccessibility")
     override fun onTouchEvent(event: MotionEvent): Boolean = router.onTouchEvent(event)
 
+    /**
+     * Pen-in-the-air events (hover and pen buttons) taken from the activity before Compose dispatches them:
+     * Compose hands an embedded view only some hover events, and Android 14 drops the hover
+     * ACTION_BUTTON_PRESS of a touchscreen pen, so the hover events are the only carrier of a click in hover.
+     */
+    fun onPenInAir(event: MotionEvent) {
+        if (event.actionMasked in GestureRouter.HOVER_OR_BUTTON) router.onTouchEvent(event)
+    }
+
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+        active = this
+    }
+
+    override fun onDetachedFromWindow() {
+        if (active === this) active = null
+        super.onDetachedFromWindow()
+    }
+
+    companion object {
+        /** The canvas on screen, for [onPenInAir] from the activity; null when no studio is shown. */
+        var active: CanvasView? = null
+            private set
+    }
+
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
         super.onSizeChanged(w, h, oldw, oldh)
         if (fitPending || oldw == 0 || oldh == 0) {

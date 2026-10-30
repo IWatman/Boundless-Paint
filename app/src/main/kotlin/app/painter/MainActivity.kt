@@ -2,6 +2,7 @@ package app.painter
 
 import android.graphics.Bitmap
 import android.os.Bundle
+import android.view.MotionEvent
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
@@ -39,6 +40,12 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent { PainterTheme { App(vm, updateVm) } }
+    }
+
+    /** Pen hover and pen buttons go to the canvas before Compose, which filters them (see CanvasView.onPenInAir). */
+    override fun dispatchGenericMotionEvent(ev: MotionEvent): Boolean {
+        CanvasView.active?.onPenInAir(ev)
+        return super.dispatchGenericMotionEvent(ev)
     }
 
     override fun onResume() {
