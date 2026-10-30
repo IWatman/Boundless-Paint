@@ -66,7 +66,9 @@ import kotlin.math.sqrt
  * §1.14). A [FillBrushParams] brush draws no outline: its trajectory is filled as a closed polygon on [end]
  * (§1.15; content SOLID only, and the fill appears on pen-up for `draw_preview` on as well: TODO(S6b)). A
  * [HarmonyParams] brush paints no dabs of its own: it keeps the points of its path and draws lines to the
- * earlier ones by the rule of its variant ([HarmonyEffect], §1.11). All of them are no-ops for every other
+ * earlier ones by the rule of its variant ([HarmonyEffect], §1.11). A [ParticlesParams] brush draws none of its
+ * path dabs either: they drive a particle system that stamps the stroke with the particle head ([ParticleSystem],
+ * §1.10). All of them are no-ops for every other
  * brush.
  *
  * The smudge and the paint kernel take the direct path, so [takeDirty] reports layer tiles and [cancel] restores
@@ -219,9 +221,27 @@ class StrokeEngine(
         }
     }
 
+    /** Particles (spec/tools/m2-brush.md §1.10) of a buffered stroke; null (or the direct path) keeps the plain dabs. */
+    private val particles: ParticlesParams? = if (directToLayer) null else params.special as? ParticlesParams
+
+    /** Particle system (§1.10): the path dabs drive it, its own dabs are stamped with [particleKernel]. */
+    private val particleSystem: ParticleSystem? = particles?.let {
+        ParticleSystem(it, ctx.seed, params.jitter.scatter.coerceIn(0f, 1f))
+    }
+
+    /** Particle dabs of the current batch, kept apart from the path dabs of [flush]. */
+    private val particleBatch = DabBatch()
+
+    /** Particle head kernel (§1.10): the particle image, or a round head when the brush has none. */
+    private val particleKernel: MaskKernel? = if (particles == null) null else MaskKernel(
+        MaskOp.OVER, res.particle, params.head.antialias, 0f, 1f, ceiling = true,
+        glaze = params.effects.glaze.coerceIn(0f, 1f),
+        tex = params.texture, texImage = res.texture, brushSize = params.size,
+    )
+
     /** Adhesion (spec/tools/m2-brush.md §1.7) of the buffered stroke; 0 keeps the plain composite path. */
     private val adhesion: Float =
-        if (directToLayer || screentone != null || harmony != null) 0f else params.effects.adhesion.coerceIn(0f, 1f)
+        if (directToLayer || screentone != null || harmony != null || particles != null) 0f else params.effects.adhesion.coerceIn(0f, 1f)
 
     /** Load plane `L` of adhesion (§1.7), `L = over(L, m·flow)` per dab; allocated only with adhesion > 0. */
     private val load: TileGrid? = if (adhesion > 0f) TileGrid(doc.width, doc.height, precise = true) else null
@@ -460,6 +480,7 @@ class StrokeEngine(
         }
         screentone?.reset()
         harmony?.reset()
+        particleSystem?.reset()
         generator = newGenerator()
         walker = newWalker(generator, replay = true)
         for (sub in recorded) {
@@ -515,7 +536,13 @@ class StrokeEngine(
             // Screentone (§1.14): the dabs only raise node coverage; each grown node draws its dot.
             st.add(out, access)
         } else {
-            scheduler.run(out, access, kernel, options.clip)
+            val psp = particleSystem
+            if (psp != null) {
+                // Particles (§1.10): the path dabs are not drawn; they drive the system, which stamps its own dabs.
+                particleBatch.clear()
+                psp.add(out, particleBatch)
+                scheduler.run(particleBatch, access, particleKernel!!, options.clip)
+            } else scheduler.run(out, access, kernel, options.clip)
             // Adhesion (§1.7): the same dabs fill the load plane of the buffer.
             val lk = loadKernel
             if (lk != null) scheduler.run(out, loadAccess!!, lk, options.clip)
