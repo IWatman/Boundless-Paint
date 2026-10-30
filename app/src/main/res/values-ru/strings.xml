@@ -87,6 +87,8 @@
     <string name="brush_editor_blend_name">Кисть «Смешивание»</string>
     <string name="brush_editor_reset">Сброс</string>
     <string name="brush_editor_confirm">Применить</string>
+    <string name="brush_editor_save_as">Сохранить как</string>
+    <string name="brush_editor_copy_name">%1$s (копия)</string>
     <string name="brush_editor_tab_stroke">Штрих</string>
     <string name="brush_editor_tab_head">Наконечник</string>
     <string name="brush_editor_tab_texture">Текстура</string>
@@ -235,6 +237,8 @@
     <string name="delete">Удалить</string>
     <string name="delete_project_title">Удалить проект?</string>
     <string name="delete_project_message">«%1$s» будет удалён без возможности восстановления.</string>
+    <string name="delete_brush_title">Удалить кисть?</string>
+    <string name="delete_brush_message">«%1$s» будет удалена без возможности восстановления.</string>
     <string name="duplicate">Дублировать</string>
     <string name="export_image">Экспорт изображения</string>
     <string name="flow">Поток</string>
@@ -342,6 +346,7 @@
     <string name="undo">Отменить (долгое нажатие: очистить слой)</string>
     <string name="rename">Переименовать</string>
     <string name="rename_layer">Переименовать слой</string>
+    <string name="rename_brush">Переименовать кисть</string>
     <string name="rename_project">Переименовать проект</string>
     <string name="save">Сохранить</string>
     <string name="settings">Настройки</string>

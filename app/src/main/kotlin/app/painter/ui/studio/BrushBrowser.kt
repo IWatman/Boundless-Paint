@@ -1,7 +1,9 @@
 package app.painter.ui.studio
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -13,6 +15,9 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -20,6 +25,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -31,6 +38,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import app.painter.R
 import app.painter.ui.components.PanelSurface
+import app.painter.ui.components.RenameDialog
 import app.painter.ui.theme.AccentFill
 
 private val BrowserWidth = 360.dp
@@ -39,9 +47,10 @@ private val CategoryWidth = 110.dp
 private val BrushRowHeight = 56.dp
 
 /**
- * Built-in brush browser: a category column on the left and the presets of the picked category on the right.
+ * Brush browser: a category column on the left and the presets of the picked category on the right.
  * It opens on the category of the current brush with that category and the brush scrolled into view. Tapping a
- * preset calls [StudioActions.selectBrush], which closes the popup.
+ * preset calls [StudioActions.selectBrush], which closes the popup; a long press on a user brush (the
+ * "Created" category of spec/tools/m2-brush.md §4.2) opens Rename and Delete.
  */
 @Composable
 internal fun BrushBrowser(state: StudioUiState, actions: StudioActions, modifier: Modifier = Modifier) {
@@ -88,6 +97,7 @@ internal fun BrushBrowser(state: StudioUiState, actions: StudioActions, modifier
                                 brush = brush,
                                 selected = brush.id == state.currentBrushId,
                                 onClick = { actions.selectBrush(brush.id) },
+                                actions = actions,
                             )
                         }
                     }
@@ -116,27 +126,71 @@ private fun CategoryRow(name: String, selected: Boolean, onClick: () -> Unit) {
     )
 }
 
-/** One preset row; the preset the current mode paints with is tinted with the primary color. */
+/**
+ * One preset row; the preset the current mode paints with is tinted with the primary color. A long press on a
+ * user brush opens the Rename/Delete menu and the delete confirmation (spec/tools/m2-brush.md §4.2 "Brush
+ * Options"); built-in presets have no menu, they are shared by every project of the app.
+ */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun BrushRow(brush: BrushItemUi, selected: Boolean, onClick: () -> Unit) {
+private fun BrushRow(brush: BrushItemUi, selected: Boolean, onClick: () -> Unit, actions: StudioActions) {
     val fill = if (selected) AccentFill else Color.Transparent
-    Box(
-        Modifier
-            .fillMaxWidth()
-            .height(BrushRowHeight)
-            .padding(horizontal = 6.dp, vertical = 3.dp)
-            .clip(MaterialTheme.shapes.small)
-            .background(fill)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 8.dp),
-        contentAlignment = Alignment.CenterStart,
-    ) {
-        Text(
-            brush.name,
-            style = MaterialTheme.typography.bodyMedium,
-            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-            color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
-            maxLines = 1,
+    var menu by remember { mutableStateOf(false) }
+    var renaming by remember { mutableStateOf(false) }
+    var deleting by remember { mutableStateOf(false) }
+    Box {
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .height(BrushRowHeight)
+                .padding(horizontal = 6.dp, vertical = 3.dp)
+                .clip(MaterialTheme.shapes.small)
+                .background(fill)
+                .combinedClickable(onClick = onClick, onLongClick = { if (brush.user) menu = true })
+                .padding(horizontal = 8.dp),
+            contentAlignment = Alignment.CenterStart,
+        ) {
+            Text(
+                brush.name,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+                color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+            )
+        }
+        DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.rename)) },
+                onClick = { menu = false; renaming = true },
+            )
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.delete), color = MaterialTheme.colorScheme.error) },
+                onClick = { menu = false; deleting = true },
+            )
+        }
+    }
+    if (renaming) {
+        RenameDialog(
+            title = stringResource(R.string.rename_brush),
+            initial = brush.name,
+            onDismiss = { renaming = false },
+            onConfirm = {
+                renaming = false
+                actions.renameBrush(brush.id, it)
+            },
+        )
+    }
+    if (deleting) {
+        AlertDialog(
+            onDismissRequest = { deleting = false },
+            title = { Text(stringResource(R.string.delete_brush_title)) },
+            text = { Text(stringResource(R.string.delete_brush_message, brush.name)) },
+            confirmButton = {
+                TextButton(onClick = { deleting = false; actions.deleteBrush(brush.id) }) {
+                    Text(stringResource(R.string.delete), color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = { TextButton(onClick = { deleting = false }) { Text(stringResource(R.string.cancel)) } },
         )
     }
 }

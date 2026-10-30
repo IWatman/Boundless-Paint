@@ -23,15 +23,23 @@ import java.util.Locale
  * [load] is blocking and must run off the main thread; afterwards the catalog is immutable and every
  * getter is safe to call from any thread. Head, texture and particle images are decoded on first use and
  * cached per brush id, so painting never touches the assets twice for the same preset.
+ *
+ * The user brushes of [userBrushes] are published as a first "Created" category (§4.2) once they exist and are
+ * in the same [find] index; they keep `asset:` references, so [resources] decodes them like any preset.
  */
-class BrushLibrary(private val assets: AssetManager) {
+class BrushLibrary(private val assets: AssetManager, private val userBrushes: UserBrushes? = null) {
 
     /** One catalog category with its localized [name] and its presets in index order. */
     class Category(val id: String, val name: String, val brushes: List<Brush>)
 
     private val lock = Any()
     private var loaded = false
-    private var categoryList: List<Category> = emptyList()
+    /** Language of the last [load]; the "Created" category name follows it. */
+    private var lang = "en"
+    /** Built-in categories of the index, in index order; user brushes are published in front of them. */
+    private var presetCategories: List<Category> = emptyList()
+    /** The "Created" category: the user brushes of [userBrushes], empty when there are none. */
+    private var createdCategory = Category(UserBrushCodec.CATEGORY, "Created", emptyList())
     private val byId = HashMap<String, Brush>()
     private val favoriteIds = HashMap<String, List<String>>()
     private val resourceCache = HashMap<String, BrushResources>()
@@ -42,8 +50,9 @@ class BrushLibrary(private val assets: AssetManager) {
     /** True once [load] has read the whole catalog. */
     val isLoaded: Boolean get() = loaded
 
-    /** Categories of the catalog, localized for the locale the catalog was loaded with. */
-    val categories: List<Category> get() = categoryList
+    /** Categories of the catalog, localized for the locale the catalog was loaded with; "Created" comes first. */
+    val categories: List<Category>
+        get() = if (createdCategory.brushes.isEmpty()) presetCategories else listOf(createdCategory) + presetCategories
 
     /** Ids of the favourites of brush [mode] (`PAINT`, `ERASE`), empty for a mode without favourites. */
     fun favorites(mode: String): List<String> = favoriteIds[mode].orEmpty()
@@ -86,19 +95,31 @@ class BrushLibrary(private val assets: AssetManager) {
         }
     }
 
-    /** Reads the index and every preset it lists; the second call is a no-op. */
+    /** Reads the index, every preset it lists and the user brushes; the second call is a no-op. */
     fun load() {
         synchronized(lock) {
             if (loaded) return
-            val index = runCatching { read(INDEX_PATH) }.getOrNull()?.let { parseIndex(it) } ?: emptyList()
-            categoryList = index
+            lang = if (Locale.getDefault().language == "ru") "ru" else "en"
+            presetCategories = runCatching { read(INDEX_PATH) }.getOrNull()?.let { parseIndex(it) } ?: emptyList()
+            setCreated(userBrushes?.load().orEmpty())
             loaded = true
+        }
+    }
+
+    /**
+     * Replaces the "Created" category with [brushes] and registers their ids for [find]; the built-in part of
+     * the catalog is untouched. Called by the brush editor and the browser after a save, a rename or a delete.
+     */
+    fun setCreated(brushes: List<Brush>) {
+        synchronized(lock) {
+            createdCategory.brushes.forEach { byId.remove(it.id) }
+            createdCategory = Category(UserBrushCodec.CATEGORY, if (lang == "ru") "Созданные" else "Created", brushes)
+            brushes.forEach { byId[it.id] = it }
         }
     }
 
     private fun parseIndex(text: String): List<Category> {
         val root = BrushIO.json.parseToJsonElement(text).jsonObject
-        val lang = if (Locale.getDefault().language == "ru") "ru" else "en"
         val out = ArrayList<Category>()
         for (element in root["categories"]?.jsonArray.orEmpty()) {
             val category = element.jsonObject

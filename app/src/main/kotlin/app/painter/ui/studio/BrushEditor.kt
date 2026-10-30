@@ -22,6 +22,8 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -37,6 +39,7 @@ import app.painter.R
 import app.painter.core.stroke.BrushParams
 import app.painter.ui.components.PanelSurface
 import app.painter.ui.components.ParamSlider
+import app.painter.ui.components.RenameDialog
 import app.painter.ui.components.formatSliderValue
 
 /** Right-side panel of the editor: the canvas stays visible next to it (spec/tools/m2-brush.md §4.2). */
@@ -63,16 +66,20 @@ private val EditorTabs = listOf(
  *
  * The working copy lives in [StudioUiState.editorParams] and the whole panel is stateless about it: every slider
  * sends the edited [BrushParams] to [StudioActions.updateEditor]. Confirm applies the copy to the current mode's
- * brush (part 4 will also save it), Cancel and Reset are the other two buttons.
+ * brush (and writes a user brush back to its file), "Save as" stores a named copy in the Created folder, Cancel
+ * and Reset are the other two buttons.
  */
 @Composable
 internal fun BrushEditor(state: StudioUiState, actions: StudioActions, modifier: Modifier = Modifier) {
     val params = state.editorParams ?: return
     var tab by rememberSaveable { mutableIntStateOf(0) }
+    /** The "Save as" name dialog is open. */
+    var naming by remember { mutableStateOf(false) }
+    val name = state.editorBrushName.ifBlank { stringResource(R.string.brush_editor_blend_name) }
     PanelSurface(modifier.width(EditorWidth).heightIn(max = EditorMaxHeight)) {
         Column(Modifier.fillMaxWidth()) {
             Text(
-                state.editorBrushName.ifBlank { stringResource(R.string.brush_editor_blend_name) },
+                name,
                 style = MaterialTheme.typography.titleSmall,
                 maxLines = 1,
                 modifier = Modifier.padding(start = 14.dp, top = 12.dp, end = 14.dp),
@@ -88,6 +95,7 @@ internal fun BrushEditor(state: StudioUiState, actions: StudioActions, modifier:
                 TextButton(onClick = actions::cancelEditor) { Text(stringResource(R.string.cancel)) }
                 TextButton(onClick = actions::resetEditor) { Text(stringResource(R.string.brush_editor_reset)) }
                 Box(Modifier.weight(1f))
+                TextButton(onClick = { naming = true }) { Text(stringResource(R.string.brush_editor_save_as)) }
                 TextButton(onClick = actions::confirmEditor) {
                     Text(stringResource(R.string.brush_editor_confirm), fontWeight = FontWeight.SemiBold)
                 }
@@ -110,6 +118,18 @@ internal fun BrushEditor(state: StudioUiState, actions: StudioActions, modifier:
                 }
             }
         }
+    }
+    if (naming) {
+        // "Save as" names the copy after the brush it was made from; the dialog trims and rejects blank names.
+        RenameDialog(
+            title = stringResource(R.string.brush_editor_save_as),
+            initial = stringResource(R.string.brush_editor_copy_name, name),
+            onDismiss = { naming = false },
+            onConfirm = {
+                naming = false
+                actions.saveBrushAs(it)
+            },
+        )
     }
 }
 

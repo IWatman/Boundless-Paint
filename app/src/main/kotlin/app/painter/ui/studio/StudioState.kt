@@ -79,9 +79,9 @@ data class HudUi(
     val ringMaxDiameterPx: Float? = null,
 )
 
-/** One preset row of the brush browser: [id] is the preset id (`<category>.<name>`). */
+/** One preset row of the brush browser: [id] is the preset id (`<category>.<name>`) or a `user.<uuid>`. */
 @Immutable
-data class BrushItemUi(val id: String, val name: String)
+data class BrushItemUi(val id: String, val name: String, val user: Boolean = false)
 
 /** One category column of the brush browser with its presets in catalog order. */
 @Immutable
@@ -403,6 +403,12 @@ interface StudioActions {
     fun resetEditor() {}
     /** Applies the working copy to the current mode's brush and closes the editor. */
     fun confirmEditor() {}
+    /** Stores the working copy as a new user brush called [name], paints with it and closes the editor. */
+    fun saveBrushAs(name: String) {}
+    /** Renames the user brush [id]. */
+    fun renameBrush(id: String, name: String) {}
+    /** Deletes the user brush [id]; the modes that painted with it fall back to their default preset. */
+    fun deleteBrush(id: String) {}
     /** Closes the editor without applying the working copy. */
     fun cancelEditor() {}
 

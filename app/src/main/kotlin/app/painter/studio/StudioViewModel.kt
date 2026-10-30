@@ -81,6 +81,7 @@ import app.painter.core.symmetry.MirrorAxes
 import app.painter.core.symmetry.SymmetryConfig
 import app.painter.core.symmetry.SymmetryType
 import app.painter.core.stroke.Brush
+import app.painter.core.stroke.BrushName
 import app.painter.core.stroke.BrushParams
 import app.painter.core.stroke.BrushResources
 import app.painter.core.stroke.CloneSource
@@ -92,6 +93,7 @@ import app.painter.core.stroke.StrokeCommit
 import app.painter.core.stroke.StrokeContext
 import app.painter.core.stroke.StrokeEngine
 import app.painter.core.stroke.PaintParams
+import app.painter.core.stroke.ResourceRefs
 import app.painter.core.stroke.StrokeMode
 import app.painter.core.stroke.StrokeOptions
 import app.painter.core.stroke.SymmetryCopies
@@ -226,8 +228,11 @@ class StudioViewModel(
         paint = PaintParams(pull = 0.9f),
     )
 
+    /** User brushes ("Created", spec/tools/m2-brush.md §4.2), one `brush.json`-format file per brush. */
+    private val userBrushes = UserBrushes(app.filesDir.resolve("brushes").resolve(UserBrushCodec.CATEGORY))
+
     /** Built-in preset catalog; read off the main thread once at start-up. */
-    private val brushes = BrushLibrary(app.assets)
+    private val brushes = BrushLibrary(app.assets, userBrushes)
 
     /** Preset the PAINT and ERASE modes paint with, null until the library has picked its favourites. */
     private var paintBrush: Brush? = null
@@ -547,18 +552,20 @@ class StudioViewModel(
 
     /**
      * Opens the editor on a working copy of the current mode's brush. The browser closes, and the preset the
-     * Reset button restores is captured now: the preset's parameters for Paint and Erase, the studio Blend tip
-     * for Blend, which has no preset. Edits stay in memory for this session (saving comes in part 4).
+     * Reset button restores is captured now: the preset's parameters for Paint and Erase — for an own brush the
+     * copy in its file — and the studio Blend tip for Blend, which has no preset.
      */
     override fun openBrushEditor() {
-        editorBaseParams = currentBrush?.params ?: blendParams
+        val brush = currentBrush
+        val saved = if (brush != null && UserBrushCodec.isUser(brush.id)) userBrushes.find(brush.id) ?: brush else brush
+        editorBaseParams = saved?.params ?: blendParams
         _state.update {
             it.copy(
                 brushBrowserOpen = false,
                 editorParams = currentParams(),
                 editorPreview = null,
-                editorBrushName = currentBrush?.name?.get(Locale.getDefault().language).orEmpty(),
-                editorHasTexture = currentBrush?.resources?.texture != null,
+                editorBrushName = brush?.name?.get(Locale.getDefault().language).orEmpty(),
+                editorHasTexture = brush?.resources?.texture != null,
             )
         }
         scheduleEditorPreview(delayMs = 0)
@@ -579,8 +586,92 @@ class StudioViewModel(
     override fun confirmEditor() {
         val params = _state.value.editorParams ?: return
         updateParams { params }
+        val brush = currentBrush
         closeBrushEditor()
+        // An edit of an own brush is written back to its file, so it outlives the session and Reset restores it.
+        if (brush != null && UserBrushCodec.isUser(brush.id)) {
+            val edited = brush.copy(params = params)
+            viewModelScope.launch {
+                if (withContext(Dispatchers.IO) { writeUserBrush(edited) }) adoptUserBrush(edited)
+            }
+        }
     }
+
+    /**
+     * "Save as" (spec/tools/m2-brush.md §4.2): stores the working copy as a new user brush named [name] in the
+     * Created category, with the resources and the id of the brush it was made from as its parent, makes it the
+     * brush of the current mode and closes the editor.
+     */
+    override fun saveBrushAs(name: String) {
+        val params = _state.value.editorParams ?: return
+        val base = currentBrush
+        val brush = UserBrushCodec.create(
+            parentId = base?.id,
+            name = name,
+            params = params,
+            resources = base?.resources ?: ResourceRefs(),
+        )
+        viewModelScope.launch {
+            if (!withContext(Dispatchers.IO) { writeUserBrush(brush) }) return@launch
+            // Selecting the copy is what the browser would do with it; it also saves the preset of the mode.
+            selectBrush(brush.id)
+            closeBrushEditor()
+        }
+    }
+
+    override fun renameBrush(id: String, name: String) {
+        val stored = userBrushes.find(id) ?: return
+        val renamed = stored.copy(name = BrushName(UserBrushCodec.cleanName(name, stored.name.text)))
+        viewModelScope.launch {
+            if (withContext(Dispatchers.IO) { writeUserBrush(renamed) }) adoptUserBrush(renamed)
+        }
+    }
+
+    /** Deletes user brush [id]; a mode that painted with it falls back to the default preset of that mode (§4.4). */
+    override fun deleteBrush(id: String) {
+        if (!UserBrushCodec.isUser(id)) return
+        viewModelScope.launch {
+            if (!withContext(Dispatchers.IO) { eraseUserBrush(id) }) return@launch
+            if (paintBrush?.id == id) {
+                paintBrush = defaultBrush(FAVORITE_PAINT)
+                paintBrush?.let { paintParams = it.params }
+            }
+            if (eraseBrush?.id == id) {
+                eraseBrush = defaultBrush(FAVORITE_ERASE)
+                eraseBrush?.let { eraseParams = it.params }
+            }
+            publishBrushes()
+            syncBrushState()
+            saveBrushPrefs()
+        }
+    }
+
+    /** Writes [brush] to the file of its id and republishes the catalog; false when the file cannot be written. */
+    private fun writeUserBrush(brush: Brush): Boolean {
+        if (!userBrushes.save(brush)) return false
+        brushes.setCreated(userBrushes.brushes)
+        return true
+    }
+
+    /** Deletes the file of user brush [id] and republishes the catalog; false when it cannot be removed. */
+    private fun eraseUserBrush(id: String): Boolean {
+        if (!userBrushes.remove(id)) return false
+        brushes.setCreated(userBrushes.brushes)
+        return true
+    }
+
+    /** Puts a saved or renamed user brush into the modes that painted with it and into the browser. */
+    private fun adoptUserBrush(brush: Brush) {
+        if (paintBrush?.id == brush.id) paintBrush = brush
+        if (eraseBrush?.id == brush.id) eraseBrush = brush
+        publishBrushes()
+        syncBrushState()
+    }
+
+    /** Default preset of [mode] (`PAINT`, `ERASE`): its favourite from the index, else the first built-in preset. */
+    private fun defaultBrush(mode: String): Brush? =
+        brushes.favorites(mode).firstOrNull()?.let { brushes.find(it) }
+            ?: brushes.categories.firstOrNull { it.id != UserBrushCodec.CATEGORY }?.brushes?.firstOrNull()
 
     override fun cancelEditor() = closeBrushEditor()
 
@@ -634,16 +725,13 @@ class StudioViewModel(
     }
 
     /**
-     * Reads the built-in brush catalog off the main thread, publishes its categories and seeds the quick
-     * parameters of both modes from the favourite preset of that mode.
+     * Reads the brush catalog — the stock presets and the user brushes of the Created folder — off the main
+     * thread, publishes its categories and seeds the quick parameters of both modes from the favourite preset
+     * of that mode.
      */
     private fun loadBrushes() {
         viewModelScope.launch(Dispatchers.IO) {
             brushes.load()
-            val lang = if (Locale.getDefault().language == "ru") "ru" else "en"
-            val categories = brushes.categories.map { c ->
-                BrushCategoryUi(c.id, c.name, c.brushes.map { BrushItemUi(it.id, it.name.get(lang)) })
-            }
             val paint = brushes.favorites(FAVORITE_PAINT).firstOrNull()?.let { brushes.find(it) }
             val erase = brushes.favorites(FAVORITE_ERASE).firstOrNull()?.let { brushes.find(it) }
             if (paintBrush == null && paint != null) {
@@ -654,12 +742,26 @@ class StudioViewModel(
                 eraseBrush = erase
                 eraseParams = erase.params
             }
+            // A stored id restores even a user brush: the Created folder is in the same index as the presets.
             restoreBrushPrefs()
             // Decoding the images of the initial presets happens here, not on the first stroke.
             listOfNotNull(paintBrush, eraseBrush).forEach { brushes.resources(it) }
-            _state.update { it.copy(brushCategories = categories) }
+            publishBrushes()
             syncBrushState()
         }
+    }
+
+    /** Republishes the catalog to the browser and the editor: the categories with localized names and brush names. */
+    private fun publishBrushes() {
+        val lang = if (Locale.getDefault().language == "ru") "ru" else "en"
+        val categories = brushes.categories.map { category ->
+            BrushCategoryUi(
+                category.id,
+                category.name,
+                category.brushes.map { BrushItemUi(it.id, it.name.get(lang), UserBrushCodec.isUser(it.id)) },
+            )
+        }
+        _state.update { it.copy(brushCategories = categories) }
     }
 
     /** Preset of the current mode; null for [BrushModeUi.BLEND], which always paints with the studio brush. */

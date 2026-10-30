@@ -88,6 +88,8 @@
     <string name="brush_editor_blend_name">Blend brush</string>
     <string name="brush_editor_reset">Reset</string>
     <string name="brush_editor_confirm">Confirm</string>
+    <string name="brush_editor_save_as">Save as</string>
+    <string name="brush_editor_copy_name">%1$s copy</string>
     <string name="brush_editor_tab_stroke">Stroke</string>
     <string name="brush_editor_tab_head">Head</string>
     <string name="brush_editor_tab_texture">Texture</string>
@@ -236,6 +238,8 @@
     <string name="delete">Delete</string>
     <string name="delete_project_title">Delete project?</string>
     <string name="delete_project_message">“%1$s” will be deleted permanently.</string>
+    <string name="delete_brush_title">Delete brush?</string>
+    <string name="delete_brush_message">“%1$s” will be deleted permanently.</string>
     <string name="duplicate">Duplicate</string>
     <string name="export_image">Export image</string>
     <string name="flow">Flow</string>
@@ -344,6 +348,7 @@
     <string name="undo">Undo (long press: clear layer)</string>
     <string name="rename">Rename</string>
     <string name="rename_layer">Rename layer</string>
+    <string name="rename_brush">Rename brush</string>
     <string name="rename_project">Rename project</string>
     <string name="save">Save</string>
     <string name="settings">Settings</string>
