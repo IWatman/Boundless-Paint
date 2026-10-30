@@ -39,6 +39,8 @@ Version tested: ______  Date: ______
 | 4.1 | Palm rest | Draw for 2 minutes with the palm on the screen | Not a single palm stroke | | |
 | 4.2 | Finger gestures with the pen | Pan / zoom / rotate with two fingers between pen strokes | Gestures work; no stray dabs | | |
 | 4.3 | Two/three-finger tap | Undo / redo by tap | Works as before | | |
+| 4.4 | Finger after the pen (default "stylus only") | Touch the screen with the pen once, then draw with a finger | The finger pans instead of drawing; before any pen touch it draws | | |
+| 4.5 | Hover reject | Settings: palm = hover reject. Hover the pen and touch with a finger; again 0.5 s after lifting the pen away | Finger ignored while hovering and for ~300 ms after | | |
 
 ## 5. Brushes with a real pen
 Draw one stroke with pressure 0 → full → 0 and one quick scribble with each; the look should match the brush sheet.
