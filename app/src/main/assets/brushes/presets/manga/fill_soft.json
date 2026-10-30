@@ -1,0 +1,66 @@
+{
+  "category": "manga",
+  "id": "manga.fill_soft",
+  "name": {
+    "en": "Soft fill",
+    "ru": "Мягкая заливка"
+  },
+  "params": {
+    "flow": 1.0,
+    "hardness": 1.0,
+    "head": {
+      "source": "round"
+    },
+    "opacity": 0.5,
+    "pressureToFlow": {
+      "min": 0.0,
+      "points": [
+        [
+          0.0,
+          0.35
+        ],
+        [
+          1.0,
+          1.0
+        ]
+      ]
+    },
+    "pressureToSize": {
+      "min": 0.0,
+      "points": [
+        [
+          0.0,
+          1.0
+        ],
+        [
+          1.0,
+          1.0
+        ]
+      ]
+    },
+    "size": 24.0,
+    "sizeMax": 300.0,
+    "sizeMin": 2.0,
+    "spacing": 0.05,
+    "special": {
+      "content": "solid",
+      "type": "fill"
+    },
+    "taperEnd": 0.0,
+    "taperStart": 0.0
+  },
+  "resources": {},
+  "schema": 1,
+  "tags": [
+    "заливка",
+    "fill",
+    "полупрозрачная",
+    "soft",
+    "плоская заливка",
+    "flat",
+    "тон",
+    "shading",
+    "манга",
+    "manga"
+  ]
+}

@@ -1,0 +1,70 @@
+{
+  "category": "manga",
+  "id": "manga.tone_medium",
+  "name": {
+    "en": "Medium dot tone",
+    "ru": "Средний тон"
+  },
+  "params": {
+    "flow": 1.0,
+    "hardness": 1.0,
+    "head": {
+      "source": "round"
+    },
+    "opacity": 1.0,
+    "pressureToFlow": {
+      "min": 0.0,
+      "points": [
+        [
+          0.0,
+          1.0
+        ],
+        [
+          1.0,
+          1.0
+        ]
+      ]
+    },
+    "pressureToSize": {
+      "min": 0.0,
+      "points": [
+        [
+          0.0,
+          1.0
+        ],
+        [
+          1.0,
+          1.0
+        ]
+      ]
+    },
+    "size": 20.0,
+    "sizeMax": 80.0,
+    "sizeMin": 6.0,
+    "spacing": 0.05,
+    "special": {
+      "angle": 45.0,
+      "scaleWithSize": false,
+      "shape": "DOT",
+      "spacing": 10.0,
+      "type": "screentone"
+    },
+    "taperEnd": 0.0,
+    "taperStart": 0.0
+  },
+  "resources": {},
+  "schema": 1,
+  "tags": [
+    "тон",
+    "screentone",
+    "скринтон",
+    "точки",
+    "dots",
+    "сетка",
+    "dot",
+    "средний",
+    "medium",
+    "манга",
+    "manga"
+  ]
+}

@@ -2,7 +2,9 @@ package app.painter.core.io
 
 import app.painter.core.stroke.ColorStampParams
 import app.painter.core.stroke.DoubleParams
+import app.painter.core.stroke.FillBrushParams
 import app.painter.core.stroke.FilterBrushParams
+import app.painter.core.stroke.ScreentoneParams
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonArray
@@ -66,13 +68,15 @@ class CatalogPresetsTest {
             for (ref in listOfNotNull(brush.resources.head, brush.resources.texture, brush.resources.particle)) {
                 assertTrue(ref in refs, "${f.path}: unknown resource ref $ref")
             }
-            // S6 specials: the off-stroke filter, the colour stamp and the double outline; nothing else.
+            // S6 specials: the off-stroke filter, the colour stamp, the double outline, the fill and the screentone.
             val special = brush.params.special
             assertTrue(
                 special == null ||
                     (special is FilterBrushParams && !special.onStroke) ||
                     special is ColorStampParams ||
-                    special is DoubleParams,
+                    special is DoubleParams ||
+                    special is FillBrushParams ||
+                    special is ScreentoneParams,
                 "${f.path}: unexpected special engine $special",
             )
             // A colour stamp shifts the head hue from its base colour, so the head must carry both.

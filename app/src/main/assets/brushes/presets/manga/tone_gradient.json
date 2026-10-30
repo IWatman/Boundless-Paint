@@ -1,0 +1,70 @@
+{
+  "category": "manga",
+  "id": "manga.tone_gradient",
+  "name": {
+    "en": "Gradient tone",
+    "ru": "Градиентный тон"
+  },
+  "params": {
+    "flow": 1.0,
+    "hardness": 0.1,
+    "head": {
+      "source": "round"
+    },
+    "opacity": 1.0,
+    "pressureToFlow": {
+      "min": 0.0,
+      "points": [
+        [
+          0.0,
+          1.0
+        ],
+        [
+          1.0,
+          1.0
+        ]
+      ]
+    },
+    "pressureToSize": {
+      "min": 0.0,
+      "points": [
+        [
+          0.0,
+          1.0
+        ],
+        [
+          1.0,
+          1.0
+        ]
+      ]
+    },
+    "size": 90.0,
+    "sizeMax": 300.0,
+    "sizeMin": 20.0,
+    "spacing": 0.02,
+    "special": {
+      "angle": 45.0,
+      "scaleWithSize": false,
+      "shape": "DOT",
+      "spacing": 8.0,
+      "type": "screentone"
+    },
+    "taperEnd": 0.0,
+    "taperStart": 0.0
+  },
+  "resources": {},
+  "schema": 1,
+  "tags": [
+    "тон",
+    "screentone",
+    "скринтон",
+    "градиент",
+    "gradient",
+    "точки",
+    "dots",
+    "плавный",
+    "smooth",
+    "манга",
+    "manga"
+  ]
+}

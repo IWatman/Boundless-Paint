@@ -1,0 +1,70 @@
+{
+  "category": "manga",
+  "id": "manga.tone_fine",
+  "name": {
+    "en": "Fine dot tone",
+    "ru": "Мелкий тон"
+  },
+  "params": {
+    "flow": 1.0,
+    "hardness": 1.0,
+    "head": {
+      "source": "round"
+    },
+    "opacity": 1.0,
+    "pressureToFlow": {
+      "min": 0.0,
+      "points": [
+        [
+          0.0,
+          1.0
+        ],
+        [
+          1.0,
+          1.0
+        ]
+      ]
+    },
+    "pressureToSize": {
+      "min": 0.0,
+      "points": [
+        [
+          0.0,
+          1.0
+        ],
+        [
+          1.0,
+          1.0
+        ]
+      ]
+    },
+    "size": 16.0,
+    "sizeMax": 60.0,
+    "sizeMin": 4.0,
+    "spacing": 0.05,
+    "special": {
+      "angle": 45.0,
+      "scaleWithSize": false,
+      "shape": "DOT",
+      "spacing": 6.0,
+      "type": "screentone"
+    },
+    "taperEnd": 0.0,
+    "taperStart": 0.0
+  },
+  "resources": {},
+  "schema": 1,
+  "tags": [
+    "тон",
+    "screentone",
+    "скринтон",
+    "точки",
+    "dots",
+    "сетка",
+    "dot",
+    "мелкий",
+    "fine",
+    "манга",
+    "manga"
+  ]
+}

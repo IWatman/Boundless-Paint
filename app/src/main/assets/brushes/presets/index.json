@@ -105,6 +105,21 @@
     },
     {
       "brushes": [
+        "manga.fill",
+        "manga.fill_soft",
+        "manga.tone_fine",
+        "manga.tone_medium",
+        "manga.tone_coarse",
+        "manga.tone_gradient"
+      ],
+      "id": "manga",
+      "name": {
+        "en": "Manga and comic",
+        "ru": "Манга и комикс"
+      }
+    },
+    {
+      "brushes": [
         "erasers.hard",
         "erasers.soft",
         "erasers.grainy"
