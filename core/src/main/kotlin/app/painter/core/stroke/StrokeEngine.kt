@@ -54,10 +54,11 @@ import kotlin.math.sqrt
  * needs the final length, [end] clears the buffer (or resets the working copies) and redraws the final path.
  *
  * [StrokeMode.BLEND] writes [SmudgeKernel] dabs straight into the layer (§1.8): no colour is deposited, the dab
- * drags the layer colours along. [StrokeMode.CLONE] throws [UnsupportedOperationException] until S5.
+ * drags the layer colours along. [StrokeMode.PAINT] with `mix_in`/`dilution` > 0 mixes the picked-up colours into
+ * the [PaintMixKernel] deposit instead. [StrokeMode.CLONE] throws [UnsupportedOperationException] until S5.
  *
- * The smudge takes the direct path, so [takeDirty] reports layer tiles and [cancel] restores them; the layer
- * alpha of an alpha-locked layer stays untouched and the pickup buffer restarts when the stroke is re-rendered.
+ * The smudge and the paint kernel take the direct path, so [takeDirty] reports layer tiles and [cancel] restores
+ * them; the layer alpha of an alpha-locked layer stays untouched and the reservoir restarts on a re-render.
  *
  * Predicted input points are ignored. Non-stylus input is pressure 1. Erasing on an alpha-locked layer is a
  * no-op; a locked node is never modified.
@@ -133,8 +134,12 @@ class StrokeEngine(
     /** True when the stroke buffer is composited with [strokeBlend] instead of plain source-over. */
     private val blended: Boolean = blendStrength > 0f && strokeBlend != BlendMode.NORMAL && strokeBlend != BlendMode.PASSTHROUGH
 
+    /** Paint with colour pickup (§1.8, S4b): `mix_in`/`dilution` deposit the picked-up colours into the layer. */
+    private val paintMix: Boolean =
+        layer != null && mode == StrokeMode.PAINT && (params.paint.mixIn > 0f || params.paint.dilution > 0f)
+
     /** True when dabs are written directly into the layer (build-up mode); a blend mode forces the buffer path. */
-    val directToLayer: Boolean = layer != null && (mode == StrokeMode.BLEND || (params.buildup && !blended))
+    val directToLayer: Boolean = layer != null && (mode == StrokeMode.BLEND || paintMix || (params.buildup && !blended))
 
     private val alphaLock = layer?.alphaLock ?: false
     private val inert = locked || (mode == StrokeMode.ERASE && alphaLock)
@@ -160,7 +165,14 @@ class StrokeEngine(
         alphaLock,
     ) else null
 
-    private val kernel: DabKernel = smudge ?: if (directToLayer) {
+    /** Paint-with-pickup kernel (§1.8, S4b); it samples the layer, so it needs a layer target. */
+    private val paintKernel: PaintMixKernel? = if (paintMix) {
+        PaintMixKernel(layer!!.pixels, params.paint.pull, params.paint.wet, alphaLock, previewOpacity)
+    } else {
+        null
+    }
+
+    private val kernel: DabKernel = smudge ?: paintKernel ?: if (directToLayer) {
         MaskKernel(
             directOpOf(mode, alphaLock), head, params.head.antialias, params.head.depth, previewOpacity, ceiling = false,
             tex = params.texture, texImage = res.texture, brushSize = params.size,
@@ -363,6 +375,7 @@ class StrokeEngine(
 
     private fun rerender() {
         smudge?.reset()
+        paintKernel?.reset()
         loadAccess?.releaseAll()
         if (directToLayer) working!!.reset() else {
             touchBuffer()

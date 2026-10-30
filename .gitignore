@@ -10,6 +10,8 @@ captures/
 *.apk
 *.aab
 .claude/
+hsperfdata_dushc
+%SystemDrive%
 Microsoft/
 liblz4-java-*.so
 
