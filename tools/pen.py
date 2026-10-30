@@ -211,6 +211,19 @@ def adb(serial: str, *args: str, stdin: str | None = None) -> str:
     return out.stdout
 
 
+def painter_tab() -> str:
+    """Serial of the running painter_tab AVD; other projects run their own emulators on the same machine."""
+    out = subprocess.run([str(ADB), "devices"], capture_output=True, text=True).stdout
+    for line in out.splitlines()[1:]:
+        serial = line.split("	")[0].strip()
+        if not serial.startswith("emulator-"):
+            continue
+        name = subprocess.run([str(ADB), "-s", serial, "emu", "avd", "name"], capture_output=True, text=True).stdout
+        if name.splitlines() and name.splitlines()[0].strip() == "painter_tab":
+            return serial
+    raise SystemExit("painter_tab emulator is not running")
+
+
 def screen_size(serial: str) -> tuple[int, int]:
     size = adb(serial, "shell", "wm", "size").strip().splitlines()[-1].split(":")[-1].strip()
     w, h = (int(v) for v in size.split("x"))
@@ -221,11 +234,13 @@ def screen_size(serial: str) -> tuple[int, int]:
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("scenario")
-    ap.add_argument("--serial", default="emulator-5556")
+    ap.add_argument("--serial", default=None, help="adb serial (default: the running painter_tab AVD)")
     ap.add_argument("--peak", type=float, default=0.78, help="peak raw pressure 0..1 (XP-Pen ≈ 0.78)")
     ap.add_argument("--y", type=float, default=None, help="row of the stroke as a fraction of the height")
     ap.add_argument("--dry-run", action="store_true", help="print the uinput script instead of running it")
     a = ap.parse_args()
+    if a.serial is None and not a.dry_run:
+        a.serial = painter_tab()
     w, h = (2560, 1600) if a.dry_run else screen_size(a.serial)
     text = scenario(a.scenario, w, h, a.peak, a.y).text()
     if a.dry_run:
