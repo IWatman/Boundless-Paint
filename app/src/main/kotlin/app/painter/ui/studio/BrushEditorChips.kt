@@ -9,23 +9,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import app.painter.R
-
-/**
- * Placeholder of a tab the editor does not fill in yet (Paint and Special come in part 3): a muted line instead of
- * an empty tab.
- */
-@Composable
-internal fun ComingSoonTab() {
-    Text(
-        stringResource(R.string.brush_editor_coming_soon),
-        style = MaterialTheme.typography.bodyMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(vertical = 24.dp),
-    )
-}
 
 /**
  * Heading of a group of controls of a brush editor tab (spec/tools/m2-brush.md §4.2): an accent label above the

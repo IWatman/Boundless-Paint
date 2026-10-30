@@ -48,7 +48,7 @@ private val EditorMaxHeight = 560.dp
 /** Height of the preview pad that shows the reference S-curve with the edited parameters. */
 private val PreviewHeight = 160.dp
 
-/** Tab labels in display order; only the first tab is implemented so far. */
+/** Tab labels in display order. */
 private val EditorTabs = listOf(
     R.string.brush_editor_tab_stroke,
     R.string.brush_editor_tab_head,
@@ -58,8 +58,8 @@ private val EditorTabs = listOf(
 )
 
 /**
- * The brush editor (spec/tools/m2-brush.md §4.2, parts 1–2): the brush name, the live preview pad, the Cancel/Reset/
- * Confirm buttons and the tabs. Stroke, Head and Texture have controls; Paint and Special still say "Coming soon".
+ * The brush editor (spec/tools/m2-brush.md §4.2, parts 1–3): the brush name, the live preview pad, the Cancel/Reset/
+ * Confirm buttons and the tabs. Stroke, Head, Texture, Paint and Special have controls.
  *
  * The working copy lives in [StudioUiState.editorParams] and the whole panel is stateless about it: every slider
  * sends the edited [BrushParams] to [StudioActions.updateEditor]. Confirm applies the copy to the current mode's
@@ -105,7 +105,8 @@ internal fun BrushEditor(state: StudioUiState, actions: StudioActions, modifier:
                     0 -> StrokeTab(params = params, actions = actions)
                     1 -> HeadTab(params = params, actions = actions)
                     2 -> TextureTab(params = params, actions = actions, hasImage = state.editorHasTexture)
-                    else -> ComingSoonTab()
+                    3 -> PaintTab(params = params, actions = actions)
+                    else -> SpecialTab(params = params, actions = actions)
                 }
             }
         }
