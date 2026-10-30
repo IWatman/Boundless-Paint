@@ -173,6 +173,19 @@
     },
     {
       "brushes": [
+        "textures.dry_brush",
+        "textures.hair",
+        "textures.bark",
+        "textures.grunge"
+      ],
+      "id": "textures",
+      "name": {
+        "en": "Textures",
+        "ru": "Фактуры"
+      }
+    },
+    {
+      "brushes": [
         "erasers.hard",
         "erasers.soft",
         "erasers.grainy"

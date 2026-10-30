@@ -1,0 +1,70 @@
+{
+  "category": "textures",
+  "id": "textures.grunge",
+  "name": {
+    "en": "Grunge",
+    "ru": "Гранж"
+  },
+  "params": {
+    "flow": 0.9,
+    "hardness": 0.6,
+    "head": {
+      "source": "round"
+    },
+    "opacity": 0.8,
+    "pressureToFlow": {
+      "min": 0.0,
+      "points": [
+        [
+          0.0,
+          0.3
+        ],
+        [
+          1.0,
+          1.0
+        ]
+      ]
+    },
+    "pressureToSize": {
+      "min": 0.4,
+      "points": [
+        [
+          0.0,
+          0.5
+        ],
+        [
+          1.0,
+          1.0
+        ]
+      ]
+    },
+    "size": 90.0,
+    "sizeMax": 400.0,
+    "sizeMin": 10.0,
+    "spacing": 0.08,
+    "texture": {
+      "depth": 1.0,
+      "jitterAngle": true,
+      "jitterPos": true,
+      "jitterScale": true,
+      "lowerLimit": 0.05,
+      "mode": "canvas-fixed",
+      "scale": 1.2,
+      "softness": 0.02
+    }
+  },
+  "resources": {
+    "texture": "asset:textures/grunge.png"
+  },
+  "schema": 1,
+  "tags": [
+    "гранж",
+    "grunge",
+    "грязь",
+    "dirt",
+    "фактура",
+    "texture",
+    "шум",
+    "noise"
+  ]
+}

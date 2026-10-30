@@ -1,0 +1,67 @@
+{
+  "category": "textures",
+  "id": "textures.bark",
+  "name": {
+    "en": "Bark",
+    "ru": "Кора"
+  },
+  "params": {
+    "flow": 0.85,
+    "hardness": 0.6,
+    "head": {
+      "rotationFollow": 1.0,
+      "rotationMode": "tangent",
+      "source": "round"
+    },
+    "opacity": 0.95,
+    "pressureToFlow": {
+      "min": 0.0,
+      "points": [
+        [
+          0.0,
+          0.35
+        ],
+        [
+          1.0,
+          1.0
+        ]
+      ]
+    },
+    "pressureToSize": {
+      "min": 0.4,
+      "points": [
+        [
+          0.0,
+          0.4
+        ],
+        [
+          1.0,
+          1.0
+        ]
+      ]
+    },
+    "size": 60.0,
+    "sizeMax": 300.0,
+    "sizeMin": 8.0,
+    "spacing": 0.04,
+    "texture": {
+      "depth": 0.9,
+      "lowerLimit": 0.15,
+      "mode": "warp-along-stroke",
+      "scale": 0.6,
+      "stretch": 3.0
+    }
+  },
+  "resources": {
+    "texture": "asset:textures/wood.png"
+  },
+  "schema": 1,
+  "tags": [
+    "кора",
+    "bark",
+    "дерево",
+    "wood",
+    "волокна",
+    "grain"
+  ]
+}

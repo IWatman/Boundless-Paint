@@ -1,0 +1,72 @@
+{
+  "category": "textures",
+  "id": "textures.hair",
+  "name": {
+    "en": "Hair strands",
+    "ru": "Пряди"
+  },
+  "params": {
+    "flow": 0.9,
+    "hardness": 0.8,
+    "head": {
+      "rotationFollow": 1.0,
+      "rotationMode": "tangent",
+      "source": "round"
+    },
+    "opacity": 0.85,
+    "pressureToFlow": {
+      "min": 0.0,
+      "points": [
+        [
+          0.0,
+          0.35
+        ],
+        [
+          1.0,
+          1.0
+        ]
+      ]
+    },
+    "pressureToSize": {
+      "min": 0.4,
+      "points": [
+        [
+          0.0,
+          0.2
+        ],
+        [
+          1.0,
+          1.0
+        ]
+      ]
+    },
+    "size": 30.0,
+    "sizeMax": 160.0,
+    "sizeMin": 4.0,
+    "spacing": 0.03,
+    "taperEnd": 30.0,
+    "taperSize": 0.8,
+    "taperStart": 10.0,
+    "texture": {
+      "depth": 1.0,
+      "lowerLimit": 0.05,
+      "mode": "warp-along-stroke",
+      "scale": 0.25,
+      "stretch": 12.0
+    }
+  },
+  "resources": {
+    "texture": "asset:textures/hatch_lines.png"
+  },
+  "schema": 1,
+  "tags": [
+    "волосы",
+    "hair",
+    "пряди",
+    "strands",
+    "мех",
+    "fur",
+    "линии",
+    "lines"
+  ]
+}

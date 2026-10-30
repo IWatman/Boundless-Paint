@@ -24,13 +24,14 @@ from . import (
     pencils,
     pens,
     stamps,
+    textures,
     threed,
     watercolor,
 )
 
 #: Categories in index order.
 MODULES = (
-    pencils, charcoal, chalk, paints, watercolor, effects, outline, stamps, manga, harmony, particles, threed, erasers, pens, markers,
+    pencils, charcoal, chalk, paints, watercolor, effects, outline, stamps, manga, harmony, particles, threed, textures, erasers, pens, markers,
     airbrush,
 )
 

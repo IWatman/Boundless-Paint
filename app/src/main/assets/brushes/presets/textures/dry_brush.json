@@ -1,0 +1,71 @@
+{
+  "category": "textures",
+  "id": "textures.dry_brush",
+  "name": {
+    "en": "Dry brush",
+    "ru": "Сухая кисть"
+  },
+  "params": {
+    "flow": 0.8,
+    "hardness": 0.7,
+    "head": {
+      "rotationFollow": 1.0,
+      "rotationMode": "tangent",
+      "source": "bitmap"
+    },
+    "opacity": 0.9,
+    "pressureToFlow": {
+      "min": 0.0,
+      "points": [
+        [
+          0.0,
+          0.4
+        ],
+        [
+          1.0,
+          1.0
+        ]
+      ]
+    },
+    "pressureToSize": {
+      "min": 0.4,
+      "points": [
+        [
+          0.0,
+          0.3
+        ],
+        [
+          1.0,
+          1.0
+        ]
+      ]
+    },
+    "size": 40.0,
+    "sizeMax": 200.0,
+    "sizeMin": 6.0,
+    "spacing": 0.03,
+    "texture": {
+      "depth": 1.0,
+      "gradation": 0.4,
+      "lowerLimit": 0.1,
+      "mode": "warp-along-stroke",
+      "scale": 0.35,
+      "stretch": 8.0
+    }
+  },
+  "resources": {
+    "head": "asset:heads/bristle_dry.png",
+    "texture": "asset:textures/fabric_fiber.png"
+  },
+  "schema": 1,
+  "tags": [
+    "сухая",
+    "dry",
+    "кисть",
+    "brush",
+    "волокна",
+    "fibres",
+    "щетина",
+    "bristle"
+  ]
+}
