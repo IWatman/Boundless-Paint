@@ -61,8 +61,11 @@ import kotlin.math.sqrt
  *
  * Special engines: a [ColorStampParams] brush with a colour head takes its dab colour from the head pixels,
  * shifted once per stroke from `base_color` to the brush colour ([ColorShift], §1.13). A [DoubleParams] brush
- * composites the shadow of the buffered stroke under its body ([DoubleEffect], §1.12). Both are no-ops for
- * every other brush.
+ * composites the shadow of the buffered stroke under its body ([DoubleEffect], §1.12). A [ScreentoneParams] brush
+ * raises the coverage of a rotated grid of nodes and draws one AA dot per node on composite ([ScreentoneEffect],
+ * §1.14). A [FillBrushParams] brush draws no outline: its trajectory is filled as a closed polygon on [end]
+ * (§1.15; content SOLID only, and the fill appears on pen-up for `draw_preview` on as well: TODO(S6b)). All of
+ * them are no-ops for every other brush.
  *
  * The smudge and the paint kernel take the direct path, so [takeDirty] reports layer tiles and [cancel] restores
  * them; the layer alpha of an alpha-locked layer stays untouched and the reservoir restarts on a re-render.
@@ -190,8 +193,23 @@ class StrokeEngine(
     /** Double outline/shadow (§1.12) of a buffered stroke; null (or the direct path) keeps the plain composite. */
     private val double: DoubleParams? = if (directToLayer) null else params.special as? DoubleParams
 
+    /** Fill brush (spec/tools/m2-brush.md §1.15): the trajectory is filled, the outline dabs are not drawn. */
+    private val fillBrush: FillBrushParams? = params.special as? FillBrushParams
+
+    /** Closed-shape fill applied on [end]: [StrokeOptions.fill] or a fill brush (§1.15). */
+    private val fillSpec: FillSpec? = options.fill ?: if (fillBrush != null) FillSpec() else null
+
+    /** Screentone snap (§1.14) of a buffered stroke; null (or the direct path) keeps the plain dab composite. */
+    private val screentone: ScreentoneEffect? = if (directToLayer) {
+        null
+    } else {
+        (params.special as? ScreentoneParams)?.let {
+            ScreentoneEffect(it, params.size, doc.width, doc.height, color, options.clip)
+        }
+    }
+
     /** Adhesion (spec/tools/m2-brush.md §1.7) of the buffered stroke; 0 keeps the plain composite path. */
-    private val adhesion: Float = if (directToLayer) 0f else params.effects.adhesion.coerceIn(0f, 1f)
+    private val adhesion: Float = if (directToLayer || screentone != null) 0f else params.effects.adhesion.coerceIn(0f, 1f)
 
     /** Load plane `L` of adhesion (§1.7), `L = over(L, m·flow)` per dab; allocated only with adhesion > 0. */
     private val load: TileGrid? = if (adhesion > 0f) TileGrid(doc.width, doc.height, precise = true) else null
@@ -292,7 +310,7 @@ class StrokeEngine(
         finalSink.lift()
         flush()
         if (rerender || params.afterSmoothing > 0f) rerender()
-        if (options.fill != null) fill()
+        if (fillSpec != null) fill()
         if (stylus) ctx.calibration?.observeStrokePeak(peakRaw)
         val commit: StrokeCommit? = when {
             mask != null -> commitMask(mask)
@@ -428,6 +446,7 @@ class StrokeEngine(
             touchBuffer()
             bufferAccess.releaseAll()
         }
+        screentone?.reset()
         generator = newGenerator()
         walker = newWalker(generator, replay = true)
         for (sub in recorded) {
@@ -442,6 +461,11 @@ class StrokeEngine(
     /** Applies symmetry copies to [batch] and renders it. */
     private fun flush() {
         if (batch.size == 0) return
+        if (fillBrush != null) {
+            // Fill brush (§1.15): the outline is not drawn, the trajectory is filled only on end().
+            batch.clear()
+            return
+        }
         val copies = options.copies
         val out = if (copies.transforms.isEmpty() && copies.domain == null) {
             batch
@@ -469,15 +493,22 @@ class StrokeEngine(
             }
             fanned
         }
-        scheduler.run(out, access, kernel, options.clip)
-        // Adhesion (§1.7): the same dabs fill the load plane of the buffer.
-        val lk = loadKernel
-        if (lk != null) scheduler.run(out, loadAccess!!, lk, options.clip)
+        val st = screentone
+        if (st != null) {
+            // Screentone (§1.14): the dabs only raise node coverage; each grown node draws its dot.
+            st.add(out, access)
+        } else {
+            scheduler.run(out, access, kernel, options.clip)
+            // Adhesion (§1.7): the same dabs fill the load plane of the buffer.
+            val lk = loadKernel
+            if (lk != null) scheduler.run(out, loadAccess!!, lk, options.clip)
+        }
         batch.clear()
     }
 
     private fun fill() {
-        val spec = options.fill ?: return
+        val spec = fillSpec ?: return
+        // TODO(S6b): FillContent.PATTERN and FillContent.PROCEDURAL fill like SOLID for now.
         val alpha = spec.opacity.coerceIn(0f, 1f) * color.a
         if (alpha <= 0f) return
         val transforms = listOf(app.painter.core.geom.Affine2.ID) + options.copies.transforms
