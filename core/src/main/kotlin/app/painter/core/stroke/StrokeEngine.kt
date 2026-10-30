@@ -64,8 +64,10 @@ import kotlin.math.sqrt
  * composites the shadow of the buffered stroke under its body ([DoubleEffect], §1.12). A [ScreentoneParams] brush
  * raises the coverage of a rotated grid of nodes and draws one AA dot per node on composite ([ScreentoneEffect],
  * §1.14). A [FillBrushParams] brush draws no outline: its trajectory is filled as a closed polygon on [end]
- * (§1.15; content SOLID only, and the fill appears on pen-up for `draw_preview` on as well: TODO(S6b)). All of
- * them are no-ops for every other brush.
+ * (§1.15; content SOLID only, and the fill appears on pen-up for `draw_preview` on as well: TODO(S6b)). A
+ * [HarmonyParams] brush paints no dabs of its own: it keeps the points of its path and draws lines to the
+ * earlier ones by the rule of its variant ([HarmonyEffect], §1.11). All of them are no-ops for every other
+ * brush.
  *
  * The smudge and the paint kernel take the direct path, so [takeDirty] reports layer tiles and [cancel] restores
  * them; the layer alpha of an alpha-locked layer stays untouched and the reservoir restarts on a re-render.
@@ -208,8 +210,18 @@ class StrokeEngine(
         }
     }
 
+    /** Harmony (spec/tools/m2-brush.md §1.11): the dabs only mark the path, [HarmonyEffect] draws the lines. */
+    private val harmony: HarmonyEffect? = if (directToLayer) {
+        null
+    } else {
+        (params.special as? HarmonyParams)?.let {
+            HarmonyEffect(it, ctx.seed, params.size, doc.width, doc.height, color, options.clip)
+        }
+    }
+
     /** Adhesion (spec/tools/m2-brush.md §1.7) of the buffered stroke; 0 keeps the plain composite path. */
-    private val adhesion: Float = if (directToLayer || screentone != null) 0f else params.effects.adhesion.coerceIn(0f, 1f)
+    private val adhesion: Float =
+        if (directToLayer || screentone != null || harmony != null) 0f else params.effects.adhesion.coerceIn(0f, 1f)
 
     /** Load plane `L` of adhesion (§1.7), `L = over(L, m·flow)` per dab; allocated only with adhesion > 0. */
     private val load: TileGrid? = if (adhesion > 0f) TileGrid(doc.width, doc.height, precise = true) else null
@@ -447,6 +459,7 @@ class StrokeEngine(
             bufferAccess.releaseAll()
         }
         screentone?.reset()
+        harmony?.reset()
         generator = newGenerator()
         walker = newWalker(generator, replay = true)
         for (sub in recorded) {
@@ -493,8 +506,12 @@ class StrokeEngine(
             }
             fanned
         }
+        val hm = harmony
         val st = screentone
-        if (st != null) {
+        if (hm != null) {
+            // Harmony (§1.11): the dabs paint nothing of their own, the effect draws the path and the links.
+            hm.add(out, access)
+        } else if (st != null) {
             // Screentone (§1.14): the dabs only raise node coverage; each grown node draws its dot.
             st.add(out, access)
         } else {
