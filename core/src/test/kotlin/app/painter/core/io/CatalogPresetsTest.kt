@@ -1,5 +1,6 @@
 package app.painter.core.io
 
+import app.painter.core.stroke.FilterBrushParams
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonArray
@@ -60,12 +61,30 @@ class CatalogPresetsTest {
             for (ref in listOfNotNull(brush.resources.head, brush.resources.texture, brush.resources.particle)) {
                 assertTrue(ref in refs, "${f.path}: unknown resource ref $ref")
             }
-            assertTrue(brush.params.special == null, "${f.path}: S1 presets must not use a special engine")
+            // S6 filter brushes are the only special engine allowed so far, and only off the stroke.
+            val special = brush.params.special
+            assertTrue(
+                special == null || (special is FilterBrushParams && !special.onStroke),
+                "${f.path}: only an off-stroke filter engine may be a special",
+            )
             // S2a paper texture: the grain params are meaningless without the texture image next to them.
             assertTrue(
                 brush.params.texture == null || brush.resources.texture != null,
                 "${f.path}: texture params need a texture image",
             )
+        }
+    }
+
+    @Test
+    fun everyEffectsPresetIsAnOffStrokeFilter() {
+        val files = presetFiles(brushAssets().resolve("presets/effects"))
+        assertTrue(files.size >= 5, "too few effects presets: ${files.size}")
+        for (f in files) {
+            // The `effects` category is the S6 filter engine: a kind plus a strength, run over the layer.
+            val filter = BrushIO.decode(f.readText()).params.special as? FilterBrushParams
+            assertTrue(filter != null, "${f.path}: effects presets must use FilterBrushParams")
+            assertTrue(!filter!!.onStroke, "${f.path}: the filter must run off the stroke")
+            assertTrue(filter.strength in 0f..1f, "${f.path}: filter strength out of 0..1: ${filter.strength}")
         }
     }
 

@@ -9,10 +9,10 @@ from __future__ import annotations
 
 import json
 
-from . import airbrush, chalk, charcoal, erasers, markers, paints, pencils, pens
+from . import airbrush, chalk, charcoal, effects, erasers, markers, paints, pencils, pens
 
 #: Categories in index order.
-MODULES = (pencils, charcoal, chalk, paints, erasers, pens, markers, airbrush)
+MODULES = (pencils, charcoal, chalk, paints, effects, erasers, pens, markers, airbrush)
 
 #: Prefilled mode favorites; `PAINT` up to 3 ids, `ERASE` one eraser id.
 FAVORITES = {

@@ -1,0 +1,68 @@
+{
+  "category": "effects",
+  "id": "effects.blur_soft",
+  "name": {
+    "en": "Blur, soft",
+    "ru": "Размытие, мягкое"
+  },
+  "params": {
+    "flow": 1.0,
+    "hardness": 0.1,
+    "head": {
+      "source": "round"
+    },
+    "opacity": 1.0,
+    "pressureToFlow": {
+      "min": 0.0,
+      "points": [
+        [
+          0.0,
+          0.35
+        ],
+        [
+          1.0,
+          1.0
+        ]
+      ]
+    },
+    "pressureToSize": {
+      "min": 0.25,
+      "points": [
+        [
+          0.0,
+          0.0
+        ],
+        [
+          0.35,
+          0.55
+        ],
+        [
+          1.0,
+          1.0
+        ]
+      ]
+    },
+    "size": 60.0,
+    "sizeMax": 400.0,
+    "sizeMin": 8.0,
+    "spacing": 0.2,
+    "special": {
+      "filter": "BLUR",
+      "onStroke": false,
+      "strength": 0.5,
+      "type": "filter"
+    }
+  },
+  "resources": {},
+  "schema": 1,
+  "tags": [
+    "размытие",
+    "blur",
+    "мягкое",
+    "soft",
+    "фильтр",
+    "filter",
+    "эффект",
+    "effect"
+  ]
+}

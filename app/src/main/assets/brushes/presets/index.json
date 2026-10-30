@@ -56,6 +56,20 @@
     },
     {
       "brushes": [
+        "effects.blur_soft",
+        "effects.blur_strong",
+        "effects.sharpen",
+        "effects.glow",
+        "effects.glow_soft"
+      ],
+      "id": "effects",
+      "name": {
+        "en": "Effects",
+        "ru": "Эффекты"
+      }
+    },
+    {
+      "brushes": [
         "erasers.hard",
         "erasers.soft",
         "erasers.grainy"

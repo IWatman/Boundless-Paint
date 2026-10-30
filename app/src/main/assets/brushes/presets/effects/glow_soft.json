@@ -1,0 +1,68 @@
+{
+  "category": "effects",
+  "id": "effects.glow_soft",
+  "name": {
+    "en": "Glow, soft dodge",
+    "ru": "Свечение, мягкое осветление"
+  },
+  "params": {
+    "flow": 1.0,
+    "hardness": 0.2,
+    "head": {
+      "source": "round"
+    },
+    "opacity": 1.0,
+    "pressureToFlow": {
+      "min": 0.0,
+      "points": [
+        [
+          0.0,
+          0.35
+        ],
+        [
+          1.0,
+          1.0
+        ]
+      ]
+    },
+    "pressureToSize": {
+      "min": 0.25,
+      "points": [
+        [
+          0.0,
+          0.0
+        ],
+        [
+          0.35,
+          0.55
+        ],
+        [
+          1.0,
+          1.0
+        ]
+      ]
+    },
+    "size": 60.0,
+    "sizeMax": 360.0,
+    "sizeMin": 6.0,
+    "spacing": 0.2,
+    "special": {
+      "filter": "GLOW",
+      "onStroke": false,
+      "strength": 0.3,
+      "type": "filter"
+    }
+  },
+  "resources": {},
+  "schema": 1,
+  "tags": [
+    "свечение",
+    "glow",
+    "осветление",
+    "dodge",
+    "фильтр",
+    "filter",
+    "мягкое",
+    "soft"
+  ]
+}

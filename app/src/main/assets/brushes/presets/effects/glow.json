@@ -1,0 +1,68 @@
+{
+  "category": "effects",
+  "id": "effects.glow",
+  "name": {
+    "en": "Glow",
+    "ru": "Свечение"
+  },
+  "params": {
+    "flow": 1.0,
+    "hardness": 0.05,
+    "head": {
+      "source": "round"
+    },
+    "opacity": 1.0,
+    "pressureToFlow": {
+      "min": 0.0,
+      "points": [
+        [
+          0.0,
+          0.35
+        ],
+        [
+          1.0,
+          1.0
+        ]
+      ]
+    },
+    "pressureToSize": {
+      "min": 0.25,
+      "points": [
+        [
+          0.0,
+          0.0
+        ],
+        [
+          0.35,
+          0.55
+        ],
+        [
+          1.0,
+          1.0
+        ]
+      ]
+    },
+    "size": 80.0,
+    "sizeMax": 480.0,
+    "sizeMin": 8.0,
+    "spacing": 0.2,
+    "special": {
+      "filter": "GLOW",
+      "onStroke": false,
+      "strength": 0.6,
+      "type": "filter"
+    }
+  },
+  "resources": {},
+  "schema": 1,
+  "tags": [
+    "свечение",
+    "glow",
+    "фильтр",
+    "filter",
+    "блик",
+    "bloom",
+    "мягкий свет",
+    "soft light"
+  ]
+}

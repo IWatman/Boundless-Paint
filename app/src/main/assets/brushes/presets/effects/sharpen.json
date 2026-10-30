@@ -1,0 +1,68 @@
+{
+  "category": "effects",
+  "id": "effects.sharpen",
+  "name": {
+    "en": "Sharpen",
+    "ru": "Резкость"
+  },
+  "params": {
+    "flow": 1.0,
+    "hardness": 0.8,
+    "head": {
+      "source": "round"
+    },
+    "opacity": 1.0,
+    "pressureToFlow": {
+      "min": 0.0,
+      "points": [
+        [
+          0.0,
+          0.35
+        ],
+        [
+          1.0,
+          1.0
+        ]
+      ]
+    },
+    "pressureToSize": {
+      "min": 0.25,
+      "points": [
+        [
+          0.0,
+          0.0
+        ],
+        [
+          0.35,
+          0.55
+        ],
+        [
+          1.0,
+          1.0
+        ]
+      ]
+    },
+    "size": 40.0,
+    "sizeMax": 240.0,
+    "sizeMin": 4.0,
+    "spacing": 0.15,
+    "special": {
+      "filter": "SHARPEN",
+      "onStroke": false,
+      "strength": 0.6,
+      "type": "filter"
+    }
+  },
+  "resources": {},
+  "schema": 1,
+  "tags": [
+    "резкость",
+    "sharpen",
+    "фильтр",
+    "filter",
+    "контур",
+    "edge",
+    "детали",
+    "detail"
+  ]
+}
