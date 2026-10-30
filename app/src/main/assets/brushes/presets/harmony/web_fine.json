@@ -1,0 +1,68 @@
+{
+  "category": "harmony",
+  "id": "harmony.web_fine",
+  "name": {
+    "en": "Fine web",
+    "ru": "Тонкая сеть"
+  },
+  "params": {
+    "flow": 1.0,
+    "hardness": 0.95,
+    "head": {
+      "source": "round"
+    },
+    "opacity": 0.95,
+    "pressureToFlow": {
+      "min": 0.0,
+      "points": [
+        [
+          0.0,
+          0.7
+        ],
+        [
+          1.0,
+          1.0
+        ]
+      ]
+    },
+    "pressureToSize": {
+      "min": 0.7,
+      "points": [
+        [
+          0.0,
+          0.0
+        ],
+        [
+          1.0,
+          1.0
+        ]
+      ]
+    },
+    "size": 0.8,
+    "sizeMax": 4.0,
+    "sizeMin": 0.3,
+    "spacing": 0.02,
+    "special": {
+      "density": 0.7,
+      "spread": 1.0,
+      "type": "harmony",
+      "variant": "WEB"
+    },
+    "taperEnd": 0.0,
+    "taperStart": 0.0
+  },
+  "resources": {},
+  "schema": 1,
+  "tags": [
+    "сеть",
+    "web",
+    "тонкая",
+    "fine",
+    "сетка",
+    "mesh",
+    "гармония",
+    "harmony",
+    "паутина",
+    "cobweb"
+  ]
+}

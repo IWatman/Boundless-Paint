@@ -1,0 +1,68 @@
+{
+  "category": "harmony",
+  "id": "harmony.web",
+  "name": {
+    "en": "Web lines",
+    "ru": "Сетчатые линии"
+  },
+  "params": {
+    "flow": 1.0,
+    "hardness": 0.95,
+    "head": {
+      "source": "round"
+    },
+    "opacity": 1.0,
+    "pressureToFlow": {
+      "min": 0.0,
+      "points": [
+        [
+          0.0,
+          0.7
+        ],
+        [
+          1.0,
+          1.0
+        ]
+      ]
+    },
+    "pressureToSize": {
+      "min": 0.7,
+      "points": [
+        [
+          0.0,
+          0.0
+        ],
+        [
+          1.0,
+          1.0
+        ]
+      ]
+    },
+    "size": 1.0,
+    "sizeMax": 5.0,
+    "sizeMin": 0.4,
+    "spacing": 0.02,
+    "special": {
+      "density": 1.0,
+      "spread": 1.0,
+      "type": "harmony",
+      "variant": "WEB"
+    },
+    "taperEnd": 0.0,
+    "taperStart": 0.0
+  },
+  "resources": {},
+  "schema": 1,
+  "tags": [
+    "сеть",
+    "web",
+    "сетка",
+    "mesh",
+    "гармония",
+    "harmony",
+    "линия",
+    "line",
+    "паутина",
+    "cobweb"
+  ]
+}

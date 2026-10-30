@@ -1,0 +1,66 @@
+{
+  "category": "harmony",
+  "id": "harmony.sketchy",
+  "name": {
+    "en": "Sketchy line",
+    "ru": "Эскизная линия"
+  },
+  "params": {
+    "flow": 1.0,
+    "hardness": 0.95,
+    "head": {
+      "source": "round"
+    },
+    "opacity": 1.0,
+    "pressureToFlow": {
+      "min": 0.0,
+      "points": [
+        [
+          0.0,
+          0.7
+        ],
+        [
+          1.0,
+          1.0
+        ]
+      ]
+    },
+    "pressureToSize": {
+      "min": 0.7,
+      "points": [
+        [
+          0.0,
+          0.0
+        ],
+        [
+          1.0,
+          1.0
+        ]
+      ]
+    },
+    "size": 1.5,
+    "sizeMax": 8.0,
+    "sizeMin": 0.5,
+    "spacing": 0.02,
+    "special": {
+      "density": 1.0,
+      "spread": 1.0,
+      "type": "harmony",
+      "variant": "SKETCHY"
+    },
+    "taperEnd": 0.0,
+    "taperStart": 0.0
+  },
+  "resources": {},
+  "schema": 1,
+  "tags": [
+    "эскиз",
+    "sketch",
+    "гармония",
+    "harmony",
+    "линия",
+    "line",
+    "штриховка",
+    "hatching"
+  ]
+}

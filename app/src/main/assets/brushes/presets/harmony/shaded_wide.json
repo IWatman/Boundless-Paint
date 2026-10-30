@@ -1,0 +1,70 @@
+{
+  "category": "harmony",
+  "id": "harmony.shaded_wide",
+  "name": {
+    "en": "Wide shading",
+    "ru": "Широкая штриховка"
+  },
+  "params": {
+    "flow": 1.0,
+    "hardness": 0.95,
+    "head": {
+      "source": "round"
+    },
+    "opacity": 1.0,
+    "pressureToFlow": {
+      "min": 0.0,
+      "points": [
+        [
+          0.0,
+          0.6
+        ],
+        [
+          1.0,
+          1.0
+        ]
+      ]
+    },
+    "pressureToSize": {
+      "min": 0.6,
+      "points": [
+        [
+          0.0,
+          0.0
+        ],
+        [
+          1.0,
+          1.0
+        ]
+      ]
+    },
+    "size": 1.2,
+    "sizeMax": 6.0,
+    "sizeMin": 0.4,
+    "spacing": 0.02,
+    "special": {
+      "density": 1.0,
+      "spread": 1.5,
+      "type": "harmony",
+      "variant": "SHADED"
+    },
+    "taperEnd": 0.0,
+    "taperStart": 0.0
+  },
+  "resources": {},
+  "schema": 1,
+  "tags": [
+    "тень",
+    "shading",
+    "широкая",
+    "wide",
+    "покрытие",
+    "coverage",
+    "гармония",
+    "harmony",
+    "линия",
+    "line",
+    "тон",
+    "tone"
+  ]
+}

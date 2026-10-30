@@ -120,6 +120,21 @@
     },
     {
       "brushes": [
+        "harmony.sketchy",
+        "harmony.sketchy_dense",
+        "harmony.shaded",
+        "harmony.shaded_wide",
+        "harmony.web",
+        "harmony.web_fine"
+      ],
+      "id": "harmony",
+      "name": {
+        "en": "Harmony",
+        "ru": "Гармония"
+      }
+    },
+    {
+      "brushes": [
         "erasers.hard",
         "erasers.soft",
         "erasers.grainy"
