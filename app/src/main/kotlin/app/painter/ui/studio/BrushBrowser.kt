@@ -10,13 +10,14 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -38,15 +39,18 @@ private val BrushRowHeight = 56.dp
 
 /**
  * Built-in brush browser: a category column on the left and the presets of the picked category on the right.
- * Tapping a preset calls [StudioActions.selectBrush], which closes the popup.
+ * It opens on the category of the current brush with that category and the brush scrolled into view. Tapping a
+ * preset calls [StudioActions.selectBrush], which closes the popup.
  */
 @Composable
 internal fun BrushBrowser(state: StudioUiState, actions: StudioActions, modifier: Modifier = Modifier) {
     val categories = state.brushCategories
     if (categories.isEmpty()) return
-    var picked by rememberSaveable { mutableIntStateOf(0) }
+    val home = categories.indexOfFirst { c -> c.brushes.any { it.id == state.currentBrushId } }.coerceAtLeast(0)
+    var picked by rememberSaveable { mutableIntStateOf(home) }
     val index = picked.coerceIn(0, categories.lastIndex)
     val current = categories[index]
+    val categoryList = rememberLazyListState(initialFirstVisibleItemIndex = (home - 2).coerceAtLeast(0))
     PanelSurface(modifier.width(BrowserWidth).height(BrowserHeight)) {
         Column {
             Text(
@@ -55,8 +59,8 @@ internal fun BrushBrowser(state: StudioUiState, actions: StudioActions, modifier
                 modifier = Modifier.padding(start = 12.dp, top = 12.dp, bottom = 8.dp),
             )
             Row(Modifier.fillMaxWidth().weight(1f)) {
-                Column(Modifier.width(CategoryWidth).verticalScroll(rememberScrollState())) {
-                    categories.forEachIndexed { i, category ->
+                LazyColumn(Modifier.width(CategoryWidth), state = categoryList) {
+                    itemsIndexed(categories) { i, category ->
                         CategoryRow(
                             name = category.name,
                             selected = i == index,
@@ -64,13 +68,18 @@ internal fun BrushBrowser(state: StudioUiState, actions: StudioActions, modifier
                         )
                     }
                 }
-                LazyColumn(Modifier.weight(1f)) {
-                    items(current.brushes, key = { it.id }) { brush ->
-                        BrushRow(
-                            brush = brush,
-                            selected = brush.id == state.currentBrushId,
-                            onClick = { actions.selectBrush(brush.id) },
-                        )
+                // A fresh list per category, so another category starts at its top and the current one at its brush.
+                key(index) {
+                    val selectedRow = current.brushes.indexOfFirst { it.id == state.currentBrushId }
+                    val brushList = rememberLazyListState(initialFirstVisibleItemIndex = (selectedRow - 2).coerceAtLeast(0))
+                    LazyColumn(Modifier.weight(1f), state = brushList) {
+                        items(current.brushes, key = { it.id }) { brush ->
+                            BrushRow(
+                                brush = brush,
+                                selected = brush.id == state.currentBrushId,
+                                onClick = { actions.selectBrush(brush.id) },
+                            )
+                        }
                     }
                 }
             }
