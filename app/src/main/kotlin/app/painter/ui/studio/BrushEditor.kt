@@ -58,8 +58,8 @@ private val EditorTabs = listOf(
 )
 
 /**
- * The brush editor (spec/tools/m2-brush.md §4.2, part 1): the brush name, the live preview pad, the Cancel/Reset/
- * Confirm buttons and the tabs. Only the Stroke tab has controls so far; the other tabs say "Coming soon".
+ * The brush editor (spec/tools/m2-brush.md §4.2, parts 1–2): the brush name, the live preview pad, the Cancel/Reset/
+ * Confirm buttons and the tabs. Stroke, Head and Texture have controls; Paint and Special still say "Coming soon".
  *
  * The working copy lives in [StudioUiState.editorParams] and the whole panel is stateless about it: every slider
  * sends the edited [BrushParams] to [StudioActions.updateEditor]. Confirm applies the copy to the current mode's
@@ -101,15 +101,11 @@ internal fun BrushEditor(state: StudioUiState, actions: StudioActions, modifier:
                     .padding(horizontal = 14.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(2.dp),
             ) {
-                if (tab == 0) {
-                    StrokeTab(params = params, actions = actions)
-                } else {
-                    Text(
-                        stringResource(R.string.brush_editor_coming_soon),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(vertical = 24.dp),
-                    )
+                when (tab) {
+                    0 -> StrokeTab(params = params, actions = actions)
+                    1 -> HeadTab(params = params, actions = actions)
+                    2 -> TextureTab(params = params, actions = actions, hasImage = state.editorHasTexture)
+                    else -> ComingSoonTab()
                 }
             }
         }
@@ -171,8 +167,8 @@ private fun EditorTabRow(selected: Int, onPick: (Int) -> Unit) {
 }
 
 /**
- * Basic stroke parameters (spec/tools/m2-brush.md §4.2): size and its range, opacity, flow, spacing, hardness,
- * smoothing and both taper lengths. Ranges follow the model: fractions are 0..1, smoothing uses the 0..100 UI
+ * Basic stroke parameters (spec/tools/m2-brush.md §4.2): size and its range, opacity, flow, spacing,
+ * smoothing and both taper lengths (hardness lives on the Head tab). Ranges follow the model: fractions are 0..1, smoothing uses the 0..100 UI
  * scale, taper lengths are document pixels.
  */
 @Composable
@@ -233,14 +229,6 @@ private fun StrokeTab(params: BrushParams, actions: StudioActions) {
         format = { formatSliderValue(it, 1f, 2) },
         step = 0.01f,
         onChange = { actions.updateEditor(params.copy(spacing = it)) },
-    )
-    ParamSlider(
-        label = stringResource(R.string.hardness),
-        value = params.hardness,
-        range = 0f..1f,
-        format = { formatSliderValue(it, 1f, 2) },
-        step = 0.01f,
-        onChange = { actions.updateEditor(params.copy(hardness = it)) },
     )
     ParamSlider(
         label = stringResource(R.string.brush_editor_smoothing),

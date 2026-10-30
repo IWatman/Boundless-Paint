@@ -21,13 +21,14 @@ private val ToggleChipHeight = 32.dp
 
 /**
  * On/off toggle of a tool bar: an accent fill and a check mark while [checked], a muted label otherwise, so that
- * a toggle reads differently from the plain action buttons next to it.
+ * a toggle reads differently from the plain action buttons next to it. [enabled] = false greys it out.
  */
 @Composable
-fun ToggleChip(label: String, checked: Boolean, onToggle: () -> Unit) {
+fun ToggleChip(label: String, checked: Boolean, enabled: Boolean = true, onToggle: () -> Unit) {
     FilterChip(
         selected = checked,
         onClick = onToggle,
+        enabled = enabled,
         label = { Text(label) },
         leadingIcon = if (checked) {
             {

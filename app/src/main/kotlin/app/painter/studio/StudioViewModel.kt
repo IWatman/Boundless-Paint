@@ -558,6 +558,7 @@ class StudioViewModel(
                 editorParams = currentParams(),
                 editorPreview = null,
                 editorBrushName = currentBrush?.name?.get(Locale.getDefault().language).orEmpty(),
+                editorHasTexture = currentBrush?.resources?.texture != null,
             )
         }
         scheduleEditorPreview(delayMs = 0)
@@ -587,7 +588,9 @@ class StudioViewModel(
     private fun closeBrushEditor() {
         editorRenderJob?.cancel()
         editorRenderJob = null
-        _state.update { it.copy(editorParams = null, editorPreview = null, editorBrushName = "") }
+        _state.update {
+            it.copy(editorParams = null, editorPreview = null, editorBrushName = "", editorHasTexture = false)
+        }
     }
 
     /**
@@ -599,10 +602,12 @@ class StudioViewModel(
         editorRenderJob?.cancel()
         val params = _state.value.editorParams ?: return
         val brush = strokeBrush(params)
-        val resources = currentBrush?.let { brushes.resources(it) } ?: BrushResources.EMPTY
         editorRenderJob = viewModelScope.launch {
             if (delayMs > 0) delay(delayMs)
             val bitmap = withContext(Dispatchers.Default) {
+                // Texture softness and invert are baked into the image when the resources are built (§1.4), so the
+                // preview decodes them from the working copy instead of the per-preset cache.
+                val resources: BrushResources = brushes.editedResources(brush)
                 runCatching { BrushPreviewRenderer.render(brush, resources) }.getOrNull()
             } ?: return@launch
             _state.update { if (it.editorParams == params) it.copy(editorPreview = bitmap.asImageBitmap()) else it }

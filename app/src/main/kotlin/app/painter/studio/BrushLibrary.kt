@@ -35,6 +35,7 @@ class BrushLibrary(private val assets: AssetManager) {
     private val byId = HashMap<String, Brush>()
     private val favoriteIds = HashMap<String, List<String>>()
     private val resourceCache = HashMap<String, BrushResources>()
+    private val editedCache = HashMap<String, BrushResources>()
 
     private val resolver = ResourceResolver { ref -> image(ref) }
 
@@ -58,6 +59,30 @@ class BrushLibrary(private val assets: AssetManager) {
     fun resources(brush: Brush): BrushResources = synchronized(resourceCache) {
         resourceCache.getOrPut(brush.id) {
             runCatching { BrushResources.load(brush, resolver) }.getOrDefault(BrushResources.EMPTY)
+        }
+    }
+
+    /**
+     * Decoded [BrushResources] of an *edited* brush, for the brush editor preview: the head curve/invert and the
+     * texture invert/softness are baked into the images when they are built (spec/tools/m2-brush.md §1.4), so the
+     * per-id cache of [resources] would show stale grain. Cached by the references plus those parameters, which are
+     * the only inputs of the build; a brush without references yields [BrushResources.EMPTY].
+     */
+    fun editedResources(brush: Brush): BrushResources {
+        val refs = brush.resources
+        if (refs.head == null && refs.texture == null && refs.particle == null) return BrushResources.EMPTY
+        val head = brush.params.head
+        val texture = brush.params.texture
+        val key = buildString {
+            append(brush.id).append('|').append(refs.head).append(head.invert).append(head.curve)
+            append('|').append(refs.texture).append(texture?.invert).append(texture?.softness)
+        }
+        return synchronized(resourceCache) {
+            editedCache[key] ?: runCatching { BrushResources.load(brush, resolver) }.getOrDefault(BrushResources.EMPTY)
+                .also {
+                    if (editedCache.size >= EDITED_CACHE_LIMIT) editedCache.clear()
+                    editedCache[key] = it
+                }
         }
     }
 
@@ -158,5 +183,8 @@ class BrushLibrary(private val assets: AssetManager) {
         const val INDEX_PATH = "brushes/presets/index.json"
         const val PRESET_PATH = "brushes/presets/"
         const val ASSET_PATH = "brushes/"
+
+        /** How many edited builds [editedResources] keeps: a softness drag only needs the last few. */
+        const val EDITED_CACHE_LIMIT = 16
     }
 }

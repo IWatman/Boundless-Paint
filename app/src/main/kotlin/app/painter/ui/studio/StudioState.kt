@@ -213,6 +213,8 @@ data class StudioUiState(
     val editorPreview: ImageBitmap? = null,
     /** Localized name of the brush the editor edits; empty for the Blend mode, which has no preset. */
     val editorBrushName: String = "",
+    /** True when the edited brush references a texture image; without one the Texture tab cannot turn the grain on. */
+    val editorHasTexture: Boolean = false,
 )
 
 /**
