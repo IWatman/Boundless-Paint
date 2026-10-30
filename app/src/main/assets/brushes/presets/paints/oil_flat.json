@@ -1,0 +1,90 @@
+{
+  "category": "paints",
+  "id": "paints.oil_flat",
+  "name": {
+    "en": "Oil, flat",
+    "ru": "Масло, плоская"
+  },
+  "params": {
+    "dynamics": [
+      {
+        "curve": {
+          "min": 0.0,
+          "points": [
+            [
+              0.0,
+              0.6
+            ],
+            [
+              1.0,
+              1.0
+            ]
+          ]
+        },
+        "source": "PRESSURE",
+        "target": "FLOW"
+      }
+    ],
+    "effects": {
+      "adhesion": 0.15
+    },
+    "flow": 0.8,
+    "hardness": 0.65,
+    "head": {
+      "angle": 0.0,
+      "aspect": 0.5,
+      "depth": 0.35,
+      "rotationFollow": 0.9,
+      "rotationMode": "tangent",
+      "source": "bitmap"
+    },
+    "jitter": {
+      "angle": 0.12,
+      "scatter": 0.01,
+      "size": 0.02
+    },
+    "opacity": 0.94,
+    "paint": {
+      "mixIn": 0.4
+    },
+    "pressureToSize": {
+      "min": 0.3,
+      "points": [
+        [
+          0.0,
+          0.0
+        ],
+        [
+          0.5,
+          0.6
+        ],
+        [
+          1.0,
+          1.0
+        ]
+      ]
+    },
+    "size": 32.0,
+    "sizeMax": 320.0,
+    "sizeMin": 3.0,
+    "spacing": 0.03,
+    "taperEnd": 6.0,
+    "taperOpacity": 0.4,
+    "taperSize": 0.85,
+    "taperStart": 1.5
+  },
+  "resources": {
+    "head": "asset:heads/bristle_flat.png"
+  },
+  "schema": 1,
+  "tags": [
+    "масло",
+    "oil",
+    "плоская",
+    "flat",
+    "флейц",
+    "bright",
+    "живопись",
+    "painting"
+  ]
+}

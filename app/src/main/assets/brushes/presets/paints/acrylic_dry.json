@@ -1,0 +1,106 @@
+{
+  "category": "paints",
+  "id": "paints.acrylic_dry",
+  "name": {
+    "en": "Acrylic, dry brush",
+    "ru": "Акрил, сухая кисть"
+  },
+  "params": {
+    "dynamics": [
+      {
+        "curve": {
+          "min": 0.0,
+          "points": [
+            [
+              0.0,
+              0.55
+            ],
+            [
+              1.0,
+              1.0
+            ]
+          ]
+        },
+        "source": "PRESSURE",
+        "target": "TEX_DEPTH"
+      }
+    ],
+    "effects": {
+      "adhesion": 0.5
+    },
+    "flow": 0.42,
+    "hardness": 0.6,
+    "head": {
+      "depth": 0.45,
+      "rotationFollow": 0.5,
+      "rotationMode": "tangent",
+      "source": "bitmap"
+    },
+    "jitter": {
+      "angle": 0.4,
+      "scatter": 0.02,
+      "size": 0.05
+    },
+    "opacity": 0.88,
+    "pressureToFlow": {
+      "min": 0.0,
+      "points": [
+        [
+          0.0,
+          0.25
+        ],
+        [
+          1.0,
+          1.0
+        ]
+      ]
+    },
+    "pressureToSize": {
+      "min": 0.28,
+      "points": [
+        [
+          0.0,
+          0.0
+        ],
+        [
+          0.5,
+          0.55
+        ],
+        [
+          1.0,
+          1.0
+        ]
+      ]
+    },
+    "size": 26.0,
+    "sizeMax": 260.0,
+    "sizeMin": 2.0,
+    "spacing": 0.06,
+    "taperEnd": 12.0,
+    "taperOpacity": 0.35,
+    "taperShape": "smooth",
+    "taperSize": 0.8,
+    "taperStart": 3.0,
+    "texture": {
+      "depth": 0.9,
+      "lowerLimit": 0.2,
+      "mode": "canvas-fixed",
+      "scale": 0.7
+    }
+  },
+  "resources": {
+    "head": "asset:heads/bristle_dry.png",
+    "texture": "asset:textures/fabric_canvas.png"
+  },
+  "schema": 1,
+  "tags": [
+    "акрил",
+    "acrylic",
+    "сухая кисть",
+    "dry brush",
+    "холст",
+    "canvas",
+    "фактура",
+    "texture"
+  ]
+}

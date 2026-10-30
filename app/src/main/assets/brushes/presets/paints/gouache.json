@@ -1,0 +1,73 @@
+{
+  "category": "paints",
+  "id": "paints.gouache",
+  "name": {
+    "en": "Gouache",
+    "ru": "Гуашь"
+  },
+  "params": {
+    "flow": 0.85,
+    "hardness": 0.3,
+    "head": {
+      "source": "round"
+    },
+    "jitter": {
+      "size": 0.015
+    },
+    "opacity": 1.0,
+    "paint": {
+      "dilution": 0.1,
+      "mixIn": 0.2
+    },
+    "pressureToFlow": {
+      "min": 0.0,
+      "points": [
+        [
+          0.0,
+          0.6
+        ],
+        [
+          1.0,
+          1.0
+        ]
+      ]
+    },
+    "pressureToSize": {
+      "min": 0.3,
+      "points": [
+        [
+          0.0,
+          0.0
+        ],
+        [
+          0.5,
+          0.6
+        ],
+        [
+          1.0,
+          1.0
+        ]
+      ]
+    },
+    "size": 20.0,
+    "sizeMax": 200.0,
+    "sizeMin": 2.0,
+    "spacing": 0.04,
+    "taperEnd": 8.0,
+    "taperOpacity": 0.35,
+    "taperSize": 0.9,
+    "taperStart": 2.0
+  },
+  "resources": {},
+  "schema": 1,
+  "tags": [
+    "гуашь",
+    "gouache",
+    "кроющая",
+    "opaque",
+    "плакат",
+    "poster",
+    "матовый",
+    "matte"
+  ]
+}

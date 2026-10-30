@@ -41,6 +41,21 @@
     },
     {
       "brushes": [
+        "paints.oil_round",
+        "paints.oil_flat",
+        "paints.gouache",
+        "paints.acrylic_dry",
+        "paints.ink_wash",
+        "paints.watercolor"
+      ],
+      "id": "paints",
+      "name": {
+        "en": "Paints",
+        "ru": "Краски"
+      }
+    },
+    {
+      "brushes": [
         "erasers.hard",
         "erasers.soft",
         "erasers.grainy"

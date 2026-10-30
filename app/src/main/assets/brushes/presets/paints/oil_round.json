@@ -1,0 +1,91 @@
+{
+  "category": "paints",
+  "id": "paints.oil_round",
+  "name": {
+    "en": "Oil, round",
+    "ru": "Масло, круглая"
+  },
+  "params": {
+    "dynamics": [
+      {
+        "curve": {
+          "min": 0.0,
+          "points": [
+            [
+              0.0,
+              0.5
+            ],
+            [
+              1.0,
+              1.0
+            ]
+          ]
+        },
+        "source": "PRESSURE",
+        "target": "FLOW"
+      }
+    ],
+    "effects": {
+      "adhesion": 0.2
+    },
+    "flow": 0.7,
+    "hardness": 0.6,
+    "head": {
+      "angle": 0.0,
+      "aspect": 0.0,
+      "depth": 0.4,
+      "rotationFollow": 0.55,
+      "rotationMode": "tangent",
+      "source": "bitmap"
+    },
+    "jitter": {
+      "angle": 0.3,
+      "scatter": 0.02,
+      "size": 0.03
+    },
+    "opacity": 0.92,
+    "paint": {
+      "mixIn": 0.5,
+      "pull": 0.6
+    },
+    "pressureToSize": {
+      "min": 0.25,
+      "points": [
+        [
+          0.0,
+          0.0
+        ],
+        [
+          0.5,
+          0.55
+        ],
+        [
+          1.0,
+          1.0
+        ]
+      ]
+    },
+    "size": 24.0,
+    "sizeMax": 240.0,
+    "sizeMin": 2.0,
+    "spacing": 0.04,
+    "taperEnd": 8.0,
+    "taperOpacity": 0.5,
+    "taperSize": 0.9,
+    "taperStart": 2.0
+  },
+  "resources": {
+    "head": "asset:heads/bristle_round.png"
+  },
+  "schema": 1,
+  "tags": [
+    "масло",
+    "oil",
+    "круглая",
+    "round",
+    "живопись",
+    "painting",
+    "корпусная",
+    "impasto"
+  ]
+}
