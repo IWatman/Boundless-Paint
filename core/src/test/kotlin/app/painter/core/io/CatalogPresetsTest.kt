@@ -1,5 +1,7 @@
 package app.painter.core.io
 
+import app.painter.core.stroke.ColorStampParams
+import app.painter.core.stroke.DoubleParams
 import app.painter.core.stroke.FilterBrushParams
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.int
@@ -17,6 +19,9 @@ import kotlin.test.assertTrue
  * references generated assets, and `index.json` lists exactly the files on disk.
  */
 class CatalogPresetsTest {
+    /** `head.baseColor` of a colour stamp: `#rrggbb` only, so the hue shift has a defined origin. */
+    private val hexColor = Regex("^#[0-9a-fA-F]{6}$")
+
     /**
      * The `brushes` assets folder. The :core test task runs with `user.dir` = the module directory, so
      * the app module is one level up; the second candidate covers an IDE run from the repository root.
@@ -61,12 +66,25 @@ class CatalogPresetsTest {
             for (ref in listOfNotNull(brush.resources.head, brush.resources.texture, brush.resources.particle)) {
                 assertTrue(ref in refs, "${f.path}: unknown resource ref $ref")
             }
-            // S6 filter brushes are the only special engine allowed so far, and only off the stroke.
+            // S6 specials: the off-stroke filter, the colour stamp and the double outline; nothing else.
             val special = brush.params.special
             assertTrue(
-                special == null || (special is FilterBrushParams && !special.onStroke),
-                "${f.path}: only an off-stroke filter engine may be a special",
+                special == null ||
+                    (special is FilterBrushParams && !special.onStroke) ||
+                    special is ColorStampParams ||
+                    special is DoubleParams,
+                "${f.path}: unexpected special engine $special",
             )
+            // A colour stamp shifts the head hue from its base colour, so the head must carry both.
+            if (special is ColorStampParams) {
+                val head = brush.params.head
+                assertTrue(head.color, "${f.path}: colour-stamp presets need head.color")
+                val base = head.baseColor
+                assertTrue(
+                    base != null && hexColor.matches(base),
+                    "${f.path}: colour-stamp presets need a #rrggbb baseColor: $base",
+                )
+            }
             // S2a paper texture: the grain params are meaningless without the texture image next to them.
             assertTrue(
                 brush.params.texture == null || brush.resources.texture != null,

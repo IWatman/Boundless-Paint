@@ -1,0 +1,71 @@
+{
+  "category": "stamps",
+  "id": "stamps.butterfly",
+  "name": {
+    "en": "Butterfly stamp",
+    "ru": "Штамп-бабочка"
+  },
+  "params": {
+    "flow": 1.0,
+    "hardness": 1.0,
+    "head": {
+      "angle": 0.0,
+      "baseColor": "#e08635",
+      "color": true,
+      "rotationMode": "fixed",
+      "source": "bitmap"
+    },
+    "jitter": {
+      "angle": 0.9,
+      "scatter": 0.04,
+      "size": 0.15
+    },
+    "opacity": 1.0,
+    "pressureToFlow": {
+      "min": 0.0,
+      "points": [
+        [
+          0.0,
+          0.6
+        ],
+        [
+          1.0,
+          1.0
+        ]
+      ]
+    },
+    "pressureToSize": {
+      "min": 0.65,
+      "points": [
+        [
+          0.0,
+          0.0
+        ],
+        [
+          1.0,
+          1.0
+        ]
+      ]
+    },
+    "size": 60.0,
+    "sizeMax": 320.0,
+    "sizeMin": 8.0,
+    "spacing": 1.3,
+    "special": {
+      "colorize": 1.0,
+      "type": "color-stamp"
+    }
+  },
+  "resources": {
+    "head": "asset:heads/stamp_butterfly.png"
+  },
+  "schema": 1,
+  "tags": [
+    "бабочка",
+    "butterfly",
+    "штамп",
+    "stamp",
+    "лето",
+    "summer"
+  ]
+}

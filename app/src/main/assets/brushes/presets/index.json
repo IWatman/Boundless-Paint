@@ -70,6 +70,41 @@
     },
     {
       "brushes": [
+        "outline.pen",
+        "outline.shadow_marker",
+        "outline.thick"
+      ],
+      "id": "outline",
+      "name": {
+        "en": "Outline and shadow",
+        "ru": "Контур и тень"
+      }
+    },
+    {
+      "brushes": [
+        "stamps.star",
+        "stamps.heart",
+        "stamps.flower",
+        "stamps.leaf",
+        "stamps.snowflake",
+        "stamps.note",
+        "stamps.cloud",
+        "stamps.droplet",
+        "stamps.bubble",
+        "stamps.butterfly",
+        "stamps.grass",
+        "stamps.rose",
+        "stamps.berry",
+        "stamps.diamond"
+      ],
+      "id": "stamps",
+      "name": {
+        "en": "Stamps",
+        "ru": "Штампы"
+      }
+    },
+    {
+      "brushes": [
         "erasers.hard",
         "erasers.soft",
         "erasers.grainy"
