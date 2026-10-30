@@ -65,7 +65,8 @@ internal class CanvasRenderer(
     private var blendProg = 0
     private var uDst = 0; private var uSrc = 0; private var uBuf = 0; private var uClip = 0
     private var uMode = 0; private var uOpacity = 0; private var uPreview = 0
-    private var uPreviewOpacity = 0; private var uAlphaLock = 0; private var uUseClip = 0
+    private var uPreviewOpacity = 0; private var uStrokeMode = 0; private var uStrokeStrength = 0
+    private var uAlphaLock = 0; private var uUseClip = 0
     private var uMask = 0; private var uClipMask = 0
     private var uUseMask = 0; private var uMaskDefault = 0; private var uMaskDensity = 0
     private var uUseClipMask = 0; private var uClipMaskDefault = 0; private var uClipMaskDensity = 0
@@ -102,6 +103,8 @@ internal class CanvasRenderer(
     private var previewLayerId: String? = null
     private var previewErase = false
     private var previewOpacity = 1f
+    private var previewStrokeMode = 0
+    private var previewStrokeStrength = 0f
     private var previewTex = IntArray(0)
 
     /** Queues [op] to run on the GL thread before the next frame. Thread-safe. */
@@ -284,7 +287,9 @@ internal class CanvasRenderer(
 
     /**
      * Sets the stroke preview. Pass [layerId] null to clear it; [replace] drops all previously
-     * uploaded buffer tiles first.
+     * uploaded buffer tiles first. [blend] and [blendStrength] are the brush blend mode of the buffered
+     * stroke (spec/tools/m2-brush.md §1.7): `out = lerp(source-over, blend(mode), strength)`;
+     * [BlendMode.NORMAL] or a zero strength keeps the plain source-over preview.
      */
     fun applyPreview(
         layerId: String?,
@@ -293,6 +298,8 @@ internal class CanvasRenderer(
         replace: Boolean,
         uploads: List<TileUpload>,
         dirtyKeys: LongArray,
+        blend: BlendMode = BlendMode.NORMAL,
+        blendStrength: Float = 0f,
     ) {
         if (replace || layerId == null || layerId != previewLayerId) {
             for (i in previewTex.indices) if (previewTex[i] != 0) markDirtyIndex(i)
@@ -301,6 +308,8 @@ internal class CanvasRenderer(
         previewLayerId = layerId
         previewErase = erase
         previewOpacity = opacity
+        previewStrokeMode = modeIndex(blend)
+        previewStrokeStrength = blendStrength.coerceIn(0f, 1f)
         updatePreview(uploads, dirtyKeys)
     }
 
@@ -574,6 +583,8 @@ internal class CanvasRenderer(
         GL.glUniform1f(uOpacity, opacity)
         GL.glUniform1i(uPreview, preview)
         GL.glUniform1f(uPreviewOpacity, previewOpacity)
+        GL.glUniform1i(uStrokeMode, previewStrokeMode)
+        GL.glUniform1f(uStrokeStrength, previewStrokeStrength)
         GL.glUniform1i(uAlphaLock, if (alphaLock) 1 else 0)
         GL.glUniform1i(uUseClip, if (clip != 0) 1 else 0)
         GL.glDrawArrays(GL.GL_TRIANGLE_STRIP, 0, 4)
@@ -633,6 +644,8 @@ internal class CanvasRenderer(
         uOpacity = GL.glGetUniformLocation(blendProg, "u_opacity")
         uPreview = GL.glGetUniformLocation(blendProg, "u_preview")
         uPreviewOpacity = GL.glGetUniformLocation(blendProg, "u_previewOpacity")
+        uStrokeMode = GL.glGetUniformLocation(blendProg, "u_strokeMode")
+        uStrokeStrength = GL.glGetUniformLocation(blendProg, "u_strokeStrength")
         uAlphaLock = GL.glGetUniformLocation(blendProg, "u_alphaLock")
         uUseClip = GL.glGetUniformLocation(blendProg, "u_useClip")
         uMask = GL.glGetUniformLocation(blendProg, "u_mask")

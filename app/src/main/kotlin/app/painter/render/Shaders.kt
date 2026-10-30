@@ -134,6 +134,8 @@ uniform int u_mode;
 uniform float u_opacity;
 uniform int u_preview;
 uniform float u_previewOpacity;
+uniform int u_strokeMode;
+uniform float u_strokeStrength;
 uniform bool u_alphaLock;
 uniform bool u_useClip;
 uniform int u_useMask;
@@ -159,7 +161,14 @@ void main() {
         vec4 b = texelFetch(u_buf, p, 0) * u_previewOpacity;
         if (u_preview == 2) l *= 1.0 - b.a;
         else if (u_alphaLock) l = vec4(l.rgb * (1.0 - b.a) + b.rgb * l.a, l.a);
-        else l = b + l * (1.0 - b.a);
+        else {
+            // Brush blend mode (StrokeEngine.blendTile): out = lerp(source-over, composite(mode), strength).
+            vec4 n = b + l * (1.0 - b.a);
+            if (u_strokeMode > 1 && u_strokeStrength > 0.0 && b.a > 0.0) {
+                n += (composite(u_strokeMode, l, b) - n) * u_strokeStrength;
+            }
+            l = n;
+        }
     }
     o = composite(u_mode, d, l * f);
 }

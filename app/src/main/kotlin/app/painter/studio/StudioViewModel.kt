@@ -371,7 +371,10 @@ class StudioViewModel(app: Application, private val prefs: ToolPrefs? = null) :
         if (engine.directToLayer) {
             canvas?.invalidate(layer.id, engine.takeDirty())
         } else {
-            canvas?.setStrokePreview(layer.id, engine.buffer, mode == StrokeMode.ERASE, engine.previewOpacity)
+            canvas?.setStrokePreview(
+                layer.id, engine.buffer, mode == StrokeMode.ERASE, engine.previewOpacity,
+                engine.previewBlend, engine.previewBlendStrength,
+            )
             canvas?.invalidateStroke(engine.takeDirty())
         }
     }
@@ -1403,7 +1406,10 @@ class StudioViewModel(app: Application, private val prefs: ToolPrefs? = null) :
         if (engine.directToLayer) {
             canvas?.invalidate(layerId, engine.takeDirty())
         } else {
-            canvas?.setStrokePreview(layerId, engine.buffer, mode == StrokeMode.ERASE, engine.previewOpacity)
+            canvas?.setStrokePreview(
+                layerId, engine.buffer, mode == StrokeMode.ERASE, engine.previewOpacity,
+                engine.previewBlend, engine.previewBlendStrength,
+            )
             canvas?.invalidateStroke(engine.takeDirty())
         }
     }

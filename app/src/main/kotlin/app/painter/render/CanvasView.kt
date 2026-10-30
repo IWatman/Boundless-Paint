@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.opengl.GLSurfaceView
 import android.view.MotionEvent
+import app.painter.core.blend.BlendMode
 import app.painter.core.doc.Document
 import app.painter.core.raster.TileGrid
 import app.painter.core.raster.TileKey
@@ -39,6 +40,8 @@ class CanvasView(context: Context) : GLSurfaceView(context) {
     private var previewBuffer: TileGrid? = null
     private var previewErase = false
     private var previewOpacity = 1f
+    private var previewBlend = BlendMode.NORMAL
+    private var previewBlendStrength = 0f
     private val previewSent = HashSet<TileKey>()
 
     init {
@@ -81,9 +84,18 @@ class CanvasView(context: Context) : GLSurfaceView(context) {
 
     /**
      * Displays [buffer] (premultiplied stroke buffer) over layer [layerId] at [opacity], or as
-     * an eraser mask when [erase]. Pass `buffer = null` to remove the preview.
+     * an eraser mask when [erase]. [blend] with [blendStrength] is the brush blend mode of the buffered
+     * stroke (spec/tools/m2-brush.md §1.7), so the preview matches the composite on pen-up. Pass
+     * `buffer = null` to remove the preview.
      */
-    fun setStrokePreview(layerId: String, buffer: TileGrid?, erase: Boolean, opacity: Float) {
+    fun setStrokePreview(
+        layerId: String,
+        buffer: TileGrid?,
+        erase: Boolean,
+        opacity: Float,
+        blend: BlendMode = BlendMode.NORMAL,
+        blendStrength: Float = 0f,
+    ) {
         if (buffer == null) {
             if (previewBuffer != null) {
                 val dirty = keysToLongs(previewSent)
@@ -97,6 +109,8 @@ class CanvasView(context: Context) : GLSurfaceView(context) {
         previewLayerId = layerId
         previewErase = erase
         previewOpacity = opacity
+        previewBlend = blend
+        previewBlendStrength = blendStrength
         val uploads = ArrayList<TileUpload>()
         val dirty: LongArray
         if (replace) {
@@ -112,7 +126,7 @@ class CanvasView(context: Context) : GLSurfaceView(context) {
         } else {
             dirty = keysToLongs(previewSent)
         }
-        renderer.post { it.applyPreview(layerId, erase, opacity, replace, uploads, dirty) }
+        renderer.post { it.applyPreview(layerId, erase, opacity, replace, uploads, dirty, blend, blendStrength) }
         requestRender()
     }
 
@@ -185,7 +199,7 @@ class CanvasView(context: Context) : GLSurfaceView(context) {
         val buf = previewBuffer
         if (id != null && buf != null) {
             previewBuffer = null
-            setStrokePreview(id, buf, previewErase, previewOpacity)
+            setStrokePreview(id, buf, previewErase, previewOpacity, previewBlend, previewBlendStrength)
         }
         renderer.setView(transform)
         requestRender()

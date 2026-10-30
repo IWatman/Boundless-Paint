@@ -34,7 +34,9 @@ import kotlin.math.sqrt
  * `L` = colour luminance (1 for the selection), PAINT writes `m + a·(L − m)`, ERASE writes `m·(1 − a)`.
  *
  * Effects ([EffectParams], spec/tools/m2-brush.md §1.7): glaze makes dabs saturate instead of accumulating in the
- * buffer; a blend mode other than normal composites the whole buffer with `BlendMath` and forces the buffered path.
+ * buffer; a blend mode other than normal composites the whole buffer with `BlendMath` and forces the buffered path;
+ * the live preview blends [previewBlend] with [previewBlendStrength] the same way, so the look does not change on
+ * pen-up.
  * Wet edges darken the rim on composite: `α' = α·(1 − w·(1 − e))` with `e` the buffer alpha against its 4 px box
  * blur, so a flat fill stays solid at the edge and thins out in the middle; `wetEdges` 0 composites unchanged.
  * Adhesion keeps an L load plane beside the buffer, `L = over(L, m·flow)` per dab, and composites the visible
@@ -157,6 +159,15 @@ class StrokeEngine(
 
     /** True when the stroke buffer is composited with [strokeBlend] instead of plain source-over. */
     private val blended: Boolean = blendStrength > 0f && strokeBlend != BlendMode.NORMAL && strokeBlend != BlendMode.PASSTHROUGH
+
+    /**
+     * Blend mode the renderer applies to the live preview of [buffer] (spec/tools/m2-brush.md §1.7) so the stroke
+     * keeps its look while drawing; [BlendMode.NORMAL] when the composite is plain source-over.
+     */
+    val previewBlend: BlendMode = if (blended) strokeBlend else BlendMode.NORMAL
+
+    /** Share of [previewBlend] in the live preview: `out = lerp(normal, blend, strength)`; 0 keeps the plain path. */
+    val previewBlendStrength: Float = if (blended) blendStrength else 0f
 
     /** Filter brush of the layer path (§1.16); the `onStroke` variant still takes the plain paint path. */
     private val filterParams: FilterBrushParams? = if (mode == StrokeMode.PAINT && layer != null) {
@@ -678,9 +689,10 @@ class StrokeEngine(
             if (src.isEmpty()) continue
             val dst = ws.prepare(key, create = !(alphaLock || erase)) ?: continue
             val s = src
-            // Brush blend mode (§1.7): the buffered stroke is blended into the layer instead of plain over.
+            // Brush blend mode (§1.7): the buffered stroke is blended into the layer instead of plain over; the
+            // live preview applies the same [previewBlend] with [previewBlendStrength] in Shaders.BLEND_FS.
             // Wet edges (§1.7): the rim factor scales the premultiplied pixel on composite; 0 skips the blur.
-            // TODO: the live preview still composites [strokeBlend] with normal source-over.
+            // Erase and alpha lock keep the plain source-over path below.
             val f = if (wetEdges > 0f) wetFactors(key) else null
             val vis = if (load != null) visibleAlpha(key) else null
             if (blended && !erase && !alphaLock) {

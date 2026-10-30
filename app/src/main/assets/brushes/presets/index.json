@@ -190,7 +190,8 @@
         "markers.chisel",
         "markers.round",
         "markers.highlighter",
-        "markers.felt_tip"
+        "markers.felt_tip",
+        "markers.alcohol"
       ],
       "id": "markers",
       "name": {

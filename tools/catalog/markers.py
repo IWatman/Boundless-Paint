@@ -1,8 +1,9 @@
-"""Markers: a chisel, a round one, a highlighter and a felt tip.
+"""Markers: a chisel, a round one, a highlighter, a felt tip and an alcohol marker.
 
 All four sit on the marker template: a wide translucent dab, little pressure response and no taper. The
-highlighter keeps `buildup` off, so overlapping dabs stay at its low opacity instead of darkening. S1
-only: no texture, no paint mixing, no special engines.
+highlighter keeps `buildup` off, so overlapping dabs stay at its low opacity instead of darkening. The
+alcohol marker multiplies its stroke into the layer, so a second layer of ink over the first darkens it the way
+real alcohol ink does. No texture, no paint mixing, no special engines.
 """
 from __future__ import annotations
 
@@ -89,8 +90,27 @@ FELT_TIP = preset(
     },
 )
 
+ALCOHOL = preset(
+    "markers.alcohol",
+    "Alcohol marker",
+    "Спиртовой маркер",
+    ["маркер", "marker", "спиртовой", "alcohol", "умножение", "multiply", "слои", "layering"],
+    "marker",
+    params={
+        "size": 22.0,
+        "opacity": 0.6,
+        "flow": 0.9,
+        "spacing": 0.025,
+        "hardness": 0.8,
+        "pressureToSize": curve([(0.0, 0.0), (1.0, 1.0)], 0.8),
+        "head": {"source": "bitmap", "aspect": 0.0, "angle": 0.0, "rotationMode": "fixed", "rotationFollow": 0.0},
+        "effects": {"blendMode": "multiply", "blendStrength": 1.0},
+    },
+    resources={"head": "asset:heads/soft_disk.png"},
+)
+
 CATEGORY = {
     "id": "markers",
     "name": {"en": "Markers", "ru": "Маркеры"},
-    "brushes": [CHISEL, ROUND, HIGHLIGHTER, FELT_TIP],
+    "brushes": [CHISEL, ROUND, HIGHLIGHTER, FELT_TIP, ALCOHOL],
 }
