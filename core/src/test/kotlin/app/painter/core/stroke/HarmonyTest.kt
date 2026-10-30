@@ -93,13 +93,13 @@ class HarmonyTest {
 
     @Test
     fun shadedLinksOnlyPointsCloserThanItsR() {
-        // Sides of 80 px: with R = 100 the chords between two sides cross the middle of the triangle, with
-        // R = 100 × 0.3 = 30 every link stays on the side its two points share.
+        // Sides of 80 px: with R = 45 × 2.3 ≈ 103 the chords between two sides cross the middle of the triangle,
+        // with R = 45 × 0.6 = 27 every link stays near the side its two points share.
         val path = polyline(floatArrayOf(40f, 40f), floatArrayOf(120f, 40f), floatArrayOf(80f, 109.3f))
         val shaded = HarmonyParams(variant = HarmonyVariant.SHADED)
-        val dense = peak(render(brush(shaded), path), 76, 84, 59, 67)
-        val narrow = peak(render(brush(shaded.copy(spread = 0.3f)), path), 76, 84, 59, 67)
-        assertTrue(dense > 0.02f, "R = 100 must link points 80 px apart, peak $dense")
-        assertTrue(narrow == 0f, "R = 30 must not, peak $narrow")
+        val dense = peak(render(brush(shaded.copy(spread = 2.3f)), path), 76, 84, 59, 67)
+        val narrow = peak(render(brush(shaded.copy(spread = 0.6f)), path), 76, 84, 59, 67)
+        assertTrue(dense > 0.005f, "R ≈ 103 must link points 80 px apart, peak $dense")
+        assertTrue(narrow == 0f, "R ≈ 27 must not, peak $narrow")
     }
 }

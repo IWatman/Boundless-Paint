@@ -3,6 +3,7 @@ package app.painter.core.stroke
 import app.painter.core.color.Rgba
 import app.painter.core.raster.MaskGrid
 import kotlin.math.floor
+import kotlin.math.hypot
 import kotlin.math.min
 import kotlin.math.sqrt
 
@@ -49,6 +50,9 @@ internal class HarmonyEffect(
     private val xs = FloatArray(HISTORY)
     private val ys = FloatArray(HISTORY)
 
+    /** Path length from the stroke start to each kept point, px: tells another pass from the same run of the path. */
+    private val arcs = FloatArray(HISTORY)
+
     /** Spatial hash of cell [radius]: packed cell index → ids of the kept points inside the cell. */
     private val cells = HashMap<Long, ArrayList<Int>>()
 
@@ -76,10 +80,17 @@ internal class HarmonyEffect(
             // The stroke's own path: alpha 1, so the line of the stroke is visible without dabs.
             lines.stroke(target, xs[last], ys[last], x, y, brushSize, 1f)
         }
+        val arc = if (count > 0) {
+            val last = slotOf(count - 1)
+            arcs[last] + hypot(x - xs[last], y - ys[last])
+        } else {
+            0f
+        }
         val id = count++
         val slot = slotOf(id)
         xs[slot] = x
         ys[slot] = y
+        arcs[slot] = arc
         link(id, x, y, target)
         cells.getOrPut(cellKey(cellOf(x), cellOf(y))) { ArrayList() }.add(id.toInt())
     }
@@ -103,6 +114,10 @@ internal class HarmonyEffect(
                     val dy = y - ys[s]
                     val d2 = dx * dx + dy * dy
                     if (d2 > r2) continue
+                    // Only other passes link: a neighbour reached along the path by a much longer way than the
+                    // straight line is a return or a loop. Neighbours on the same run would just thicken the path
+                    // (and fill loops solid).
+                    if (arcs[slotOf(id)] - arcs[s] < sqrt(d2) * SAME_RUN) continue
                     // The bits of a positive float keep their order, so the packed pairs sort by distance.
                     cands.add((d2.toRawBits().toLong() shl 32) or (p.toLong() and 0xFFFFFFFFL))
                 }
@@ -117,18 +132,24 @@ internal class HarmonyEffect(
             val c = cands[k]
             if (chance < 1f && HashRng.rnd(seed, CH_LINK, id * MAX_NEIGHBOURS + k) >= chance) continue
             val dist = sqrt(Float.fromBits((c ushr 32).toInt()))
-            val alpha = rule.alpha * (1f - dist / r)
+            val near = 1f - dist / r
+            // Close neighbours link more often than far ones, so the hatching thins out towards the edge.
+            if (HashRng.rnd(seed, CH_NEAR, id * MAX_NEIGHBOURS + k) >= near) continue
+            val alpha = rule.alpha * near
             if (alpha <= 0f) continue
             val s = slotOf((c and 0xFFFFFFFFL))
             val xj = xs[s]
             val yj = ys[s]
-            val f = rule.shorten
+            // A random shortening per end, so the links do not stop on one straight edge.
+            val key = id * MAX_NEIGHBOURS + k
+            val f0 = rule.shorten * (0.25f + 1.5f * HashRng.rnd(seed, CH_SHORTEN, key * 2))
+            val f1 = rule.shorten * (0.25f + 1.5f * HashRng.rnd(seed, CH_SHORTEN, key * 2 + 1))
             lines.stroke(
                 target,
-                x + (xj - x) * f,
-                y + (yj - y) * f,
-                x + (xj - x) * (1f - f),
-                y + (yj - y) * (1f - f),
+                x + (xj - x) * f0,
+                y + (yj - y) * f0,
+                x + (xj - x) * (1f - f1),
+                y + (yj - y) * (1f - f1),
                 brushSize,
                 alpha,
             )
@@ -143,11 +164,12 @@ internal class HarmonyEffect(
 
     /** Links of [variant]; the extra variants fall back to SKETCHY (TODO(S7a)). */
     private fun ruleOf(variant: HarmonyVariant): Rule = when (variant) {
-        HarmonyVariant.SKETCHY -> Rule(80f, 0.3f, 0.3f, 0.2f)
-        HarmonyVariant.SHADED -> Rule(100f, 1f, 0.08f, 0f)
-        HarmonyVariant.WEB -> Rule(60f, 0.5f, 0.2f, 0f)
+        // Tuned on the brush sheet with hand-like strokes: faint links that build up where passes meet.
+        HarmonyVariant.SKETCHY -> Rule(60f, 0.3f, 0.07f, 0.2f)
+        HarmonyVariant.SHADED -> Rule(45f, 1f, 0.03f, 0f)
+        HarmonyVariant.WEB -> Rule(50f, 0.5f, 0.06f, 0f)
         // TODO(S7a): CHROME, FUR, LONG_FUR, RIBBON, CURVY, GRID, CIRCLES and SQUARES link as SKETCHY for now.
-        else -> Rule(80f, 0.3f, 0.3f, 0.2f)
+        else -> Rule(60f, 0.3f, 0.07f, 0.2f)
     }
 
     /** One row of the variant table: link distance, probability per neighbour, alpha of the link, end shortening. */
@@ -170,5 +192,10 @@ internal class HarmonyEffect(
 
         /** Random channel of the links; a private stream of this engine, not an [RngChannel]. */
         const val CH_LINK = 17
+        const val CH_NEAR = 20
+        const val CH_SHORTEN = 21
+
+        /** A neighbour whose path distance is below this multiple of the straight distance is on the same run. */
+        const val SAME_RUN = 1.6f
     }
 }

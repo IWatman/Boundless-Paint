@@ -123,7 +123,7 @@ class BrushSheet {
     /** One swatch: the three strokes on a fresh white-paper document, flattened with the paper. */
     private fun renderPreset(file: File, assets: File, index: Int, wave: Boolean = false): BufferedImage {
         val brush = BrushIO.decode(file.readText())
-        val params = brush.params.copy(size = brush.params.size.coerceIn(4f, 60f))
+        val params = brush.params.copy(size = brush.params.size.coerceIn(1f, 60f))
         val res = BrushResources.load(brush.copy(params = params), ResourceResolver { ref -> loadImage(assets, ref) })
         val doc = Document.create(CELL_W, CELL_H - HEADER)
         val rnd = Random(7919L + index)
