@@ -161,6 +161,18 @@
     },
     {
       "brushes": [
+        "threed.tube",
+        "threed.thick_tube",
+        "threed.twisty"
+      ],
+      "id": "threed",
+      "name": {
+        "en": "3D",
+        "ru": "3D"
+      }
+    },
+    {
+      "brushes": [
         "erasers.hard",
         "erasers.soft",
         "erasers.grainy"

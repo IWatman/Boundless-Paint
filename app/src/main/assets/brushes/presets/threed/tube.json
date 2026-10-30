@@ -1,0 +1,64 @@
+{
+  "category": "threed",
+  "id": "threed.tube",
+  "name": {
+    "en": "Tube",
+    "ru": "Трубка"
+  },
+  "params": {
+    "flow": 1.0,
+    "hardness": 1.0,
+    "head": {
+      "source": "round"
+    },
+    "opacity": 1.0,
+    "pressureToFlow": {
+      "min": 0.0,
+      "points": [
+        [
+          0.0,
+          1.0
+        ],
+        [
+          1.0,
+          1.0
+        ]
+      ]
+    },
+    "pressureToSize": {
+      "min": 0.4,
+      "points": [
+        [
+          0.0,
+          0.25
+        ],
+        [
+          1.0,
+          1.0
+        ]
+      ]
+    },
+    "size": 24.0,
+    "sizeMax": 200.0,
+    "sizeMin": 4.0,
+    "spacing": 0.015,
+    "special": {
+      "kind": "TUBE",
+      "twistRate": 1.0,
+      "type": "3d"
+    },
+    "taperEnd": 0.0,
+    "taperStart": 0.0
+  },
+  "resources": {},
+  "schema": 1,
+  "tags": [
+    "3d",
+    "объём",
+    "volume",
+    "трубка",
+    "tube",
+    "неон",
+    "neon"
+  ]
+}

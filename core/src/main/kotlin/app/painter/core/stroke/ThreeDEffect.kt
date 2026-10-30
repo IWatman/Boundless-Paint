@@ -28,8 +28,8 @@ import kotlin.math.sqrt
  * | kind | normal |
  * |---|---|
  * | [ThreeDKind.TUBE] | `n = (x, y, sqrt(1 − r²))`, `x, y` the pixel offset over the radius |
- * | [ThreeDKind.RIBBON] | a flat band: `up = (0,0,1)` rotated around the path tangent by `s·twist_rate` |
- * | [ThreeDKind.TWISTY] | the tube normal times four bands along `φ = atan2(nₓ, n_z) + s·twist_rate` |
+ * | [ThreeDKind.RIBBON] | a flat band: `up = (0,0,1)` rotated around the path tangent by `s·twist_rate`, lit on both faces |
+ * | [ThreeDKind.TWISTY] | the tube normal times four bands along `φ = atan2(nₓ, n_z) + s·twist_rate`, gaps at 45% |
  *
  * `s` is the path length so far in px and `twist_rate` is taken in degrees per px. [reset] drops the `z` plane and
  * the path state so a re-rendered stroke rebuilds them from the recorded points.
@@ -107,9 +107,11 @@ internal class ThreeDEffect(
         val flat = kind == ThreeDKind.RIBBON
         val tx = if (tangentX.isNaN()) cos(dab.angle) else tangentX
         val ty = if (tangentX.isNaN()) sin(dab.angle) else tangentY
-        val rnx = ty * sin(twist)
-        val rny = -tx * sin(twist)
-        val rnz = cos(twist)
+        // A ribbon is lit on both faces: once the twist turns its back to the viewer, the back face shows.
+        val side = if (cos(twist) < 0f) -1f else 1f
+        val rnx = ty * sin(twist) * side
+        val rny = -tx * sin(twist) * side
+        val rnz = cos(twist) * side
         val cr = color.r
         val cg = color.g
         val cb = color.b
@@ -156,7 +158,7 @@ internal class ThreeDEffect(
                 var band = 1f
                 if (kind == ThreeDKind.TWISTY) {
                     val phi = atan2(nx, nz) + twist
-                    band = 0.5f + 0.5f * cos(BANDS * phi)
+                    band = 1f - BAND_DEPTH * (0.5f - 0.5f * cos(BANDS * phi))
                 }
                 val sr = ((cr * diff + spec) * band).coerceIn(0f, 1f)
                 val sg = ((cg * diff + spec) * band).coerceIn(0f, 1f)
@@ -201,6 +203,9 @@ internal class ThreeDEffect(
 
         /** Bright bands of [ThreeDKind.TWISTY] around the tube. */
         const val BANDS = 4f
+
+        /** How dark the gaps between the [BANDS] get: 0 = no bands, 1 = black gaps. */
+        const val BAND_DEPTH = 0.55f
 
         /** A dab closer than this to the previous one keeps the old tangent, px. */
         const val MIN_SEGMENT = 1e-4f
