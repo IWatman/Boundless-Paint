@@ -1,4 +1,4 @@
-# Brush import and export
+# Brush import and export (M3)
 
 Goal: let users bring brushes from other painting apps. Imported brushes land in the **Imported** folder of the brush browser (a pack becomes its own folder). Heads and textures transfer exactly; behaviour parameters are mapped approximately, because every engine is different.
 
@@ -17,10 +17,12 @@ Goal: let users bring brushes from other painting apps. Imported brushes land in
 
 Not supported: Infinite Painter and ibisPaint brush files. Their formats are closed and undocumented, and reading them would require taking their apps apart, which the clean-room rules forbid ([00-clean-room/PROCESS.md](../../00-clean-room/PROCESS.md)).
 
-Import works only on files the user provides. We never ship brushes or images taken from other products.
+Import works only on files the user provides. The app never ships brushes or images taken from other products.
 
 ## Rules
-- Parsers live in `core/io/import/` (pure Kotlin, JVM-tested with small hand-made fixtures we create ourselves, never third-party brush files).
+- Parsers live in `core/io/import/` (pure Kotlin, JVM tests).
+- Tests run on real third-party brush files downloaded from public free sources (official Krita, GIMP and MyPaint sets, free ABR and Procreate packs). They are kept locally in `.tools/brush-samples/` (ignored by git), together with a note of where each file came from and its license; the tests skip when the folder is absent, so CI stays green.
+- Only files whose license allows redistribution (CC0 or similar) and small fixtures of our own are committed to the repository.
 - Every parser is defensive: size limits, no unbounded allocations, a malformed file gives a readable error and imports nothing.
 - Unknown parameters are dropped silently. The import report lists the brush count and anything skipped.
 - Names come from the file (or the file name); the category is "Imported".

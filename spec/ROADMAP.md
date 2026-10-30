@@ -29,6 +29,7 @@ Each milestone = a working APK build + green JVM tests.
 ## M3: Expansion
 - Filters (P1 set), filter layers, liquify, text, curvilinear perspective, panels/frame divider, crop, resize, straighten.
 - PSD in/out, timelapse, settings, stylus (palm rejection, buttons), shortcuts.
+- Brush import/export: own .pbrush packs, PNG/JPG heads, Photoshop ABR, Procreate, Krita, GIMP, MyPaint, Clip Studio ([tools/brush-import.md](tools/brush-import.md)).
 
 ## M4: ibis additions
 - Vector layer, radial/array rulers, rounded rect/polygon/arrow/balloon, lasso fill/eraser, surrounding fill.

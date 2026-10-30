@@ -5,7 +5,7 @@ Goal of M2: parity with the IP foundation and the full stock brush set. Tool spe
 - [tools/m2-select-transform-fill.md](tools/m2-select-transform-fill.md): eyedropper, selection, transform, bucket, gradient;
 - [tools/m2-layers-adjust.md](tools/m2-layers-adjust.md): groups, multi-select, masks, 33 modes, adjustment layers, adjustments;
 - [tools/m2-guides-shapes.md](tools/m2-guides-shapes.md): guides, shapes and detection, symmetry, perspective.
-- [tools/brush-import.md](tools/brush-import.md): importing brushes from other apps (ABR, Procreate, Krita, GIMP, MyPaint, Clip Studio) and our own .pbrush packs.
+- [tools/brush-import.md](tools/brush-import.md): brush import/export, planned for M3 (kept here for reference).
 
 If the specs diverge, this file wins.
 
@@ -87,6 +87,5 @@ Agents write only to their own packages and their tests. Only the coordinator ch
 
 ## 5. Scope changes relative to ROADMAP
 - Moved into M2: Clone (brush), regular polygon, Hatching, Color Balance, Levels, Gradient map, Posterize, Black & White.
-- Moved into M2 (user request, 2026-10-30): brush import/export, including third-party formats, see [tools/brush-import.md](tools/brush-import.md).
 - Moved to M3: curvilinear perspective (5 points and fisheye), Lanczos, keeping the transform source between sessions.
 - Remaining in M4: radial and array rulers, rounded rect, arrow, balloon, star, lasso fill across all layers, surrounding fill.
