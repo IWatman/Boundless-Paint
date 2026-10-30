@@ -94,8 +94,15 @@ class PaintMixKernel(
         }
         val keep = 1f - pull.coerceIn(0f, 1f)
         for (k in 0 until 4) reservoir[k] += (mean[k] - reservoir[k]) * keep
-        val mix = dab.mixIn.coerceIn(0f, 1f) * (coverage / (n * n))
-        if (mix > 0f) for (k in 0 until 4) paint[k] += (mean[k] - paint[k]) * mix
+        // Picking up is weighted by how much paint lies under the dab (its mean alpha): an empty canvas is not
+        // white or clear paint, so it must neither tint nor thin the brush colour. The paint keeps its own alpha
+        // and only its colour moves towards the picked-up colour.
+        val loaded = mean[3].coerceIn(0f, 1f)
+        val mix = dab.mixIn.coerceIn(0f, 1f) * (coverage / (n * n)) * loaded
+        if (mix > 0f) {
+            val scale = paint[3] / max(mean[3], 1e-4f)
+            for (k in 0 until 3) paint[k] += (mean[k] * scale - paint[k]) * mix
+        }
         val dil = dab.dilution.coerceIn(0f, 1f)
         for (k in 0 until 4) deposit[k] = paint[k] + (reservoir[k] - paint[k]) * dil
     }
