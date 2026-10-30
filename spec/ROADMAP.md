@@ -20,7 +20,7 @@ Each milestone = a working APK build + green JVM tests.
 
 ## M2: Parity with the IP foundation + the full stock brush set
 - **Full brush engine** (all of spec/brush-engine.md, including watercolor, particles, harmony, double, color stamp, 3D, filter brushes, screentone snap). GPU dabs.
-- **Stock catalog of ≈236 brushes** (spec/brush-catalog.md), covering the IP and ibis stock. Brush Editor UI, brush browser with folders, favorites and search. Clone brush. Stylus settings (curve, calibration, buttons).
+- **Stock catalog that covers every engine feature** (≈90 brushes: each special engine, texture mode and effect has presets). The full ≈236 stock of spec/brush-catalog.md is filled in M3+ with the brush editor and import (decision 2026-10-30). Brush Editor UI, brush browser with folders, favorites and search. Clone brush. Stylus settings (curve, calibration, buttons).
 - Eyedropper (long-press), selection (lasso, rect, ellipse, wand, brush) + operations.
 - Transform (basic, anchor, distort, warp, multi-layer), bucket (tolerance, gap, expand, reference layer), gradients.
 - Groups, masks, all 33 blend modes, adjustment layers, adjustments, curves.

@@ -1,7 +1,7 @@
 # M2 implementation plan
 
 Goal of M2: parity with the IP foundation and the full stock brush set. Tool specs:
-- [tools/m2-brush.md](tools/m2-brush.md): brush engine, catalog of ≈236, browser, editor, stylus, tool state;
+- [tools/m2-brush.md](tools/m2-brush.md): brush engine, catalog covering every engine feature (≈90; the full ≈236 moves to M3+), browser, editor, stylus, tool state;
 - [tools/m2-select-transform-fill.md](tools/m2-select-transform-fill.md): eyedropper, selection, transform, bucket, gradient;
 - [tools/m2-layers-adjust.md](tools/m2-layers-adjust.md): groups, multi-select, masks, 33 modes, adjustment layers, adjustments;
 - [tools/m2-guides-shapes.md](tools/m2-guides-shapes.md): guides, shapes and detection, symmetry, perspective.

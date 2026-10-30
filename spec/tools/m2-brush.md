@@ -301,7 +301,7 @@ Notation: `m` = dab mask coverage in the pixel 0..1, `d` = current diameter, `θ
 | S7 | Special-2 | particles, harmony (`LineRenderer`) | S1 |
 | S8 | Watercolor | `WetSimulation` | S2, S4 |
 | S9 | 3D | tube, ribbon, twisty | S3 |
-| S10 | Catalog | `gen_assets.py`, ≈236 presets, previews | S1–S9 as they become ready (categories are connected when their features are ready) |
+| S10 | Catalog | `gen_assets.py`, presets for every engine feature (≈90 in M2; the full ≈236 in M3+), previews | S1–S9 as they become ready (categories are connected when their features are ready) |
 | U1 | Brush browser | §4.1 | S0 (codec) |
 | U2 | Editor | §4.2 | S1, U1 |
 | U3 | Stylus | §4.3 | S0 |
@@ -533,7 +533,7 @@ cache/brush_previews/<id>_<paramsHash>.png
 - **Gate:** if scenario B or C fails after optimizations (SIMD-friendly loops, LUTs, bbox clamping), a "GPU dabs for MaskKernel" task is created. The other kernels stay on the CPU.
 
 ## 7. M2 acceptance (brushes)
-- [ ] All ≈236 presets load. Each one draws a non-empty stroke on the reference trajectory without exceptions (an automated JVM test + a run on the device).
+- [ ] All presets load (M2: every engine feature has presets; the full ≈236 is M3+). Each one draws a non-empty stroke on the reference trajectory without exceptions (an automated JVM test + a run on the device).
 - [ ] Each group of §1 passes its own acceptance.
 - [ ] Determinism: 1 and 4 threads, input in one batch and point by point yield a bit-for-bit identical buffer.
 - [ ] Undo rolls back any stroke, including smudge, filter, clone and watercolor after drying.
