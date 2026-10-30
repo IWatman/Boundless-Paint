@@ -52,3 +52,4 @@ Found:
 | 16 | ✅ Two-level menu: Symmetry, Guides, Perspective, Shapes. Was: the Creative tools menu (symmetry, guides, perspective, shapes) no longer fits the screen and has to be scrolled | group it into sections or a side panel like IP |
 | 17 | The live preview of a closed shape omits the closing segment and the fill; both appear only on Apply | render the closed path and fill in the preview engine (StrokeEngine closes/fills only in end()) |
 | 18 | ✅ Shared ToggleChip (FilterChip with a check). Was: on/off toggles in the tool bars (shape Outline/Fill, guide toggles) look the same as plain action buttons | distinct on/off styling (filled chip or check) |
+| 19 | After Apply the Shape tool (and Fill/Gradient) stays active, but the left toolbar still highlights the brush, so the next stroke unexpectedly draws a shape | show the active tool in the toolbar (or return to the brush after Apply, as a setting) |
