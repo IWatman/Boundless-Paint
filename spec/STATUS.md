@@ -39,7 +39,8 @@
   and the GPU renderer replace that lower content with the cache, and the app recomputes the cache after each
   change. Added from Editing Tools → New filter layer…, persisted in the project manifest (`kind: "filter"`).
 - Verified on `painter_tab` (2026-10-31): blur filter layer replaces the lower strokes live, crop dialog/apply,
-  settings sheet, PSD export menu, and a timelapse export whose MP4 is H.264 720p (720×404), 30 fps, 29.97 s.
+  settings sheet, PSD export and import (the Home picker now accepts any document and the parser validates the
+  header), and a timelapse export whose MP4 is H.264 720p (720×404), 30 fps, 29.97 s.
 - Tests: **566 JVM tests, all green** (493 core, 73 app).
 
 ## M2: done (2026-10-31)

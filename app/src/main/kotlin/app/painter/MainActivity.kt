@@ -161,7 +161,7 @@ private fun App(vm: StudioViewModel, updateVm: UpdateViewModel) {
             onNewCanvas = { screen = Screen.NEW },
             onOpenGallery = { vm.refreshProjects(); screen = Screen.GALLERY },
             onOpenUpdates = { showUpdates = true },
-            onImportPsd = { importPsd.launch(arrayOf("image/vnd.adobe.photoshop", "application/octet-stream")) },
+            onImportPsd = { importPsd.launch(arrayOf("*/*")) },
             recent = projects.take(8),
             onOpenProject = open,
         )
