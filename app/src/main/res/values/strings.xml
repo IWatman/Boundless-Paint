@@ -590,4 +590,25 @@
     <string name="manuscript_guides">Manuscript guides</string>
     <string name="radial_guides">Radial ruler</string>
     <string name="array_guides">Array ruler</string>
+    <!-- Frame animation -->
+    <string name="animation_title">Animation</string>
+    <string name="animation_group_name">Animation</string>
+    <string name="animation_start">Start animation</string>
+    <string name="animation_start_hint">The current layer becomes frame 1. Add frames to animate on top of it.</string>
+    <string name="animation_add_frame">Add frame (copy of the current one)</string>
+    <string name="animation_delete_frame">Delete frame</string>
+    <string name="animation_previous">Previous frame</string>
+    <string name="animation_next">Next frame</string>
+    <string name="animation_play">Play</string>
+    <string name="animation_stop">Stop</string>
+    <string name="animation_onion_skin">Onion skin</string>
+    <string name="animation_onion_before">Before</string>
+    <string name="animation_onion_after">After</string>
+    <string name="animation_fps">FPS</string>
+    <string name="animation_playback">Playback</string>
+    <string name="animation_loop">Loop</string>
+    <string name="animation_pingpong">Ping-pong</string>
+    <string name="animation_once">Play once</string>
+    <string name="animation_frame_label">Frame %1$d</string>
+    <string name="animation_frame_number">%1$d</string>
 </resources>

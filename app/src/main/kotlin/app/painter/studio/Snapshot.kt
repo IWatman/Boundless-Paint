@@ -26,6 +26,7 @@ fun snapshotDocument(doc: Document, pixels: Boolean = true): Document {
     copy.selection.active = doc.selection.active
     if (pixels) copy.selection.copyFrom(doc.selection)
     copy.guides = doc.guides
+    copy.animation = doc.animation?.copy()
     copy.gammaCorrect = doc.gammaCorrect
     copy.paper.color = doc.paper.color
     copy.paper.visible = doc.paper.visible

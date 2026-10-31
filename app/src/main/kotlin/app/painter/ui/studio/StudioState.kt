@@ -5,6 +5,7 @@ import androidx.compose.ui.graphics.ImageBitmap
 import app.painter.core.adjust.AdjustParams
 import app.painter.core.blend.BlendMode
 import app.painter.core.color.Rgba
+import app.painter.core.doc.AnimationPlayback
 import app.painter.core.doc.ColorTag
 import app.painter.core.doc.EditTarget
 import app.painter.core.fill.GradientType
@@ -141,6 +142,42 @@ data class LayerUi(
     val isVector: Boolean = false,
 )
 
+/** One frame in the animation timeline. [index] is its zero-based position in playback order. */
+@Immutable
+data class AnimationFrameUi(
+    val id: String,
+    val index: Int,
+    val thumbnail: ImageBitmap?,
+)
+
+/**
+ * A neighbouring frame drawn under the canvas while onion skin is on. [before] is true for frames before the
+ * active one (drawn red), false for frames after it (drawn blue); [distance] 1 is the nearest frame.
+ */
+@Immutable
+data class OnionFrameUi(
+    val image: ImageBitmap,
+    val before: Boolean,
+    val distance: Int,
+)
+
+/**
+ * Frame-animation state of the open document. [frames] are in timeline order; [activeIndex] indexes them.
+ * [onion] is empty while playback runs or when onion skin is off.
+ */
+@Immutable
+data class AnimationUi(
+    val fps: Int = 12,
+    val playback: AnimationPlayback = AnimationPlayback.LOOP,
+    val onionSkin: Boolean = false,
+    val onionBefore: Int = 1,
+    val onionAfter: Int = 1,
+    val frames: List<AnimationFrameUi> = emptyList(),
+    val activeIndex: Int = 0,
+    val playing: Boolean = false,
+    val onion: List<OnionFrameUi> = emptyList(),
+)
+
 /**
  * Complete state rendered by [StudioScreen]. [brushSize] is the diameter in document pixels,
  * opacity/flow/hardness are 0..1. [layers] are in display order (top first).
@@ -164,6 +201,10 @@ data class StudioUiState(
     val canRedo: Boolean = false,
     val layerPanelOpen: Boolean = false,
     val colorPanelOpen: Boolean = false,
+    /** Frame animation of the document, null when it has no animation group. */
+    val animation: AnimationUi? = null,
+    /** The bottom animation timeline is open (it also offers to start an animation). */
+    val animationPanelOpen: Boolean = false,
     /** Stylus settings the [StylusSettingsPanel] shows (spec/tools/m2-brush.md §4.3). */
     val stylusSettings: StylusSettings = StylusSettings(),
     /** Pressure calibration of the pen the [StylusSettingsPanel] reports (spec/tools/m2-brush.md §4.3). */
@@ -478,6 +519,40 @@ interface StudioActions {
     fun clearLayerLongPress()
     fun toggleLayerPanel()
     fun toggleColorPanel()
+
+    /** Opens or closes the bottom animation timeline (it offers to start an animation on a plain document). */
+    fun toggleAnimationPanel() {}
+
+    /** Turns the active raster layer into the first frame of a new animation group. */
+    fun startAnimation() {}
+
+    /** Adds a copy of the active frame directly above it and makes it active. */
+    fun addAnimationFrame() {}
+
+    /** Deletes the active frame; the last remaining frame cannot be deleted. */
+    fun deleteAnimationFrame() {}
+
+    /** Makes frame [id] active and the only visible frame. */
+    fun selectAnimationFrame(id: String) {}
+
+    /** Previous ([delta] -1) or next (+1) frame, wrapping around the timeline. */
+    fun stepAnimationFrame(delta: Int) {}
+
+    /** Starts or stops playback. */
+    fun setAnimationPlaying(playing: Boolean) {}
+
+    /** Playback rate in frames per second, clamped to 1..60. */
+    fun setAnimationFps(fps: Int) {}
+
+    /** Loop, ping-pong or play once. */
+    fun setAnimationPlayback(mode: AnimationPlayback) {}
+
+    /** Shows or hides the onion-skin overlay. */
+    fun setAnimationOnionSkin(on: Boolean) {}
+
+    /** Number of previous and following frames shown by the onion skin, each clamped to 0..4. */
+    fun setAnimationOnionFrames(before: Int, after: Int) {}
+
     fun addLayer()
 
     /** Inserts an empty vector layer above the active node and makes it active. */

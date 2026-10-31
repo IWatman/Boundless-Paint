@@ -5,6 +5,9 @@ import app.painter.core.adjust.UnknownAdjust
 import app.painter.core.blend.BlendMode
 import app.painter.core.color.Rgba
 import app.painter.core.doc.AdjustmentLayer
+import app.painter.core.doc.Animation
+import app.painter.core.doc.AnimationMeta
+import app.painter.core.doc.AnimationPlayback
 import app.painter.core.doc.ColorTag
 import app.painter.core.doc.Document
 import app.painter.core.doc.EditTarget
@@ -203,6 +206,19 @@ object ProjectIO {
             doc.selection.active = it.active
         }
         doc.guides = m.guides
+        doc.animation = m.animation?.let { a ->
+            AnimationMeta(
+                fps = a.fps,
+                playback = AnimationPlayback.entries.firstOrNull { it.name.equals(a.playback, ignoreCase = true) }
+                    ?: AnimationPlayback.LOOP,
+                onionSkin = a.onionSkin,
+                onionBefore = a.onionBefore,
+                onionAfter = a.onionAfter,
+                frameGroupId = a.frameGroupId,
+            )
+        }
+        // Drops the block when its frame group is gone and restores "one visible frame" after a load.
+        Animation.normalize(doc)
         return doc
     }
 
@@ -582,6 +598,16 @@ object ProjectIO {
         nodes = doc.root.children.map(::toDto),
         selection = if (doc.selection.isEmpty) null else SelectionDto(doc.selection.active),
         guides = doc.guides,
+        animation = doc.animation?.let { a ->
+            AnimationDto(
+                fps = a.fps,
+                playback = a.playback.name.lowercase(),
+                onionSkin = a.onionSkin,
+                onionBefore = a.onionBefore,
+                onionAfter = a.onionAfter,
+                frameGroupId = a.frameGroupId,
+            )
+        },
     )
 
     private fun toDto(n: Node): NodeDto = NodeDto(

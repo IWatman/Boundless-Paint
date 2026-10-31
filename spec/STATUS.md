@@ -103,7 +103,12 @@
   compositor/renderer. Paint/erase strokes append a path and replay deterministically; `VectorStrokeCommand` restores
   paths and pixels together, the layer panel has "Add vector layer" and a `V` badge. Paths persist in the manifest
   (`kind: "vector"`) and are re-rendered on load. See `docs/vector-layers.md`.
-- Still planned in M4: animation/onion skin, Drive sync.
+- **Frame animation**: `Document.animation` stores fps, loop/pingpong/once, onion settings and the frame-group id;
+  frames are raster layers inside a dedicated group with one visible at a time. Options → Animation opens a
+  timeline with thumbnails, add/duplicate/delete, prev/next, play/stop, fps, loop mode and onion before/after.
+  Onion skin is a cached Compose bitmap overlay (previous frames red, next blue). Animation metadata persists in
+  the manifest; non-animation documents are unchanged.
+- **M4 remaining:** Google Drive account login + sync, done last with the user's OAuth client.
 
 ## M2: done (2026-10-31)
 - Build: `. .\tools\env.ps1; .\gradlew.bat :core:test :app:testDebugUnitTest :app:assembleDebug`.

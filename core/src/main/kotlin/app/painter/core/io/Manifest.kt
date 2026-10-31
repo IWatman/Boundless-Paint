@@ -1,5 +1,6 @@
 package app.painter.core.io
 
+import app.painter.core.doc.AnimationMeta
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
@@ -36,6 +37,23 @@ internal data class ManifestDto(
     val selection: SelectionDto? = null,
     /** Opaque guides block (schema owned by core/guide). */
     val guides: JsonObject? = null,
+    /**
+     * Frame animation settings. Frames are ordinary raster children of the referenced group, so their pixels
+     * live in `layers/` like every other layer and no extra file format is needed.
+     */
+    val animation: AnimationDto? = null,
+)
+
+@Serializable
+internal data class AnimationDto(
+    val fps: Int = AnimationMeta.DEFAULT_FPS,
+    /** One of `loop`, `pingpong`, `once`. */
+    val playback: String = "loop",
+    val onionSkin: Boolean = false,
+    val onionBefore: Int = 1,
+    val onionAfter: Int = 1,
+    /** Group whose raster children are the frames, in timeline order. */
+    val frameGroupId: String = "",
 )
 
 @Serializable

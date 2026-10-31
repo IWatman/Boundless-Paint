@@ -589,4 +589,25 @@
     <string name="manuscript_guides">Границы рукописи</string>
     <string name="radial_guides">Радиальная линейка</string>
     <string name="array_guides">Массив линеек</string>
+    <!-- Frame animation -->
+    <string name="animation_title">Анимация</string>
+    <string name="animation_group_name">Анимация</string>
+    <string name="animation_start">Начать анимацию</string>
+    <string name="animation_start_hint">Текущий слой станет кадром 1. Добавляйте кадры, чтобы рисовать поверх него.</string>
+    <string name="animation_add_frame">Добавить кадр (копия текущего)</string>
+    <string name="animation_delete_frame">Удалить кадр</string>
+    <string name="animation_previous">Предыдущий кадр</string>
+    <string name="animation_next">Следующий кадр</string>
+    <string name="animation_play">Воспроизвести</string>
+    <string name="animation_stop">Остановить</string>
+    <string name="animation_onion_skin">Призрачные кадры</string>
+    <string name="animation_onion_before">До</string>
+    <string name="animation_onion_after">После</string>
+    <string name="animation_fps">Кадр/с</string>
+    <string name="animation_playback">Воспроизведение</string>
+    <string name="animation_loop">Повтор</string>
+    <string name="animation_pingpong">Пинг-понг</string>
+    <string name="animation_once">Один раз</string>
+    <string name="animation_frame_label">Кадр %1$d</string>
+    <string name="animation_frame_number">%1$d</string>
 </resources>

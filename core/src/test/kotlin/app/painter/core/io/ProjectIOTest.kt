@@ -153,6 +153,7 @@ class ProjectIOTest {
         for (k in b.selection.mask.keys()) assertContentEquals(a.selection.mask.get(k)!!.data, b.selection.mask.get(k)!!.data)
         assertEquals(a.paper.visible, b.paper.visible)
         assertEquals(Math.round(a.paper.color.b * 255), Math.round(b.paper.color.b * 255))
+        assertEquals(a.animation, b.animation)
         assertEquals(a.root.children.size, b.root.children.size)
         a.root.children.zip(b.root.children).forEach { (x, y) -> assertSameNode(x, y) }
     }

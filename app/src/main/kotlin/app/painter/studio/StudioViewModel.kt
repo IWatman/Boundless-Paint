@@ -19,6 +19,9 @@ import app.painter.core.adjust.AdjustKind
 import app.painter.core.adjust.AdjustParams
 import app.painter.core.blend.Compositor
 import app.painter.core.color.Rgba
+import app.painter.core.doc.Animation
+import app.painter.core.doc.AnimationMeta
+import app.painter.core.doc.AnimationPlayback
 import app.painter.core.doc.Document
 import app.painter.core.doc.AdjustmentLayer
 import app.painter.core.doc.FilterLayer
@@ -145,6 +148,8 @@ import app.painter.timelapse.TimelapseEncoder
 import app.painter.timelapse.TimelapseStore
 import app.painter.ui.home.ProjectCardUi
 import app.painter.ui.studio.AdjustEditorUi
+import app.painter.ui.studio.AnimationFrameUi
+import app.painter.ui.studio.AnimationUi
 import app.painter.ui.studio.BrushCategoryUi
 import app.painter.ui.studio.BrushItemUi
 import app.painter.ui.studio.BrushModeUi
@@ -163,6 +168,7 @@ import app.painter.ui.studio.isSelectionTool
 import app.painter.ui.studio.adjustTitleRes
 import app.painter.ui.studio.LayerUi
 import app.painter.ui.studio.LazyUi
+import app.painter.ui.studio.OnionFrameUi
 import app.painter.ui.studio.OverlayLineUi
 import app.painter.ui.studio.PerspectiveUi
 import app.painter.ui.studio.StudioActions
@@ -276,6 +282,19 @@ class StudioViewModel(
 
     /** Mode that was active before a stroke of the back of the pen switched to Erase; null outside such a stroke. */
     private var modeBeforePenEraser: BrushModeUi? = null
+
+    // ---- animation ----
+    /** Playback loop; null while stopped. */
+    private var animPlayJob: Job? = null
+    /** Bumped whenever playback starts or stops, so a cancelled loop cannot publish a stale stop. */
+    private var animPlayToken = 0
+    /** Ping-pong direction of the running playback. */
+    private var animForward = true
+    /** Last frame shown, kept when the user paints a static layer outside the frame group. */
+    private var animFrameId: String? = null
+    /** Fingerprint of the frames an onion overlay was built from. */
+    private var onionSignature: Long? = null
+    private var onionCache: List<OnionFrameUi> = emptyList()
     /** Descriptor of the device of the running stylus stroke; saved when the stroke ends, null otherwise. */
     private var strokeDevice: String? = null
     /** In-flight marching-ants contour computation of the selection mask. */
@@ -395,6 +414,12 @@ class StudioViewModel(
         timelapseJob?.cancel()
         timelapseJob = null
         timelapseStore = TimelapseStore(store.dirFor(d.id))
+        animPlayToken++
+        animPlayJob?.cancel()
+        animPlayJob = null
+        animFrameId = null
+        onionSignature = null
+        onionCache = emptyList()
         // The saved state belongs to the document that was just flushed, not to the new one.
         saveTracker.reset()
         docOnDisk = onDisk
@@ -473,6 +498,8 @@ class StudioViewModel(
 
     override fun onStrokeBegin(p: InputPoint, deviceDescriptor: String, penEraser: Boolean) {
         pendingVectorStroke = null
+        // Painting while frames cycle would change target mid-stroke: stop on the frame that is on screen.
+        if (_state.value.animation?.playing == true) setAnimationPlaying(false)
         // A filter is computing on a copy of the layer; a stroke would land under it and be overwritten.
         if (filterBusy) return
         // The back of the pen (TOOL_TYPE_ERASER) erases with the erase brush for this stroke only (§4.3);
@@ -2342,11 +2369,19 @@ class StudioViewModel(
     }
 
     override fun deleteLayer(id: String) {
+        if (isAnimationFrame(id)) {
+            deleteFrame(id)
+            return
+        }
         if (doc.layerCount() <= 1) return
         exec(DeleteNode(id))
     }
 
     override fun duplicateLayer(id: String) {
+        if (isAnimationFrame(id)) {
+            addFrame(id)
+            return
+        }
         if (doc.layerCount() >= _state.value.layerLimit) return
         exec(DuplicateNode(id))
     }
@@ -2365,6 +2400,10 @@ class StudioViewModel(
     }
 
     override fun selectLayer(id: String) {
+        if (isAnimationFrame(id)) {
+            selectAnimationFrame(id)
+            return
+        }
         finishShape(commit = true)
         finishTransform(apply = true)
         finishGradient(apply = true)
@@ -2382,7 +2421,14 @@ class StudioViewModel(
         exec(MoveNode(id, parent.id, target))
     }
 
-    override fun setLayerVisible(id: String, visible: Boolean) = props(id, visible = visible)
+    override fun setLayerVisible(id: String, visible: Boolean) {
+        // Frames are a one-visible-at-a-time group: showing one selects it, hiding the active one is ignored.
+        if (isAnimationFrame(id)) {
+            if (visible) selectAnimationFrame(id)
+            return
+        }
+        props(id, visible = visible)
+    }
     override fun setLayerBlend(id: String, mode: BlendMode) = props(id, blendMode = mode)
     override fun setLayerClipped(id: String, clipped: Boolean) = props(id, clipped = clipped)
     override fun setLayerAlphaLock(id: String, locked: Boolean) = props(id, alphaLock = locked)
@@ -2472,6 +2518,326 @@ class StudioViewModel(
         node.opacity = pendingOpacityStart
         history.execute(doc, SetNodeProps(id, opacity = final))
     }
+
+    // ---- animation ----
+
+    override fun toggleAnimationPanel() {
+        _state.update { it.copy(animationPanelOpen = !it.animationPanelOpen) }
+    }
+
+    /**
+     * Turns the active raster layer into the first frame. The layer is wrapped in a new group, so its pixels,
+     * mask and position in the stack are kept; the group id is what [AnimationMeta] points at.
+     */
+    override fun startAnimation() {
+        if (doc.animation != null) {
+            // Orphaned metadata left by an undo that removed the frame group: start over cleanly.
+            if (Animation.frames(doc).isNotEmpty()) return
+            doc.animation = null
+        }
+        val layer = doc.activeRaster ?: run {
+            var found: RasterLayer? = null
+            doc.root.walk { if (found == null && it is RasterLayer) found = it }
+            found
+        } ?: return
+        finishShape(commit = true)
+        finishTransform(apply = true)
+        finishGradient(apply = true)
+        commitPendingOpacity()
+        val groupId = newNodeId()
+        exec(GroupNodes(listOf(layer.id), getApplication<Application>().getString(R.string.animation_group_name), groupId))
+        val group = doc.findNode(groupId) as? GroupNode ?: return
+        group.visible = true
+        group.expanded = false
+        doc.animation = AnimationMeta(frameGroupId = groupId)
+        doc.activeId = layer.id
+        animFrameId = layer.id
+        markDirty()
+        refreshLayers()
+        canvas?.invalidate(null, null)
+    }
+
+    /** Adds a copy of frame [sourceId] (default: the active frame) directly above it. */
+    private fun addFrame(sourceId: String?) {
+        if (doc.animation == null) return
+        if (doc.layerCount() >= _state.value.layerLimit) return
+        stopAnimationPlayback()
+        val frames = Animation.frames(doc)
+        val current = frames.firstOrNull { it.id == sourceId }
+            ?: frames.firstOrNull { it.id == doc.activeId }
+            ?: frames.firstOrNull { it.id == animFrameId }
+            ?: frames.firstOrNull()
+            ?: return
+        val command = DuplicateNode(current.id)
+        exec(command)
+        val copy = command.copyId?.let { doc.findNode(it) as? RasterLayer } ?: return
+        copy.name = getApplication<Application>().getString(R.string.animation_frame_label, frames.size + 1)
+        doc.activeId = copy.id
+        animFrameId = copy.id
+        markDirty()
+        refreshLayers()
+        canvas?.invalidate(null, null)
+    }
+
+    override fun addAnimationFrame() = addFrame(null)
+
+    /** Deletes frame [id] when at least one frame remains. */
+    private fun deleteFrame(id: String) {
+        stopAnimationPlayback()
+        val before = Animation.frames(doc)
+        if (before.size <= 1) return
+        val index = before.indexOfFirst { it.id == id }.coerceAtLeast(0)
+        exec(DeleteNode(id))
+        val after = Animation.frames(doc)
+        val next = after.getOrNull(index.coerceAtMost(after.lastIndex)) ?: after.lastOrNull() ?: return
+        doc.activeId = next.id
+        doc.activeTarget = EditTarget.LAYER
+        animFrameId = next.id
+        markDirty()
+        refreshLayers()
+        canvas?.invalidate(null, null)
+    }
+
+    override fun deleteAnimationFrame() {
+        val frames = Animation.frames(doc)
+        val current = frames.firstOrNull { it.id == doc.activeId }
+            ?: frames.firstOrNull { it.id == animFrameId }
+            ?: frames.firstOrNull()
+            ?: return
+        deleteFrame(current.id)
+    }
+
+    override fun selectAnimationFrame(id: String) {
+        val frame = Animation.frames(doc).firstOrNull { it.id == id } ?: return
+        if (doc.activeId == id && _state.value.animation?.playing != true &&
+            _state.value.animation?.activeIndex == Animation.activeIndex(doc, animFrameId)
+        ) {
+            if (!frame.visible) {
+                frame.visible = true
+                markDirty()
+                refreshLayers()
+            }
+            return
+        }
+        stopAnimationPlayback()
+        finishShape(commit = true)
+        finishTransform(apply = true)
+        finishGradient(apply = true)
+        commitPendingOpacity()
+        val frames = Animation.frames(doc)
+        for (f in frames) f.visible = f.id == id
+        doc.activeId = id
+        doc.activeTarget = EditTarget.LAYER
+        animFrameId = id
+        markDirty()
+        refreshLayers()
+        canvas?.invalidate(null, null)
+    }
+
+    override fun stepAnimationFrame(delta: Int) {
+        val frames = Animation.frames(doc)
+        if (frames.isEmpty()) return
+        val index = Animation.activeIndex(doc, animFrameId)
+        selectAnimationFrame(frames[Animation.step(index, delta, frames.size)].id)
+    }
+
+    override fun setAnimationPlaying(playing: Boolean) {
+        if (playing) startAnimationPlayback() else stopAnimationPlayback()
+    }
+
+    /**
+     * Starts the playback loop. Each frame only toggles visibility and the active id; the layer rows are
+     * refreshed once on stop, so a 60 fps setting does not rebuild the panel every tick.
+     */
+    private fun startAnimationPlayback() {
+        val meta = doc.animation ?: return
+        val frames = Animation.frames(doc)
+        if (frames.size < 2) return
+        // Starting an already running loop only updates the rate, not the position.
+        val alreadyPlaying = animPlayJob?.isActive == true
+        if (!alreadyPlaying) stopAnimationPlayback()
+        var index = Animation.activeIndex(doc, animFrameId)
+        if (!alreadyPlaying && meta.playback == AnimationPlayback.ONCE && index >= frames.lastIndex) index = 0
+        animForward = true
+        animFrameId = frames[index].id
+        showFrame(frames[index])
+        _state.update { s -> s.copy(animation = s.animation?.copy(playing = true, activeIndex = index)) }
+        if (alreadyPlaying) {
+            animPlayJob?.cancel()
+        }
+        val token = ++animPlayToken
+        animPlayJob = viewModelScope.launch {
+            try {
+                while (isActive) {
+                    delay((1000L / meta.fps).coerceAtLeast(16L))
+                    val current = Animation.frames(doc)
+                    if (current.size < 2) break
+                    val cursor = Animation.activeIndex(doc, animFrameId)
+                    val step = Animation.nextStep(cursor, current.size, meta.playback, animForward) ?: break
+                    animForward = step.forward
+                    animFrameId = current[step.index].id
+                    showFrame(current[step.index])
+                }
+            } finally {
+                if (token == animPlayToken) {
+                    animPlayJob = null
+                    _state.update { s -> s.copy(animation = s.animation?.copy(playing = false)) }
+                    markDirty()
+                    refreshLayers()
+                    canvas?.invalidate(null, null)
+                }
+            }
+        }
+    }
+
+    private fun stopAnimationPlayback() {
+        val playing = animPlayJob != null || _state.value.animation?.playing == true
+        animPlayToken++
+        animPlayJob?.cancel()
+        animPlayJob = null
+        if (!playing) return
+        _state.update { s -> s.copy(animation = s.animation?.copy(playing = false)) }
+        markDirty()
+        refreshLayers()
+        canvas?.invalidate(null, null)
+    }
+
+    /** Makes [frame] the only visible frame and paints on it; playback calls this without rebuilding rows. */
+    private fun showFrame(frame: RasterLayer) {
+        for (f in Animation.frames(doc)) f.visible = f.id == frame.id
+        doc.activeId = frame.id
+        val index = Animation.activeIndex(doc, frame.id)
+        _state.update { s ->
+            s.copy(
+                activeLayerId = frame.id,
+                animation = s.animation?.copy(activeIndex = index, playing = true, onion = emptyList()),
+            )
+        }
+        canvas?.invalidate(null, null)
+    }
+
+    override fun setAnimationFps(fps: Int) {
+        val meta = doc.animation ?: return
+        val old = meta.fps
+        meta.fps = fps
+        if (meta.fps == old) return
+        markDirty()
+        if (_state.value.animation?.playing == true) {
+            stopAnimationPlayback()
+            startAnimationPlayback()
+        } else {
+            refreshAnimation()
+        }
+    }
+
+    override fun setAnimationPlayback(mode: AnimationPlayback) {
+        val meta = doc.animation ?: return
+        if (meta.playback == mode) return
+        meta.playback = mode
+        markDirty()
+        refreshAnimation()
+    }
+
+    override fun setAnimationOnionSkin(on: Boolean) {
+        val meta = doc.animation ?: return
+        if (meta.onionSkin == on) return
+        meta.onionSkin = on
+        markDirty()
+        refreshAnimation()
+    }
+
+    override fun setAnimationOnionFrames(before: Int, after: Int) {
+        val meta = doc.animation ?: return
+        val b = before.coerceIn(0, AnimationMeta.MAX_ONION_FRAMES)
+        val a = after.coerceIn(0, AnimationMeta.MAX_ONION_FRAMES)
+        if (meta.onionBefore == b && meta.onionAfter == a) return
+        meta.onionBefore = b
+        meta.onionAfter = a
+        markDirty()
+        refreshAnimation()
+    }
+
+    /**
+     * Publishes the animation block and restores the "one visible frame" invariant. Onion frames are rendered
+     * from the frame pixels (not the whole composite) and cached by a version fingerprint, so painting on the
+     * active frame does not rebuild the overlay.
+     */
+    private fun refreshAnimation() {
+        val meta = doc.animation
+        if (meta == null || !Animation.normalize(doc, clearOrphaned = false)) {
+            onionSignature = null
+            onionCache = emptyList()
+            animFrameId = null
+            _state.update { it.copy(animation = null) }
+            return
+        }
+        val frames = Animation.frames(doc)
+        val index = Animation.activeIndex(doc, animFrameId)
+        animFrameId = frames[index].id
+        val playing = _state.value.animation?.playing == true
+        val frameUi = frames.mapIndexed { i, f -> AnimationFrameUi(f.id, i, thumbnailOf(f)) }
+        val onion = if (meta.onionSkin && !playing) onionFrames(frames, index, meta) else emptyList()
+        if (!meta.onionSkin || playing) {
+            onionSignature = null
+            onionCache = emptyList()
+        }
+        _state.update {
+            it.copy(
+                animation = AnimationUi(
+                    fps = meta.fps,
+                    playback = meta.playback,
+                    onionSkin = meta.onionSkin,
+                    onionBefore = meta.onionBefore,
+                    onionAfter = meta.onionAfter,
+                    frames = frameUi,
+                    activeIndex = index,
+                    playing = playing,
+                    onion = onion,
+                ),
+                activeLayerId = doc.activeId,
+            )
+        }
+    }
+
+    /** Previous and next onion frames with their bitmaps; returns the cache when the pixels did not change. */
+    private fun onionFrames(
+        frames: List<RasterLayer>,
+        index: Int,
+        meta: AnimationMeta,
+    ): List<OnionFrameUi> {
+        val before = (1..meta.onionBefore).mapNotNull { d -> frames.getOrNull(index - d)?.let { d to it } }
+        val after = (1..meta.onionAfter).mapNotNull { d -> frames.getOrNull(index + d)?.let { d to it } }
+        val wanted = before + after
+        if (wanted.isEmpty()) return emptyList()
+        var signature = (index.toLong() shl 32) xor (meta.onionBefore.toLong() shl 8) xor meta.onionAfter.toLong()
+        signature = signature * 31 + doc.width
+        signature = signature * 31 + doc.height
+        for ((_, frame) in wanted) {
+            signature = signature * 31 + frame.id.hashCode()
+            for ((key, tile) in frame.pixels.entries()) {
+                signature = signature * 31 + key.packed + tile.version
+            }
+        }
+        if (signature == onionSignature) return onionCache
+        val out = ArrayList<OnionFrameUi>(wanted.size)
+        for ((distance, frame) in before) {
+            if (frame.pixels.keys().isEmpty()) continue
+            val bitmap = gridToBitmap(frame.pixels, doc.width, doc.height, maxSide = ONION_MAX_SIDE).asImageBitmap()
+            out.add(OnionFrameUi(bitmap, before = true, distance = distance))
+        }
+        for ((distance, frame) in after) {
+            if (frame.pixels.keys().isEmpty()) continue
+            val bitmap = gridToBitmap(frame.pixels, doc.width, doc.height, maxSide = ONION_MAX_SIDE).asImageBitmap()
+            out.add(OnionFrameUi(bitmap, before = false, distance = distance))
+        }
+        onionSignature = signature
+        onionCache = out
+        return out
+    }
+
+    /** True when [id] is a frame of the open animation. */
+    private fun isAnimationFrame(id: String): Boolean =
+        doc.animation != null && Animation.frames(doc).any { it.id == id }
 
     override fun setPaperColor(color: Rgba) {
         doc.paper.color = color
@@ -2752,6 +3118,7 @@ class StudioViewModel(
     }
 
     override fun save() {
+        if (_state.value.animation?.playing == true) stopAnimationPlayback()
         finishShape(commit = true)
         finishTransform(apply = true)
         finishGradient(apply = true)
@@ -2771,6 +3138,8 @@ class StudioViewModel(
         autosaveJob?.cancel()
         autosaveJob = null
         commitPendingOpacity()
+        // A frame group removed by undo leaves the metadata behind until redo; a save commits that removal.
+        if (doc.animation != null) Animation.normalize(doc)
         if (!dirtySinceSave) {
             // Autosave may already have written the latest state; Home still needs fresh thumbnails.
             if (withThumbnail && thumbStale) updateThumbnailOnly(refreshList) else if (refreshList) refreshProjects()
@@ -3459,6 +3828,8 @@ class StudioViewModel(
 
     private fun refreshLayers() {
         refreshSelection()
+        // Frames of an animation are ordinary layers: restoring their visibility first keeps the rows in sync.
+        refreshAnimation()
         val rows = ArrayList<LayerUi>()
         fun visit(group: GroupNode, depth: Int) {
             for (n in group.children.asReversed()) {
@@ -3559,6 +3930,9 @@ private const val PREVIEW_FRAME_MS = 33L
 
 /** Debounce of the brush editor live preview: re-render 100 ms after the last change (spec §4.2). */
 private const val EDITOR_PREVIEW_DELAY_MS = 100L
+
+/** Longest side of the bitmap painted as onion skin; larger frames are sampled down. */
+private const val ONION_MAX_SIDE = 512
 
 /** Distance of the transform rotate handle from the top edge, in dp on screen. */
 private const val ROTATE_HANDLE_DP = 26f

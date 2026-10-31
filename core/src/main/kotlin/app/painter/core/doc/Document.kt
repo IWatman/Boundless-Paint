@@ -43,6 +43,12 @@ class Document(
     /** Guides block of the manifest, kept opaque and round-tripped as is (schema owned by core/guide). */
     var guides: JsonObject? = null
 
+    /**
+     * Frame-animation settings; null for a document without frames. The frames are ordinary raster layers in
+     * the group [AnimationMeta.frameGroupId], so they are saved and undone like any other layer.
+     */
+    var animation: AnimationMeta? = null
+
     /** The node flagged as reference for fill / wand, if any. */
     val referenceNode: Node? get() { var r: Node? = null; root.walk { if (it.reference) r = it }; return r }
 

@@ -157,6 +157,7 @@ fun StudioScreen(
             .background(PainterTheme.colors.canvasBackground),
     ) {
         Box(Modifier.fillMaxSize()) { canvas() }
+        OnionSkinOverlay(state = state, modifier = Modifier.fillMaxSize())
         SelectionOverlay(state = state, modifier = Modifier.fillMaxSize())
         ManuscriptOverlay(state = state, modifier = Modifier.fillMaxSize())
         RulerGuidesOverlay(state = state, modifier = Modifier.fillMaxSize())
@@ -312,6 +313,17 @@ fun StudioScreen(
                     actions = actions,
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
+                        .padding(start = 8.dp, end = 8.dp, bottom = 64.dp),
+                )
+            }
+
+            if (state.animationPanelOpen) {
+                AnimationPanel(
+                    state = state,
+                    actions = actions,
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth()
                         .padding(start = 8.dp, end = 8.dp, bottom = 64.dp),
                 )
             }
@@ -962,6 +974,10 @@ private fun StudioTopBar(
                         DropdownMenuItem(
                             text = { Text(stringResource(R.string.timelapse_title)) },
                             onClick = { menuOpen = false; onTimelapse() },
+                        )
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.animation_title)) },
+                            onClick = { menuOpen = false; actions.toggleAnimationPanel() },
                         )
                         DropdownMenuItem(
                             text = { Text(stringResource(R.string.manuscript_guides)) },
