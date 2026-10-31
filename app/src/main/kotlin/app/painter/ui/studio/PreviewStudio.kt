@@ -122,6 +122,12 @@ class FakeStudioController(projectName: String = "Demo") {
             val l = LayerUi(id, "Layer $id", true, 1f, BlendMode.NORMAL, false, false, null)
             s.copy(layers = s.layers.toMutableList().apply { add(idx, l) }, activeLayerId = id, canUndo = true)
         }
+        override fun addVectorLayer() = update { s ->
+            val id = (nextId++).toString()
+            val idx = s.layers.indexOfFirst { it.id == s.activeLayerId }.coerceAtLeast(0)
+            val l = LayerUi(id, "Vector $id", true, 1f, BlendMode.NORMAL, false, false, null, isVector = true)
+            s.copy(layers = s.layers.toMutableList().apply { add(idx, l) }, activeLayerId = id, canUndo = true)
+        }
         override fun deleteLayer(id: String) = update { s ->
             val rest = s.layers.filterNot { it.id == id }
             s.copy(layers = rest, activeLayerId = if (s.activeLayerId == id) rest.firstOrNull()?.id else s.activeLayerId)

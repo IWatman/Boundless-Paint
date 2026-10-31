@@ -507,6 +507,9 @@
     <string name="update_now">Update</string>
     <string name="update_retry">Retry</string>
     <string name="update_up_to_date">You have the latest version.</string>
+    <!-- Vector layers -->
+    <string name="add_vector_layer">Add vector layer</string>
+    <string name="vector_layer_default_name">Vector %1$d</string>
     <!-- Adjustment layers -->
     <string name="add_adjustment">Add adjustment</string>
     <string name="adjust">Adjust…</string>

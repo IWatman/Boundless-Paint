@@ -27,6 +27,7 @@ import app.painter.core.doc.EditTarget
 import app.painter.core.doc.GroupNode
 import app.painter.core.doc.Node
 import app.painter.core.doc.RasterLayer
+import app.painter.core.doc.VectorLayer
 import app.painter.core.doc.effectivelyLocked
 import app.painter.core.doc.newNodeId
 import app.painter.core.fill.BucketFill
@@ -71,6 +72,7 @@ import app.painter.core.history.SetMaskProps
 import app.painter.core.history.SetNodeProps
 import app.painter.core.history.TilePatchCommand
 import app.painter.core.history.Ungroup
+import app.painter.core.history.VectorStrokeCommand
 import app.painter.core.history.snapshotTiles
 import app.painter.core.io.BrushIO
 import app.painter.core.io.ProjectIO
@@ -129,6 +131,8 @@ import app.painter.core.transform.Handle
 import app.painter.core.transform.Resample
 import app.painter.core.transform.Snap
 import app.painter.core.transform.TransformSession
+import app.painter.core.vector.VectorPoint
+import app.painter.core.vector.VectorStroke
 import app.painter.core.select.EllipseShape
 import app.painter.core.select.MaskOps
 import app.painter.core.select.PolyShape
@@ -252,6 +256,24 @@ class StudioViewModel(
     private var thumbStale = false
     private var strokeCounter = 0L
     private var strokeOnMask = false
+    /** Metadata of the running stroke when it paints on a vector layer; null otherwise. */
+    private var pendingVectorStroke: PendingVectorStroke? = null
+
+    /**
+     * Replay data of one interactive stroke on a [VectorLayer]. The path itself is taken from
+     * [StrokeEngine.recordedPoints] on pen-up: those points already passed calibration and guide stages.
+     */
+    private data class PendingVectorStroke(
+        val layerId: String,
+        val brush: BrushParams,
+        val color: Rgba,
+        val mode: StrokeMode,
+        val seed: Long,
+        val zoom: Float,
+        val viewRotation: Float,
+        val symmetry: SymmetryConfig?,
+    )
+
     /** Mode that was active before a stroke of the back of the pen switched to Erase; null outside such a stroke. */
     private var modeBeforePenEraser: BrushModeUi? = null
     /** Descriptor of the device of the running stylus stroke; saved when the stroke ends, null otherwise. */
@@ -450,6 +472,7 @@ class StudioViewModel(
     }
 
     override fun onStrokeBegin(p: InputPoint, deviceDescriptor: String, penEraser: Boolean) {
+        pendingVectorStroke = null
         // A filter is computing on a copy of the layer; a stroke would land under it and be overwritten.
         if (filterBusy) return
         // The back of the pen (TOOL_TYPE_ERASER) erases with the erase brush for this stroke only (§4.3);
@@ -498,6 +521,22 @@ class StudioViewModel(
         )
         stroke = engine
         strokeOnMask = layer == null
+        // Only paint/erase paths can be replayed: smudge, clone and filter strokes depend on pixels that a
+        // later replay would not see.
+        pendingVectorStroke = if (layer is VectorLayer && (mode == StrokeMode.PAINT || mode == StrokeMode.ERASE)) {
+            PendingVectorStroke(
+                layerId = layer.id,
+                brush = brush.params,
+                color = s.color,
+                mode = mode,
+                seed = ctx.seed,
+                zoom = zoom,
+                viewRotation = ctx.viewRotation,
+                symmetry = guides.symmetry.takeIf { it.on },
+            )
+        } else {
+            null
+        }
         engine.begin(p)
         if (layer == null) return // no live mask preview yet: the canvas refreshes when the stroke ends
         if (engine.directToLayer) {
@@ -540,7 +579,12 @@ class StudioViewModel(
 
     override fun onStrokeEnd() {
         restorePenEraserMode()
-        val engine = stroke ?: return
+        val engine = stroke ?: run {
+            pendingVectorStroke = null
+            return
+        }
+        val pending = pendingVectorStroke
+        pendingVectorStroke = null
         stroke = null
         val layerId = doc.activeId ?: return
         val commit = try {
@@ -558,10 +602,52 @@ class StudioViewModel(
         if (!engine.directToLayer) canvas?.setStrokePreview(layerId, null, false, 1f)
         val patch = (commit as? StrokeCommit.Pixels)?.patch
         if (patch != null) {
-            history.push(TilePatchCommand(patch))
+            if (pending != null && pending.layerId == patch.layerId) {
+                pushVectorStroke(pending, engine, patch)
+            } else {
+                history.push(TilePatchCommand(patch))
+            }
             canvas?.invalidate(patch.layerId, patch.after.keys)
         }
         if (_state.value.mode == BrushModeUi.PAINT && _state.value.tool != ToolUi.CLONE) rememberColor(_state.value.color)
+    }
+
+    /**
+     * Records the finished interactive stroke of a vector layer: the raster cache already holds its pixels,
+     * so one [VectorStrokeCommand] restores both the cache patch and the path list on undo/redo.
+     */
+    private fun pushVectorStroke(pending: PendingVectorStroke, engine: StrokeEngine, patch: TilePatch) {
+        val layer = doc.findNode(pending.layerId) as? VectorLayer ?: run {
+            history.push(TilePatchCommand(patch))
+            return
+        }
+        val points = engine.recordedPoints().map(VectorPoint::from)
+        if (points.isEmpty()) {
+            history.push(TilePatchCommand(patch))
+            return
+        }
+        val before = layer.strokes.toList()
+        layer.appendStroke(
+            VectorStroke(
+                points = points,
+                brush = pending.brush,
+                color = pending.color,
+                mode = pending.mode,
+                seed = pending.seed,
+                zoom = pending.zoom,
+                viewRotation = pending.viewRotation,
+                symmetry = pending.symmetry,
+            ),
+        )
+        history.push(
+            VectorStrokeCommand(
+                layerId = layer.id,
+                beforeStrokes = before,
+                afterStrokes = layer.strokes.toList(),
+                patch = patch,
+                name = if (pending.mode == StrokeMode.ERASE) "Erase" else "Vector stroke",
+            ),
+        )
     }
 
     /**
@@ -570,6 +656,7 @@ class StudioViewModel(
      */
     private fun failStroke(engine: StrokeEngine) {
         stroke = null
+        pendingVectorStroke = null
         TilePool.shared.clearFree()
         runCatching { engine.cancel() }
         val layerId = doc.activeId
@@ -587,7 +674,11 @@ class StudioViewModel(
     override fun onStrokeCancel() {
         restorePenEraserMode()
         strokeDevice = null
-        val engine = stroke ?: return
+        val engine = stroke ?: run {
+            pendingVectorStroke = null
+            return
+        }
+        pendingVectorStroke = null
         stroke = null
         engine.cancel()
         val layerId = doc.activeId ?: return
@@ -2240,6 +2331,16 @@ class StudioViewModel(
         exec(AddLayer(layer, parent.id, index))
     }
 
+    override fun addVectorLayer() {
+        if (doc.layerCount() >= _state.value.layerLimit) return
+        finishShape(commit = true)
+        val active = doc.activeNode
+        val parent = active?.parent ?: doc.root
+        val index = if (active != null) parent.indexOf(active) + 1 else parent.children.size
+        val layer = doc.newVectorLayer(defaultVectorLayerName(doc.layerCount() + 1))
+        exec(AddLayer(layer, parent.id, index))
+    }
+
     override fun deleteLayer(id: String) {
         if (doc.layerCount() <= 1) return
         exec(DeleteNode(id))
@@ -3405,6 +3506,7 @@ class StudioViewModel(
         // Adjustment layers have no pixels: the row shows a kind badge instead of a thumbnail.
         isAdjustment = this is AdjustmentLayer,
         adjustKind = (this as? AdjustmentLayer)?.params?.kind,
+        isVector = this is VectorLayer,
     )
 
     private fun thumbnailOf(layer: RasterLayer): ImageBitmap? {
@@ -3439,6 +3541,9 @@ private const val TIMELAPSE_MIN_INTERVAL_MS = 500L
 
 private fun StudioViewModel.defaultLayerName(n: Int): String =
     getApplication<android.app.Application>().getString(R.string.layer_default_name, n)
+
+private fun StudioViewModel.defaultVectorLayerName(n: Int): String =
+    getApplication<android.app.Application>().getString(R.string.vector_layer_default_name, n)
 
 private const val STUDIO_BRUSH_ID = "studio.round"
 

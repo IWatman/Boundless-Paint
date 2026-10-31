@@ -453,6 +453,13 @@ class StrokeEngine(
         out
     }
 
+    /**
+     * Post-stage path of the last stroke, one list per sub-stroke (a lift starts a new one). Stabilizer,
+     * lazy rope, snapping and calibration have already been applied; vector layers store these points and
+     * replay them with [StrokeOptions.stabilize] off.
+     */
+    fun recordedPoints(): List<InputPoint> = recorded.flatten()
+
     private fun touchBuffer() {
         synchronized(dirty) { dirty.addAll(buffer.keys()) }
     }

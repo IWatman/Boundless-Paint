@@ -6,6 +6,7 @@ import app.painter.core.doc.GroupNode
 import app.painter.core.doc.LayerMask
 import app.painter.core.doc.Node
 import app.painter.core.doc.RasterLayer
+import app.painter.core.doc.VectorLayer
 import app.painter.core.raster.MaskGrid
 import app.painter.core.raster.TileGrid
 
@@ -43,6 +44,15 @@ private fun copyKeepingIds(node: Node, pixels: Boolean): Node = when (node) {
         g.expanded = node.expanded
         for (c in node.children) g.add(copyKeepingIds(c, pixels))
         g
+    }
+    is VectorLayer -> VectorLayer(
+        node.id,
+        node.name,
+        if (pixels) node.pixels.copy() else TileGrid(node.pixels.width, node.pixels.height),
+        node.strokes.toList(),
+    ).also {
+        copyBase(node, it, pixels)
+        it.alphaLock = node.alphaLock
     }
     is RasterLayer -> RasterLayer(
         node.id,

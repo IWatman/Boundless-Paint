@@ -14,6 +14,9 @@ import app.painter.core.doc.LayerMask
 import app.painter.core.doc.Node
 import app.painter.core.doc.ProjectType
 import app.painter.core.doc.RasterLayer
+import app.painter.core.doc.VectorLayer
+import app.painter.core.vector.VectorCodec
+import app.painter.core.vector.VectorRenderService
 import app.painter.core.raster.MaskGrid
 import app.painter.core.filter.FilterCodec
 import app.painter.core.raster.MaskTile
@@ -188,7 +191,10 @@ object ProjectIO {
         doc.paper.textureScale = m.paper.texScale
         val layersDir = File(dir, LAYERS)
         val masksDir = File(dir, MASKS)
-        for (n in m.nodes) fromDto(n, doc, layersDir, masksDir)?.let { doc.root.add(it) }
+        val vectorLayers = ArrayList<VectorLayer>()
+        for (n in m.nodes) fromDto(n, doc, layersDir, masksDir, vectorLayers)?.let { doc.root.add(it) }
+        // The cache is replayed after the whole tree exists: StrokeEngine resolves its target through the document.
+        for (layer in vectorLayers) VectorRenderService.renderAll(doc, layer)
         doc.activeId = m.activeId?.takeIf { doc.findNode(it) != null }
         doc.activeTarget =
             if (m.activeTarget == "mask" && doc.activeNode?.mask != null) EditTarget.MASK else EditTarget.LAYER
@@ -583,6 +589,7 @@ object ProjectIO {
         name = n.name,
         kind = when (n) {
             is GroupNode -> NodeKind.GROUP
+            is VectorLayer -> NodeKind.VECTOR
             is FilterLayer -> NodeKind.FILTER
             is RasterLayer -> NodeKind.RASTER
             is AdjustmentLayer -> NodeKind.ADJUSTMENT
@@ -600,19 +607,40 @@ object ProjectIO {
         mask = n.mask?.let { MaskDto(it.enabled, it.linked, it.density, it.tiles.defaultValue.toInt() and 0xFF) },
         adjust = (n as? AdjustmentLayer)?.let { AdjustCodec.toJson(it.params) },
         filter = (n as? FilterLayer)?.let { FilterCodec.toJson(it.params) },
+        vector = (n as? VectorLayer)?.let { VectorCodec.toJson(it.strokes) },
         children = (n as? GroupNode)?.children?.map(::toDto) ?: emptyList(),
     )
 
-    private fun fromDto(d: NodeDto, doc: Document, layersDir: File, masksDir: File): Node? {
+    private fun fromDto(
+        d: NodeDto,
+        doc: Document,
+        layersDir: File,
+        masksDir: File,
+        vectorLayers: MutableList<VectorLayer>,
+    ): Node? {
         val node: Node = when (d.kind) {
             NodeKind.GROUP -> GroupNode(d.id, d.name).also { g ->
                 g.expanded = d.expanded
-                for (c in d.children) fromDto(c, doc, layersDir, masksDir)?.let { g.add(it) }
+                for (c in d.children) fromDto(c, doc, layersDir, masksDir, vectorLayers)?.let { g.add(it) }
             }
             NodeKind.RASTER -> {
                 val grid = TileGrid(doc.width, doc.height)
                 readTiles(grid, File(layersDir, safeName(d.id)))
                 RasterLayer(d.id, d.name, grid).also { it.alphaLock = d.alphaLock }
+            }
+            NodeKind.VECTOR -> {
+                val grid = TileGrid(doc.width, doc.height)
+                readTiles(grid, File(layersDir, safeName(d.id)))
+                // A malformed vector block keeps the stored cache instead of clearing the layer.
+                val strokes = d.vector?.let {
+                    runCatching { VectorCodec.fromJson(it) }
+                        .onFailure { e -> warn("keeping the cache of vector layer ${d.id}: ${e.message}") }
+                        .getOrNull()
+                }
+                VectorLayer(d.id, d.name, grid, strokes.orEmpty()).also {
+                    it.alphaLock = d.alphaLock
+                    if (strokes != null) vectorLayers.add(it)
+                }
             }
             NodeKind.FILTER -> {
                 val grid = TileGrid(doc.width, doc.height)

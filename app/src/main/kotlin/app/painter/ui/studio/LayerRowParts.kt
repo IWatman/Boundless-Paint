@@ -143,6 +143,23 @@ fun LayerThumbnail(layer: LayerUi, size: Dp, active: Boolean) {
                 modifier = Modifier.size(size).padding(1.dp),
             )
         }
+        if (layer.isVector) {
+            Box(
+                Modifier
+                    .align(Alignment.BottomStart)
+                    .padding(2.dp)
+                    .size(14.dp)
+                    .background(MaterialTheme.colorScheme.primary, MaterialTheme.shapes.extraSmall),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    "V",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onPrimary,
+                    maxLines = 1,
+                )
+            }
+        }
         if (!layer.visible) {
             Box(Modifier.size(size).background(Color.Black.copy(alpha = 0.45f)), contentAlignment = Alignment.Center) {
                 Icon(Icons.Outlined.VisibilityOff, null, tint = Color.White, modifier = Modifier.size(18.dp))

@@ -80,6 +80,8 @@ internal data class NodeDto(
     val adjust: JsonObject? = null,
     /** Live filter parameters (kind = filter), see [app.painter.core.filter.FilterCodec]. */
     val filter: JsonObject? = null,
+    /** Vector paths (kind = vector), see [app.painter.core.vector.VectorCodec]. */
+    val vector: JsonObject? = null,
     val children: List<NodeDto> = emptyList(),
 )
 
@@ -98,4 +100,5 @@ internal object NodeKind {
     const val GROUP = "group"
     const val ADJUSTMENT = "adjustment"
     const val FILTER = "filter"
+    const val VECTOR = "vector"
 }

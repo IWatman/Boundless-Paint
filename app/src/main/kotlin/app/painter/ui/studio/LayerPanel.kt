@@ -22,6 +22,7 @@ import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.ArrowDropDown
+import androidx.compose.material.icons.outlined.Create
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.SubdirectoryArrowRight
@@ -117,6 +118,7 @@ internal fun LayerPanel(state: StudioUiState, actions: StudioActions, modifier: 
                 )
             }
             AdjustmentAddEntry(actions = actions, expanded = expanded, modifier = Modifier.padding(horizontal = 4.dp))
+            VectorAddEntry(actions = actions, expanded = expanded, modifier = Modifier.padding(horizontal = 4.dp))
             if (expanded && active != null) {
                 LayerProperties(active, actions)
             }
@@ -129,6 +131,36 @@ internal fun LayerPanel(state: StudioUiState, actions: StudioActions, modifier: 
             )
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             PaperRow(state, actions, expanded)
+        }
+    }
+}
+
+/**
+ * "Add vector layer" entry of the layer panel header: plain row when the panel is expanded, icon only when
+ * it is collapsed.
+ */
+@Composable
+private fun VectorAddEntry(actions: StudioActions, expanded: Boolean, modifier: Modifier = Modifier) {
+    Row(
+        modifier
+            .fillMaxWidth()
+            .clip(MaterialTheme.shapes.small)
+            .clickable(onClickLabel = stringResource(R.string.add_vector_layer)) { actions.addVectorLayer() }
+            .padding(horizontal = 8.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            Icons.Outlined.Create,
+            stringResource(R.string.add_vector_layer),
+            modifier = Modifier.size(20.dp),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        if (expanded) {
+            Text(
+                stringResource(R.string.add_vector_layer),
+                style = MaterialTheme.typography.labelLarge,
+                modifier = Modifier.weight(1f).padding(start = 8.dp),
+            )
         }
     }
 }

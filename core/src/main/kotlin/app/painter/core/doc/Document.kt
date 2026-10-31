@@ -48,6 +48,9 @@ class Document(
 
     fun newRasterLayer(name: String): RasterLayer = RasterLayer(newNodeId(), name, TileGrid(width, height))
 
+    /** Empty vector layer with a transparent raster cache of the canvas size. */
+    fun newVectorLayer(name: String): VectorLayer = VectorLayer(newNodeId(), name, TileGrid(width, height))
+
     fun findNode(id: String): Node? {
         var found: Node? = null
         root.walk { if (it.id == id) found = it }

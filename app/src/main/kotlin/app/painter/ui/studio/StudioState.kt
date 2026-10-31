@@ -137,6 +137,8 @@ data class LayerUi(
     val isAdjustment: Boolean = false,
     /** [app.painter.core.adjust.AdjustKind] id when [isAdjustment]. */
     val adjustKind: String? = null,
+    /** Node is an editable vector layer: the thumbnail shows a small "V" badge. */
+    val isVector: Boolean = false,
 )
 
 /**
@@ -477,6 +479,9 @@ interface StudioActions {
     fun toggleLayerPanel()
     fun toggleColorPanel()
     fun addLayer()
+
+    /** Inserts an empty vector layer above the active node and makes it active. */
+    fun addVectorLayer() {}
 
     /**
      * Inserts an adjustment layer of [kind] (one of [app.painter.core.adjust.AdjustKind.ALL]) above the

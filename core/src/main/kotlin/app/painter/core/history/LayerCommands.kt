@@ -5,8 +5,10 @@ import app.painter.core.doc.ColorTag
 import app.painter.core.doc.Document
 import app.painter.core.doc.Node
 import app.painter.core.doc.RasterLayer
+import app.painter.core.doc.VectorLayer
 import app.painter.core.raster.Tile
 import app.painter.core.raster.TileKey
+import app.painter.core.vector.VectorStroke
 
 /**
  * Inserts [node] into the group [parentId] (null = root) at [index] (null = top) and makes it
@@ -152,28 +154,35 @@ class SetNodeProps(
     override val byteSize: Long get() = STRUCT_BYTES
 }
 
-/** Removes all pixels of raster layer [layerId]. */
+/** Removes all pixels, and the vector paths of a [VectorLayer], of raster layer [layerId]. */
 class ClearLayer(
     val layerId: String,
     override val name: String = "Clear layer",
 ) : Command {
     private var before: Map<TileKey, Tile?>? = null
+    private var beforeStrokes: List<VectorStroke>? = null
 
     override fun apply(doc: Document) {
         val layer = doc.raster(layerId)
         requireUnlocked(layer)
         val grid = layer.pixels
         if (before == null) before = snapshotTiles(grid, grid.keys().toList())
+        if (layer is VectorLayer && beforeStrokes == null) beforeStrokes = layer.strokes.toList()
         grid.clear()
+        (layer as? VectorLayer)?.setStrokes(emptyList())
         doc.touch()
     }
 
     override fun revert(doc: Document) {
-        val grid = doc.raster(layerId).pixels
+        val layer = doc.raster(layerId)
+        val grid = layer.pixels
         grid.clear()
         before?.let { writeTiles(grid, it) }
+        if (layer is VectorLayer) beforeStrokes?.let(layer::setStrokes)
         doc.touch()
     }
 
-    override val byteSize: Long get() = STRUCT_BYTES + tileBytes(before?.size ?: 0)
+    override val byteSize: Long
+        get() = STRUCT_BYTES + tileBytes(before?.size ?: 0) +
+            (beforeStrokes?.sumOf { it.points.size * 32L } ?: 0L)
 }

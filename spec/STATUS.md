@@ -99,7 +99,11 @@
   format. `TiffCmyk` + `TiffCmykTest` cover the container and black/white conversion.
 - Radial and array ruler overlays: 24 rays from the canvas centre, and a 3x3 thirds grid with an outer frame;
   both follow the canvas transform and are toggled in Options.
-- Still planned in M4: vector layers, animation/onion skin, Drive sync.
+- **Vector layers**: `VectorLayer` keeps editable brush paths beside the raster cache used by the existing
+  compositor/renderer. Paint/erase strokes append a path and replay deterministically; `VectorStrokeCommand` restores
+  paths and pixels together, the layer panel has "Add vector layer" and a `V` badge. Paths persist in the manifest
+  (`kind: "vector"`) and are re-rendered on load. See `docs/vector-layers.md`.
+- Still planned in M4: animation/onion skin, Drive sync.
 
 ## M2: done (2026-10-31)
 - Build: `. .\tools\env.ps1; .\gradlew.bat :core:test :app:testDebugUnitTest :app:assembleDebug`.

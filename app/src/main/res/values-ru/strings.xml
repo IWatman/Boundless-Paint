@@ -506,6 +506,9 @@
     <string name="update_signature_mismatch">Установленная версия подписана другим ключом (тестовая сборка). Удалите приложение и установите Boundless Paint заново с GitHub.</string>
     <string name="update_done">Обновлено до версии %1$s.</string>
     <string name="updates">Обновления</string>
+    <!-- Vector layers -->
+    <string name="add_vector_layer">Добавить векторный слой</string>
+    <string name="vector_layer_default_name">Вектор %1$d</string>
     <!-- Adjustment layers -->
     <string name="add_adjustment">Добавить коррекцию</string>
     <string name="adjust">Настроить…</string>

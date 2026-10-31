@@ -5,6 +5,7 @@ import app.painter.core.blend.BlendMode
 import app.painter.core.color.Rgba
 import app.painter.core.filter.FilterParams
 import app.painter.core.raster.TileGrid
+import app.painter.core.vector.VectorStroke
 import java.util.UUID
 
 /** Base of every entry in the layer stack (spec/document-model.md). */
@@ -47,6 +48,40 @@ open class RasterLayer(
 
     override fun deepCopy(newId: String): RasterLayer =
         RasterLayer(newId, name, pixels.copy()).also { copyBaseTo(it); it.alphaLock = alphaLock }
+}
+
+/**
+ * Editable vector layer (M4): [strokes] is the source of truth, [pixels] is a raster cache rendered with the
+ * ordinary [app.painter.core.stroke.StrokeEngine] so the CPU compositor and the GPU renderer need no special
+ * case. Re-render the cache with [app.painter.core.vector.VectorRenderService] after changing the strokes.
+ */
+class VectorLayer(
+    id: String,
+    name: String,
+    pixels: TileGrid,
+    strokes: List<VectorStroke> = emptyList(),
+) : RasterLayer(id, name, pixels) {
+    private val _strokes = ArrayList<VectorStroke>(strokes)
+
+    /** Vector paths in paint order (bottom to top within the layer). */
+    val strokes: List<VectorStroke> get() = _strokes
+
+    fun appendStroke(stroke: VectorStroke) {
+        _strokes.add(stroke)
+    }
+
+    /** Replaces every path, e.g. on undo or on a project load. */
+    fun setStrokes(strokes: List<VectorStroke>) {
+        val copy = strokes.toList()
+        _strokes.clear()
+        _strokes.addAll(copy)
+    }
+
+    override fun deepCopy(newId: String): VectorLayer =
+        VectorLayer(newId, name, pixels.copy(), _strokes.toList()).also {
+            copyBaseTo(it)
+            it.alphaLock = alphaLock
+        }
 }
 
 /**
