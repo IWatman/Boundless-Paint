@@ -4,6 +4,8 @@ package app.painter.studio
 enum class ExportFormat(val mime: String, val extension: String) {
     PNG("image/png", "png"),
     JPG("image/jpeg", "jpg"),
+    /** 8-bit CMYK TIFF; no alpha, always composited on the paper. */
+    CMYK_TIFF("image/tiff", "tiff"),
 }
 
 /**

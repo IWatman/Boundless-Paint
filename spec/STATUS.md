@@ -86,7 +86,9 @@
   empty layer as a tone layer or over existing content.
 - **Manuscript guides**: bleed (3%), trim (5%) and safe-area (10%) overlays, toggled from Options. They follow
   the canvas transform like the other overlays.
-- Still planned in M4: vector layers, radial/array rulers, animation/onion skin, colour mode/CMYK, Drive sync.
+- **CMYK export**: 8-bit uncompressed CMYK TIFF, four inks, paper composited; available as the third export
+  format. `TiffCmyk` + `TiffCmykTest` cover the container and black/white conversion.
+- Still planned in M4: vector layers, radial/array rulers, animation/onion skin, Drive sync.
 
 ## M2: done (2026-10-31)
 - Build: `. .\tools\env.ps1; .\gradlew.bat :core:test :app:testDebugUnitTest :app:assembleDebug`.

@@ -77,6 +77,7 @@ import app.painter.core.io.ProjectIO
 import app.painter.core.io.ProjectStore
 import app.painter.core.io.PsdIO
 import app.painter.core.io.SaveTracker
+import app.painter.core.io.TiffCmyk
 import app.painter.core.io.import.BrushImport
 import app.painter.core.liquify.LiquifySession
 import app.painter.core.perspective.PerspectiveConfig
@@ -2796,6 +2797,11 @@ class StudioViewModel(
             val bmp = gridToBitmap(grid, doc.width, doc.height)
             ByteArrayOutputStream().use { out -> bmp.compress(format, quality, out); out.toByteArray() }
         }
+
+    /** CMYK TIFF for the M4 export option (8-bit, uncompressed, paper composited). */
+    suspend fun encodeCmyk(): ByteArray = withContext(Dispatchers.Default) {
+        TiffCmyk.encode(Compositor.flatten(doc, includePaper = true), doc.width, doc.height)
+    }
 
     val documentName: String get() = doc.name
 

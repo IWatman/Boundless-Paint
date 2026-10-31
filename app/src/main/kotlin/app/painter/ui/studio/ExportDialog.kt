@@ -50,7 +50,7 @@ fun ExportDialog(
                         step = 1f,
                         unit = "%",
                     )
-                } else {
+                } else if (options.format == ExportFormat.PNG) {
                     ToggleChip(
                         label = stringResource(R.string.transparent_background),
                         checked = options.transparent,

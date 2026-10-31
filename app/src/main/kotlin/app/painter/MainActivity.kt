@@ -219,11 +219,15 @@ private fun Studio(vm: StudioViewModel) {
         if (uri != null) scope.launch {
             val opts = vm.pendingExport ?: ExportOptions()
             val ok = runCatching {
-                val format = when (opts.format) {
-                    ExportFormat.JPG -> Bitmap.CompressFormat.JPEG
-                    ExportFormat.PNG -> Bitmap.CompressFormat.PNG
+                val bytes = if (opts.format == ExportFormat.CMYK_TIFF) {
+                    vm.encodeCmyk()
+                } else {
+                    val format = when (opts.format) {
+                        ExportFormat.JPG -> Bitmap.CompressFormat.JPEG
+                        else -> Bitmap.CompressFormat.PNG
+                    }
+                    vm.encodeComposite(format, opts.quality, opts.transparentBackground)
                 }
-                val bytes = vm.encodeComposite(format, opts.quality, opts.transparentBackground)
                 context.contentResolver.openOutputStream(uri)?.use { it.write(bytes) }
             }.isSuccess
             Toast.makeText(context, if (ok) "Exported" else "Export failed", Toast.LENGTH_SHORT).show()
@@ -235,6 +239,10 @@ private fun Studio(vm: StudioViewModel) {
     )
     val jpgLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument(ExportFormat.JPG.mime),
+        writeExport,
+    )
+    val cmykLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument(ExportFormat.CMYK_TIFF.mime),
         writeExport,
     )
     val psdLauncher = rememberLauncherForActivityResult(
@@ -261,7 +269,11 @@ private fun Studio(vm: StudioViewModel) {
             vm.exportRequest.value = false
             val opts = vm.pendingExport ?: ExportOptions()
             val name = "${vm.documentName}.${opts.format.extension}"
-            if (opts.format == ExportFormat.JPG) jpgLauncher.launch(name) else pngLauncher.launch(name)
+            when (opts.format) {
+                ExportFormat.JPG -> jpgLauncher.launch(name)
+                ExportFormat.CMYK_TIFF -> cmykLauncher.launch(name)
+                ExportFormat.PNG -> pngLauncher.launch(name)
+            }
         }
     }
 
