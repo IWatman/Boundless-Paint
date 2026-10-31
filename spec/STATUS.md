@@ -56,6 +56,16 @@
   Shaded and Web have their own rules), and fill pattern/procedural (solid only).
 - Re-checked after the fix: 29 fast strokes on the emulator, Dalvik heap stabilises around 227 MB of the 450 MB
   cap, no new ANR or `OutOfMemoryError`.
+
+### Brush coverage audit (2026-10-31, 0.3.9)
+- `BrushCoverageTest` (androidTest, emulator) renders **every one of the 91 stock presets** through the real
+  `StrokeEngine` and `BrushLibrary` resources on a gradient + 8 px checkerboard, counts changed pixels and logs
+  `BrushCoverage|category|name|changed=N`. All 91 changed pixels; there are no dead catalog brushes.
+- `Blur, soft` looked like a no-op on the first linear-gradient probe (a symmetric blur leaves a linear gradient
+  unchanged); the checkerboard pass changes ~17k pixels, so the brush works.
+- `Dust` was technically drawing but too faint: opacity 0.6→0.82, flow 0.6→0.7, particle count 200→240 and
+  sprite size 0.09→0.14 in `tools/catalog/particles.py`; regenerated presets (`gen_assets.py --check` OK), it now
+  covers ~22k pixels in the audit and is visible in the UI.
 - Watercolour preview now writes only the pigment bounding rectangle of each tile (plus the bilinear border)
   instead of walking all 256×256 pixels; the previous rectangle is included once so drying pixels are cleared.
   The local cell-to-pixel conversion was also fixed so wet tiles after the first one write their pigment.
