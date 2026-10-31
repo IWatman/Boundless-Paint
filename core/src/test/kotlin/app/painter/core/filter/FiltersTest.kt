@@ -281,6 +281,20 @@ class FiltersTest {
     }
 
     @Test
+    fun screentoneDrawsDotsLinesAndCrosses() {
+        val dots = grid(128, 128)
+        Filters.apply("l", dots, ScreentoneParams(cell = 8, angleDeg = 0f, shape = "dot"))
+        assertTrue(px(dots, 4, 4)[3] > 0.5f, "a dot sits on the cell centre")
+        assertTrue(px(dots, 1, 1)[3] < 0.5f, "the cell corner stays clear")
+
+        val lines = grid(128, 128)
+        Filters.apply("l", lines, ScreentoneParams(cell = 8, angleDeg = 90f, shape = "line"))
+        var row = 0
+        for (x in 0 until 128) if (px(lines, x, 4)[3] > 0.5f) row++
+        assertTrue(row > 100, "the horizontal line spans the canvas")
+    }
+
+    @Test
     fun selectionAndAlphaLockTogether() {
         val doc = Document.create(96, 32)
         val layer = doc.activeRaster!!

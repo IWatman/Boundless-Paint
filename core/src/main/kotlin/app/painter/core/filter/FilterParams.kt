@@ -275,6 +275,22 @@ data class LayerGlowParams(
     override val reach: Int get() = radius.coerceIn(1, 100)
 }
 
+/** Screentone generator: dots, parallel lines or a cross hatch on a [cell]-px grid. */
+@Serializable
+@SerialName("screentone")
+data class ScreentoneParams(
+    val cell: Int = 8,
+    val angleDeg: Float = 45f,
+    /** dot, line or cross. */
+    val shape: String = "dot",
+    val color: String = "#000000",
+    val strength: Float = 1f,
+) : FilterParams() {
+    override val kind: String get() = "screentone"
+    override val reach: Int get() = 0
+    override val coversCanvas: Boolean get() = true
+}
+
 /** Draw generator: a page divided into [rows] x [cols] panels by margins and gutters. */
 @Serializable
 @SerialName("panel-grid")

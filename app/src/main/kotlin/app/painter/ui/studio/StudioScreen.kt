@@ -748,6 +748,20 @@ private fun StudioTopBar(
                             },
                         )
                         DropdownMenuItem(
+                            text = { Text(stringResource(R.string.tool_lasso_fill)) },
+                            onClick = {
+                                toolsMenu = false
+                                actions.selectTool(ToolUi.LASSO_FILL)
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.tool_lasso_erase)) },
+                            onClick = {
+                                toolsMenu = false
+                                actions.selectTool(ToolUi.LASSO_ERASE)
+                            },
+                        )
+                        DropdownMenuItem(
                             text = { Text(stringResource(R.string.tool_magic_wand)) },
                             onClick = {
                                 toolsMenu = false

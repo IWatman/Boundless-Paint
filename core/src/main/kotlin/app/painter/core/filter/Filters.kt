@@ -246,6 +246,7 @@ object Filters {
         is DropShadowParams -> dropShadow(src, w, h, params)
         is LayerGlowParams -> layerGlow(src, w, h, params)
         is PanelGridParams -> panelGrid(src, w, h, params)
+        is ScreentoneParams -> screentone(src, w, h, params)
     }
 
     /** `a·(1-t) + b·t` per channel, clamped to a non-negative premultiplied pixel. */
@@ -896,6 +897,38 @@ object Filters {
         fillRect(out, w, h, ix0, iy1 - thickness, ix1, iy1, ink)
         fillRect(out, w, h, ix0, iy0, ix0 + thickness, iy1, ink)
         fillRect(out, w, h, ix1 - thickness, iy0, ix1, iy1, ink)
+        return mix(src, out, p.strength)
+    }
+
+    /** Screentone: a dot/line/cross pattern on a [ScreentoneParams.cell] grid, optionally rotated. */
+    private fun screentone(src: FloatArray, w: Int, h: Int, p: ScreentoneParams): FloatArray {
+        val cell = p.cell.coerceIn(2, 64)
+        val ink = ink(p.color)
+        val angle = Math.toRadians(p.angleDeg.toDouble())
+        val ca = cos(angle)
+        val sa = sin(angle)
+        val out = src.copyOf()
+        val cx = w / 2f
+        val cy = h / 2f
+        val radius = cell * 0.32f
+        for (y in 0 until h) for (x in 0 until w) {
+            // Rotate the pixel into the pattern frame around the canvas centre.
+            val dx = (x + 0.5f - cx)
+            val dy = (y + 0.5f - cy)
+            val u = dx * ca + dy * sa
+            val v = -dx * sa + dy * ca
+            val gx = u - cell * floor(u / cell)
+            val gy = v - cell * floor(v / cell)
+            val cx0 = cell / 2f
+            val dot = gx - cx0
+            val doy = gy - cx0
+            val hit = when (p.shape.lowercase()) {
+                "line" -> abs(dot) <= 0.75f
+                "cross" -> abs(dot) <= 0.75f || abs(doy) <= 0.75f
+                else -> hypot(dot, doy) <= radius
+            }
+            if (hit) overInk(out, (y * w + x) * 4, ink, 1f)
+        }
         return mix(src, out, p.strength)
     }
 

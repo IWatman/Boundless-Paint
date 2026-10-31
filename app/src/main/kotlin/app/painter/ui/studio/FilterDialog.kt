@@ -37,6 +37,7 @@ import app.painter.core.filter.HalftoneParams
 import app.painter.core.filter.LayerGlowParams
 import app.painter.core.filter.LayerStrokeParams
 import app.painter.core.filter.PanelGridParams
+import app.painter.core.filter.ScreentoneParams
 import app.painter.core.filter.SpinBlurParams
 import app.painter.core.filter.ZoomBlurParams
 import app.painter.core.color.Rgba
@@ -65,6 +66,7 @@ private enum class FilterKindUi(val label: Int) {
     SHADOW(R.string.filter_drop_shadow),
     LAYER_GLOW(R.string.filter_layer_glow),
     PANELS(R.string.filter_panels),
+    SCREENTONE(R.string.filter_screentone),
 }
 
 /**
@@ -92,6 +94,7 @@ fun FilterDialog(ink: Rgba, onDismiss: () -> Unit, onApply: (FilterParams) -> Un
     var cols by remember { mutableStateOf(2f) }
     var margin by remember { mutableStateOf(40f) }
     var gutter by remember { mutableStateOf(24f) }
+    var toneShape by remember { mutableStateOf("dot") }
     val inkHex = remember(ink) {
         "#%02X%02X%02X".format(
             (ink.r.coerceIn(0f, 1f) * 255).roundToInt(),
@@ -102,7 +105,7 @@ fun FilterDialog(ink: Rgba, onDismiss: () -> Unit, onApply: (FilterParams) -> Un
 
     val params = kind.params(
         radius, amount, distance, angle, cell, threshold, mono, scale, strength,
-        count, thickness, inner, inkHex, strokeInner, strokeOuter, rows, cols, margin, gutter,
+        count, thickness, inner, inkHex, strokeInner, strokeOuter, rows, cols, margin, gutter, toneShape,
     )
     val percent = { v: Float -> "${(v * 100).roundToInt()}%" }
 
@@ -309,6 +312,21 @@ fun FilterDialog(ink: Rgba, onDismiss: () -> Unit, onApply: (FilterParams) -> Un
                             { thickness = it }, step = 1f, unit = "px",
                         )
                     }
+                    FilterKindUi.SCREENTONE -> {
+                        ParamSlider(
+                            stringResource(R.string.cell_size), cell, 2f..48f, { it.roundToInt().toString() },
+                            { cell = it }, step = 1f, unit = "px",
+                        )
+                        ParamSlider(
+                            stringResource(R.string.angle), angle, 0f..180f, { it.roundToInt().toString() },
+                            { angle = it }, step = 1f, unit = "°",
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            ToggleChip(stringResource(R.string.dots), toneShape == "dot") { toneShape = "dot" }
+                            ToggleChip(stringResource(R.string.lines), toneShape == "line") { toneShape = "line" }
+                            ToggleChip(stringResource(R.string.cross), toneShape == "cross") { toneShape = "cross" }
+                        }
+                    }
                 }
                 ParamSlider(
                     stringResource(R.string.strength), strength, 0f..1f, percent,
@@ -344,6 +362,7 @@ private fun FilterKindUi.params(
     cols: Float,
     margin: Float,
     gutter: Float,
+    toneShape: String,
 ): FilterParams = when (this) {
     FilterKindUi.BLUR -> BlurParams(radius, strength)
     FilterKindUi.MOTION -> MotionBlurParams(distance, angle, strength)
@@ -375,5 +394,8 @@ private fun FilterKindUi.params(
     FilterKindUi.PANELS -> PanelGridParams(
         rows = rows.roundToInt(), cols = cols.roundToInt(), margin = margin.roundToInt(),
         gutter = gutter.roundToInt(), thickness = thickness.roundToInt(), color = ink, strength = strength,
+    )
+    FilterKindUi.SCREENTONE -> ScreentoneParams(
+        cell = cell.roundToInt(), angleDeg = angle, shape = toneShape, color = ink, strength = strength,
     )
 }

@@ -306,7 +306,8 @@ internal fun MainToolbar(
 /** Icon of the active tool indicator of the main toolbar (STATUS debt 19). */
 private fun activeToolIcon(tool: ToolUi): ImageVector = when (tool) {
     ToolUi.BRUSH -> Icons.Outlined.Brush
-    ToolUi.SELECT_RECT, ToolUi.SELECT_ELLIPSE, ToolUi.SELECT_LASSO, ToolUi.SELECT_WAND -> Icons.Outlined.SelectAll
+    ToolUi.SELECT_RECT, ToolUi.SELECT_ELLIPSE, ToolUi.SELECT_LASSO, ToolUi.SELECT_WAND,
+    ToolUi.LASSO_FILL, ToolUi.LASSO_ERASE -> Icons.Outlined.SelectAll
     ToolUi.TRANSFORM -> Icons.Outlined.OpenWith
     ToolUi.FILL -> Icons.Outlined.FormatColorFill
     ToolUi.GRADIENT -> Icons.Outlined.Gradient
@@ -330,6 +331,8 @@ private fun activeToolName(tool: ToolUi): String = stringResource(
         ToolUi.SHAPE -> R.string.shape_title
         ToolUi.CLONE -> R.string.tool_clone
         ToolUi.LIQUIFY -> R.string.tool_liquify
+        ToolUi.LASSO_FILL -> R.string.tool_lasso_fill
+        ToolUi.LASSO_ERASE -> R.string.tool_lasso_erase
     },
 )
 

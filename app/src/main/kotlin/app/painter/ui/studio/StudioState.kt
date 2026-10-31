@@ -36,7 +36,15 @@ enum class ToolUi {
     CLONE,
     /** Liquify: dragging pushes the pixels of the active layer around (spec/ROADMAP.md M3). */
     LIQUIFY,
+    /** Freehand lasso that fills the enclosed area immediately (M4). */
+    LASSO_FILL,
+    /** Freehand lasso that erases the enclosed area immediately (M4). */
+    LASSO_ERASE,
 }
+
+/** True for the lasso fill/erase tools that record a freehand contour and apply it on release. */
+val ToolUi.isLassoContent: Boolean
+    get() = this == ToolUi.LASSO_FILL || this == ToolUi.LASSO_ERASE
 
 /** True for the tools that build a selection instead of painting. */
 val ToolUi.isSelectionTool: Boolean

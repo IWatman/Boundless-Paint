@@ -31,6 +31,7 @@ import app.painter.core.doc.effectivelyLocked
 import app.painter.core.doc.newNodeId
 import app.painter.core.fill.BucketFill
 import app.painter.core.fill.FillCommand
+import app.painter.core.fill.LassoFill
 import app.painter.core.fill.Gradient
 import app.painter.core.fill.GradientSpec
 import app.painter.core.fill.GradientStop
@@ -152,6 +153,7 @@ import app.painter.ui.studio.PointUi
 import app.painter.ui.studio.RectUi
 import app.painter.ui.studio.RulerUi
 import app.painter.ui.studio.ToolUi
+import app.painter.ui.studio.isLassoContent
 import app.painter.ui.studio.isSelectionTool
 import app.painter.ui.studio.adjustTitleRes
 import app.painter.ui.studio.LayerUi
@@ -974,7 +976,8 @@ class StudioViewModel(
     override val toolActive: Boolean
         get() = _state.value.tool == ToolUi.TRANSFORM || _state.value.tool == ToolUi.FILL ||
             _state.value.tool == ToolUi.GRADIENT || _state.value.tool == ToolUi.SHAPE ||
-            _state.value.tool == ToolUi.LIQUIFY || _state.value.tool.isSelectionTool
+            _state.value.tool == ToolUi.LIQUIFY || _state.value.tool.isSelectionTool ||
+            _state.value.tool.isLassoContent
 
     override fun selectTool(tool: ToolUi) {
         if (tool != ToolUi.TRANSFORM) finishTransform(apply = true)
@@ -1029,7 +1032,7 @@ class StudioViewModel(
                 val outline = ellipseOutline(toolStartX, toolStartY, toolStartX, toolStartY)
                 _state.update { it.copy(selectionDraftPath = outline) }
             }
-            ToolUi.SELECT_LASSO -> {
+            ToolUi.SELECT_LASSO, ToolUi.LASSO_FILL, ToolUi.LASSO_ERASE -> {
                 lassoPoints.add(PointUi(toolStartX, toolStartY))
                 val trail = lassoPoints.toList()
                 _state.update { it.copy(selectionDraftPath = trail) }
@@ -1066,7 +1069,7 @@ class StudioViewModel(
                 val outline = ellipseOutline(toolStartX, toolStartY, cx, cy)
                 _state.update { it.copy(selectionDraftPath = outline) }
             }
-            ToolUi.SELECT_LASSO -> {
+            ToolUi.SELECT_LASSO, ToolUi.LASSO_FILL, ToolUi.LASSO_ERASE -> {
                 val last = lassoPoints.lastOrNull()
                 if (last == null || (cx - last.x) * (cx - last.x) + (cy - last.y) * (cy - last.y) >= 4f) {
                     lassoPoints.add(PointUi(cx, cy))
@@ -1127,6 +1130,17 @@ class StudioViewModel(
                 val poly = FloatArray(trail.size * 2)
                 trail.forEachIndexed { i, p -> poly[i * 2] = p.x; poly[i * 2 + 1] = p.y }
                 SelectionEdits.shape(doc, PolyShape(poly), SelectMode.NEW, aa = true)?.let { exec(it) }
+            }
+            ToolUi.LASSO_FILL, ToolUi.LASSO_ERASE -> {
+                if (trail.size < 3) return
+                val layer = doc.activeRaster ?: return
+                val poly = FloatArray(trail.size * 2)
+                trail.forEachIndexed { i, p -> poly[i * 2] = p.x; poly[i * 2 + 1] = p.y }
+                val patch = LassoFill.apply(
+                    doc, layer.id, poly, _state.value.color, 1f, erase = tool == ToolUi.LASSO_ERASE,
+                ) ?: return
+                history.push(TilePatchCommand(patch, if (tool == ToolUi.LASSO_ERASE) "Lasso erase" else "Lasso fill"))
+                canvas?.invalidate(layer.id, patch.after.keys)
             }
             else -> {
                 val rect = draft?.let { RectUi.between(it.left, it.top, it.right, it.bottom) } ?: return

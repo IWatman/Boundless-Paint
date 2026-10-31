@@ -577,4 +577,10 @@
     <string name="fill_selection">Залить выделение</string>
     <string name="erase_selection">Стереть выделение</string>
     <string name="fill_outside_selection">Залить вне выделения</string>
+    <string name="tool_lasso_fill">Заливка лассо</string>
+    <string name="tool_lasso_erase">Стирание лассо</string>
+    <string name="filter_screentone">Тон</string>
+    <string name="dots">Точки</string>
+    <string name="lines">Линии</string>
+    <string name="cross">Крест</string>
 </resources>

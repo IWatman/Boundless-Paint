@@ -578,4 +578,10 @@
     <string name="fill_selection">Fill selection</string>
     <string name="erase_selection">Erase selection</string>
     <string name="fill_outside_selection">Fill outside selection</string>
+    <string name="tool_lasso_fill">Lasso fill</string>
+    <string name="tool_lasso_erase">Lasso erase</string>
+    <string name="filter_screentone">Screentone</string>
+    <string name="dots">Dots</string>
+    <string name="lines">Lines</string>
+    <string name="cross">Cross</string>
 </resources>

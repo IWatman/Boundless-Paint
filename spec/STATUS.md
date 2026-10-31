@@ -80,8 +80,12 @@
 - Selection content actions: **Fill selection**, **Erase selection** and **Fill outside selection** in Editing
   Tools when a selection is active. The surrounding fill renders an inverted selection mask without intersecting
   it with the active selection; `SelectTest` covers fill and erase keeping the selected island.
-- Still planned in M4: vector layers, radial/array rulers, a direct lasso-fill gesture, animation/onion skin,
-  manuscript, screentone layer, colour mode/CMYK, Drive sync.
+- **Lasso fill** and **Lasso erase** tools: drag a freehand contour, release, and the enclosed area is filled
+  or cleared in one undo step (`LassoFill` + the direct tools).
+- **Screentone** filter: dot/line/cross patterns on a configurable cell grid, angle and ink colour; usable on an
+  empty layer as a tone layer or over existing content.
+- Still planned in M4: vector layers, radial/array rulers, animation/onion skin, manuscript, colour mode/CMYK,
+  Drive sync.
 
 ## M2: done (2026-10-31)
 - Build: `. .\tools\env.ps1; .\gradlew.bat :core:test :app:testDebugUnitTest :app:assembleDebug`.
