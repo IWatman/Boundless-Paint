@@ -65,6 +65,7 @@ import app.painter.core.history.TilePatchCommand
 import app.painter.core.history.Ungroup
 import app.painter.core.io.ProjectIO
 import app.painter.core.io.ProjectStore
+import app.painter.core.io.SaveTracker
 import app.painter.core.perspective.PerspectiveConfig
 import app.painter.core.perspective.PerspectiveOverlay
 import app.painter.core.perspective.PerspectiveType
@@ -204,6 +205,14 @@ class StudioViewModel(
     private var stroke: StrokeEngine? = null
     private var dirtySinceSave = false
     private var autosaveJob: Job? = null
+    /** Tile versions of the last successful save: only what changed since is copied (debt 10). */
+    private val saveTracker = SaveTracker()
+    /** True while [doc] has a project directory that an incremental save can update. */
+    private var docOnDisk = false
+    /** Previous queued save; saves run one after another so their commits stay in write order. */
+    private var saveJob: Job? = null
+    /** True when the last save kept an older `thumb.png`; Home or leaving the studio refreshes it. */
+    private var thumbStale = false
     private var strokeCounter = 0L
     private var strokeOnMask = false
     /** Mode that was active before a stroke of the back of the pen switched to Erase; null outside such a stroke. */
@@ -296,7 +305,7 @@ class StudioViewModel(
     fun newDocument(name: String, width: Int, height: Int) {
         val d = Document.create(width, height, name.ifBlank { "Untitled" }, defaultLayerName(1))
         // The first layer already carries the localized default name; the layers panel opens collapsed.
-        setDocument(d)
+        setDocument(d, onDisk = false)
         _state.update { it.copy(layerPanelOpen = false) }
         dirtySinceSave = true
         save()
@@ -304,15 +313,20 @@ class StudioViewModel(
 
     suspend fun openDocument(id: String) {
         val loaded = withContext(Dispatchers.IO) { ioLock.withLock { ProjectIO.load(store.dirFor(id)) } }
-        setDocument(loaded)
+        setDocument(loaded, onDisk = true)
     }
 
-    private fun setDocument(d: Document) {
+    private fun setDocument(d: Document, onDisk: Boolean) {
         finishShape(commit = false)
         finishTransform(apply = false)
         finishGradient(apply = false)
         save(refreshList = false) // flush pending changes of the previous document
         doc = d
+        // The saved state belongs to the document that was just flushed, not to the new one.
+        saveTracker.reset()
+        docOnDisk = onDisk
+        thumbStale = false
+        if (onDisk) saveTracker.commitAll(d)
         guides = GuideJson.fromElement(d.guides)
         // A manifest without a centre (a new document) gets the symmetry centre of the canvas.
         if (guides.symmetry.center.x == 0f && guides.symmetry.center.y == 0f) {
@@ -2419,21 +2433,72 @@ class StudioViewModel(
     /**
      * Writes the document in the background if it changed. [refreshList] also reloads the project list
      * (thumbnails), which autosave skips: the list is only visible on Home.
+     *
+     * Pixels of the tiles that changed since the last successful save are copied here, on the main thread,
+     * and the writer reuses the stored files of every untouched grid (debt 10). [withThumbnail] = false keeps
+     * the previous `thumb.png` during autosave; a project without one still gets it rendered.
      */
-    private fun save(refreshList: Boolean) {
+    private fun save(refreshList: Boolean, withThumbnail: Boolean = true) {
         autosaveJob?.cancel()
         autosaveJob = null
         commitPendingOpacity()
         if (!dirtySinceSave) {
             // Autosave may already have written the latest state; Home still needs fresh thumbnails.
-            if (refreshList) refreshProjects()
+            if (withThumbnail && thumbStale) updateThumbnailOnly(refreshList) else if (refreshList) refreshProjects()
             return
         }
         dirtySinceSave = false
-        val snapshot = snapshotDocument(doc)
-        viewModelScope.launch(Dispatchers.IO) {
-            val thumb = renderThumbnailPng(snapshot)
-            ioLock.withLock { ProjectIO.save(snapshot, store.dirFor(snapshot.id), thumb) }
+        val docRef = doc
+        val incremental = docOnDisk
+        val delta = if (incremental) saveTracker.collect(docRef) else null
+        // Metadata only when the pixels come from the deltas and the project directory.
+        val snapshot = snapshotDocument(docRef, pixels = !incremental)
+        val versions = if (incremental) null else saveTracker.capture(docRef)
+        val dir = store.dirFor(docRef.id)
+        val thumbNeeded = withThumbnail || !ProjectIO.thumbnailFile(dir).isFile
+        val previous = saveJob
+        saveJob = viewModelScope.launch {
+            previous?.join()
+            val ok = runCatching {
+                withContext(Dispatchers.IO) {
+                    ioLock.withLock {
+                        if (delta != null) {
+                            ProjectIO.saveDelta(
+                                snapshot,
+                                dir,
+                                delta,
+                                thumbnail = if (thumbNeeded) { written -> renderThumbnailPng(written) } else null,
+                            )
+                        } else {
+                            ProjectIO.save(snapshot, dir, if (thumbNeeded) renderThumbnailPng(snapshot) else null)
+                        }
+                    }
+                }
+            }.isSuccess
+            if (ok) {
+                // Only now are the collected tiles known to be on disk; a failure keeps them dirty.
+                if (delta != null) saveTracker.commit(delta) else saveTracker.commitVersions(versions!!)
+                docOnDisk = true
+                thumbStale = !thumbNeeded
+                if (refreshList) refreshProjects()
+            } else {
+                dirtySinceSave = true
+            }
+        }
+    }
+
+    /** Refreshes `thumb.png` of a project whose tiles are already saved (an autosave kept the old preview). */
+    private fun updateThumbnailOnly(refreshList: Boolean) {
+        val dir = store.dirFor(doc.id)
+        val previous = saveJob
+        saveJob = viewModelScope.launch {
+            previous?.join()
+            val ok = runCatching {
+                withContext(Dispatchers.IO) {
+                    ioLock.withLock { ProjectIO.updateThumbnail(dir, ::renderThumbnailPng) }
+                }
+            }.isSuccess
+            if (ok) thumbStale = false
             if (refreshList) refreshProjects()
         }
     }
@@ -2443,6 +2508,9 @@ class StudioViewModel(
      * [AUTOSAVE_DELAY_MS] after the last change, so a killed process loses at most that much work.
      */
     private fun markDirty() {
+        // Project recency in the gallery comes from the manifest: strokes are pushed to history without
+        // going through Command.apply, so they have to stamp the document here.
+        doc.modified = maxOf(System.currentTimeMillis(), doc.modified + 1)
         dirtySinceSave = true
         autosaveJob?.cancel()
         autosaveJob = viewModelScope.launch {
@@ -2451,7 +2519,7 @@ class StudioViewModel(
             // hold pixels outside history: save only once all of them are done.
             while (stroke != null || transformSession != null || gradientLayerId != null) delay(AUTOSAVE_DELAY_MS)
             autosaveJob = null
-            save(refreshList = false)
+            save(refreshList = false, withThumbnail = false)
         }
     }
 

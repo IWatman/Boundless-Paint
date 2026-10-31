@@ -18,6 +18,10 @@ timelapse/frames.mp4|chunks/   H.264 segments + index.json
 ```
 - In-app storage: an unpacked directory `files/projects/<id>/` (fast). `.pnt` is only for export and sync.
 - Atomic write: we write to `<id>.tmp/`, then rename. Crash backup = the command journal since the last save (`journal.bin`).
+- Autosave is incremental (debt 10): the main thread copies only the tiles whose `Tile.version` changed since the last
+  successful write, and the writer builds the `.tmp` directory by copying the files of untouched grids and the
+  compressed bytes of untouched tiles, re-encoding only the changed ones. `manifest.json` is always rewritten; the
+  thumbnail is refreshed when leaving the studio (autosave keeps the previous `thumb.png`).
 
 ## Brush `.pbrush` / pack `.pbrushes`
 - `.pbrush`: `brush.json` (see brush-engine.md §6) + `head.png`, `texture.png`, `particle.png` (8-bit gray or RGBA).

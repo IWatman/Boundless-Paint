@@ -33,6 +33,9 @@ import java.io.OutputStream
 import java.io.RandomAccessFile
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import java.nio.file.AtomicMoveNotSupportedException
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 import java.util.zip.CRC32
 import java.util.zip.ZipEntry
 import java.util.zip.ZipInputStream
@@ -62,6 +65,32 @@ object ProjectIO {
     @Volatile
     var warn: (String) -> Unit = { System.err.println("ProjectIO: " + it) }
 
+    /** `thumb.png` of the project directory [dir] (it may not exist). */
+    fun thumbnailFile(dir: File): File = File(dir, THUMB)
+
+    /**
+     * Rewrites only `thumb.png` of [dir] (used when an autosave kept an older preview because rendering it
+     * with every autosave would flatten the whole document every few seconds). The [thumbnail] provider gets
+     * the stored document and runs on the caller's thread.
+     */
+    fun updateThumbnail(dir: File, thumbnail: (Document) -> ByteArray?) {
+        if (!File(dir, MANIFEST).isFile) throw IOException("no project to update at $dir")
+        val bytes = thumbnail(load(dir)) ?: return
+        val tmp = File(dir, "$THUMB.tmp")
+        tmp.writeBytes(bytes)
+        val target = File(dir, THUMB).toPath()
+        try {
+            Files.move(
+                tmp.toPath(),
+                target,
+                StandardCopyOption.REPLACE_EXISTING,
+                StandardCopyOption.ATOMIC_MOVE,
+            )
+        } catch (e: AtomicMoveNotSupportedException) {
+            Files.move(tmp.toPath(), target, StandardCopyOption.REPLACE_EXISTING)
+        }
+    }
+
     /**
      * Atomically saves [doc] into [dir] (manifest schema 2): everything is written into a sibling `<dir>.tmp`
      * which then replaces [dir]. Empty tiles, and mask tiles equal to the mask default, are skipped. Entries of an existing project
@@ -84,6 +113,55 @@ object ProjectIO {
         if (thumbnailPng != null) File(tmp, THUMB).writeBytes(thumbnailPng)
         File(tmp, MANIFEST).writeText(manifestJson.encodeToString(ManifestDto.serializer(), toDto(doc)))
         File(tmp, FsUtil.COMPLETE_MARKER).writeBytes(ByteArray(0))
+        commit(dir, tmp)
+    }
+
+    /**
+     * Writes [doc] on top of the project already in [dir], copying only the tiles of [delta] and the files of
+     * unchanged grids (debt 10). [doc] only carries the manifest side: node properties, paper, guides and the
+     * selection state (its grids are empty). [thumbnail] is called with the written document when a fresh
+     * `thumb.png` is wanted; it runs on the caller's thread, which must not be the main one.
+     */
+    fun saveDelta(doc: Document, dir: File, delta: SaveDelta, thumbnail: ((Document) -> ByteArray?)? = null) {
+        if (!File(dir, MANIFEST).isFile) throw IOException("no project to update at $dir")
+        recover(dir)
+        val tmp = FsUtil.tmpOf(dir)
+        FsUtil.deleteRecursively(tmp)
+        if (!tmp.mkdirs()) throw IOException("cannot create $tmp")
+
+        val oldLayers = File(dir, LAYERS)
+        val newLayers = File(tmp, LAYERS)
+        val oldMasks = File(dir, MASKS)
+        val newMasks = File(tmp, MASKS)
+        doc.root.walk { node ->
+            if (node is RasterLayer) {
+                val from = File(oldLayers, safeName(node.id))
+                val to = File(newLayers, safeName(node.id))
+                val layerDelta = delta.layers[node.id]
+                if (layerDelta != null) writeLayerDelta(from, to, layerDelta) else copyGridFiles(from, to)
+            }
+            node.mask?.let {
+                val from = File(oldMasks, safeName(node.id))
+                val to = File(newMasks, safeName(node.id))
+                val maskDelta = delta.masks[node.id]
+                if (maskDelta != null) writeMaskDelta(from, to, maskDelta) else copyGridFiles(from, to)
+            }
+        }
+        if (delta.selectionPresent) {
+            val from = File(dir, SELECTION)
+            val to = File(tmp, SELECTION)
+            val selectionDelta = delta.selection
+            if (selectionDelta != null) writeMaskDelta(from, to, selectionDelta) else copyGridFiles(from, to)
+        }
+        File(tmp, MANIFEST).writeText(manifestJson.encodeToString(ManifestDto.serializer(), toDto(doc)))
+        File(tmp, FsUtil.COMPLETE_MARKER).writeBytes(ByteArray(0))
+        if (thumbnail != null) {
+            thumbnail(load(tmp))?.let { File(tmp, THUMB).writeBytes(it) }
+        } else {
+            // Autosave keeps the previous preview instead of dropping it (OWNED files are not carried over).
+            val oldThumb = File(dir, THUMB)
+            if (oldThumb.isFile) oldThumb.copyTo(File(tmp, THUMB), overwrite = true)
+        }
         commit(dir, tmp)
     }
 
@@ -286,6 +364,143 @@ object ProjectIO {
                 grid.put(TileKey(tx, ty), Tile.ofHalves(halves))
             }
         }
+    }
+
+    // ---------------------------------------------------------------- incremental save (debt 10)
+
+    /** Byte range of one tile inside `tiles.bin`. */
+    private class GridIndexEntry(val offset: Long, val length: Int)
+
+    /** Copies the files of an unchanged grid (`tiles.idx`, `tiles.bin`) without decoding them. */
+    private fun copyGridFiles(from: File, to: File) {
+        if (!from.isDirectory) return
+        to.mkdirs()
+        for (name in arrayOf(TILES_IDX, TILES_BIN)) {
+            val f = File(from, name)
+            if (f.isFile) f.copyTo(File(to, name), overwrite = true)
+        }
+    }
+
+    /** `tiles.idx` of [dir] as key → byte range in `tiles.bin`; empty when the grid has no stored tiles. */
+    private fun readGridIndex(dir: File): Map<TileKey, GridIndexEntry> {
+        val f = File(dir, TILES_IDX)
+        if (!f.isFile) return emptyMap()
+        val buf = ByteBuffer.wrap(f.readBytes()).order(ByteOrder.LITTLE_ENDIAN)
+        val out = HashMap<TileKey, GridIndexEntry>()
+        while (buf.remaining() >= INDEX_ENTRY_BYTES) {
+            val tx = buf.short.toInt() and 0xFFFF
+            val ty = buf.short.toInt() and 0xFFFF
+            val offset = buf.int.toLong() and 0xFFFFFFFFL
+            val length = buf.int
+            out[TileKey(tx, ty)] = GridIndexEntry(offset, length)
+        }
+        return out
+    }
+
+    /** Keys of a grid after [removed] and [changed] are applied, in the order [writeTiles] stores them. */
+    private fun deltaKeys(
+        old: Map<TileKey, GridIndexEntry>,
+        changed: Set<TileKey>,
+        removed: Set<TileKey>,
+    ): List<TileKey> {
+        val keys = ArrayList<TileKey>(old.size + changed.size)
+        val seen = HashSet<TileKey>(old.size + changed.size)
+        for (key in old.keys) if (key !in removed && seen.add(key)) keys.add(key)
+        for (key in changed) if (seen.add(key)) keys.add(key)
+        keys.sortWith(compareBy({ it.ty }, { it.tx }))
+        return keys
+    }
+
+    /**
+     * Writes the layer grid of `oldDir` with [delta] applied into `newDir`: unchanged tiles keep the compressed
+     * bytes of the old `tiles.bin`, only changed tiles are compressed again.
+     */
+    private fun writeLayerDelta(oldDir: File, newDir: File, delta: LayerDelta) {
+        val old = readGridIndex(oldDir)
+        val keys = deltaKeys(old, delta.changed.keys, delta.removed)
+        if (keys.isEmpty()) return
+        newDir.mkdirs()
+        val index = ByteBuffer.allocate(keys.size * INDEX_ENTRY_BYTES).order(ByteOrder.LITTLE_ENDIAN)
+        var offset = 0L
+        val oldBin = openOldBin(old, oldDir)
+        try {
+            BufferedOutputStream(FileOutputStream(File(newDir, TILES_BIN)), 256 * 1024).use { bin ->
+                for (key in keys) {
+                    val halves = delta.changed[key]
+                    val bytes = if (halves != null) compressTile(halves) else readRange(oldBin!!, old.getValue(key))
+                    bin.write(bytes)
+                    index.putShort(key.tx.toShort())
+                    index.putShort(key.ty.toShort())
+                    index.putInt(offset.toInt())
+                    index.putInt(bytes.size)
+                    offset += bytes.size
+                    require(offset <= 0xFFFFFFFFL) { "tiles.bin exceeds 4 GiB" }
+                }
+            }
+        } finally {
+            oldBin?.close()
+        }
+        File(newDir, TILES_IDX).writeBytes(index.array())
+    }
+
+    /** [writeLayerDelta] for a mask grid: only the coverage bytes that changed are compressed again. */
+    private fun writeMaskDelta(oldDir: File, newDir: File, delta: MaskDelta) {
+        val old = readGridIndex(oldDir)
+        val keys = deltaKeys(old, delta.changed.keys, delta.removed)
+        if (keys.isEmpty()) return
+        newDir.mkdirs()
+        val index = ByteBuffer.allocate(keys.size * INDEX_ENTRY_BYTES).order(ByteOrder.LITTLE_ENDIAN)
+        var offset = 0L
+        val oldBin = openOldBin(old, oldDir)
+        try {
+            BufferedOutputStream(FileOutputStream(File(newDir, TILES_BIN)), 64 * 1024).use { bin ->
+                for (key in keys) {
+                    val data = delta.changed[key]
+                    val bytes = if (data != null) compressMask(data) else readRange(oldBin!!, old.getValue(key))
+                    bin.write(bytes)
+                    index.putShort(key.tx.toShort())
+                    index.putShort(key.ty.toShort())
+                    index.putInt(offset.toInt())
+                    index.putInt(bytes.size)
+                    offset += bytes.size
+                    require(offset <= 0xFFFFFFFFL) { "tiles.bin exceeds 4 GiB" }
+                }
+            }
+        } finally {
+            oldBin?.close()
+        }
+        File(newDir, TILES_IDX).writeBytes(index.array())
+    }
+
+    /** Old `tiles.bin` for the byte ranges of [index]; null when the grid is new. */
+    private fun openOldBin(index: Map<TileKey, GridIndexEntry>, dir: File): RandomAccessFile? {
+        if (index.isEmpty()) return null
+        val f = File(dir, TILES_BIN)
+        if (!f.isFile) throw IOException("$dir has $TILES_IDX without $TILES_BIN")
+        return RandomAccessFile(f, "r")
+    }
+
+    private fun readRange(file: RandomAccessFile, entry: GridIndexEntry): ByteArray {
+        val bytes = ByteArray(entry.length)
+        file.seek(entry.offset)
+        file.readFully(bytes)
+        return bytes
+    }
+
+    /** LZ4 frame of one tile's half-float pixels, the same bytes [writeTiles] produces. */
+    private fun compressTile(halves: ShortArray): ByteArray {
+        val raw = ByteBuffer.allocate(TILE_RAW_BYTES).order(ByteOrder.LITTLE_ENDIAN)
+        raw.asShortBuffer().put(halves)
+        val out = ByteArrayOutputStream(TILE_RAW_BYTES / 4)
+        LZ4FrameOutputStream(out).use { it.write(raw.array(), 0, TILE_RAW_BYTES) }
+        return out.toByteArray()
+    }
+
+    /** LZ4 frame of one mask tile. */
+    private fun compressMask(data: ByteArray): ByteArray {
+        val out = ByteArrayOutputStream(MASK_RAW_BYTES / 8)
+        LZ4FrameOutputStream(out).use { it.write(data) }
+        return out.toByteArray()
     }
 
     private fun writeMaskTiles(grid: MaskGrid, dir: File) {
