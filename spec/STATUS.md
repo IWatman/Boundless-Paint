@@ -21,9 +21,21 @@
   colour and stamped at the centre of the canvas, clipped by the selection, as one undo step; the Transform tool
   moves it afterwards.
 - Keyboard shortcuts: Ctrl+Z undo, Ctrl+Shift+Z / Ctrl+Y redo, B paint, E erase, `[`/`]` brush size, F fit.
-- Still open in M3: filter layers (live), generators (radial/speed lines, halftone), layer styles, curvilinear
-  perspective, canvas crop/resize/straighten, PSD import/export, timelapse, panels/frame divider, brush
-  import/export UI, a settings screen.
+### Expansion batch (2026-10-31)
+- Brush import/export: `.pbrush` / `.pbrushes`, MyPaint `.myb`, GIMP `.gbr`, Krita `.kpp`, Procreate
+  `.brushset`/`.brush` and PNG/JPG heads/textures; imported brushes live in their own **Imported** folder with
+  their images under `brushes/created/assets/<id>/`. Export current brush or all own brushes through SAF.
+  `BrushImportTest` (7) covers the parsers.
+- Canvas: crop, canvas size (scale/anchors) and straighten; one `CanvasCommand` swaps every layer, mask and the
+  selection, with undo/redo and a GL reset. `CanvasOpsTest` (6).
+- Raster layer styles as filters: outline, drop shadow, outer glow; plus a panel-grid Draw generator.
+- Curvilinear 5-point perspective grid (fisheye rings + radial spokes).
+- PSD import/export of the 8-bit RGB raster subset (layers, names, opacity, blend, clipping, RLE, composite
+  fallback) — `PsdIO`, `PsdIOTest`; PSD export from Options, import from Home.
+- Timelapse: a JPEG frame per change in a project (settings toggle), H.264 MP4 export via MediaCodec with
+  15/30/60 s or full duration and 720p/1080p/4K quality.
+- Settings sheet: appearance, colour pipeline, timelapse, stylus and About.
+- Still open in M3: live filter layers (non-destructive filters on the GPU).
 
 ## M2: done (2026-10-31)
 - Build: `. .\tools\env.ps1; .\gradlew.bat :core:test :app:testDebugUnitTest :app:assembleDebug`.

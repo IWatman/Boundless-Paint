@@ -25,6 +25,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.FileOpen
 import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.PhotoLibrary
 import androidx.compose.material.icons.outlined.SystemUpdate
@@ -83,6 +84,7 @@ fun HomeScreen(
     onNewCanvas: () -> Unit,
     onOpenGallery: () -> Unit,
     onOpenUpdates: () -> Unit,
+    onImportPsd: () -> Unit,
     recent: List<ProjectCardUi>,
     onOpenProject: (id: String) -> Unit,
 ) {
@@ -91,6 +93,12 @@ fun HomeScreen(
             TopAppBar(
                 title = { Text(stringResource(R.string.app_name), fontWeight = FontWeight.SemiBold) },
                 actions = {
+                    IconButton(onClick = onImportPsd) {
+                        Icon(
+                            Icons.Outlined.FileOpen,
+                            contentDescription = stringResource(R.string.import_psd),
+                        )
+                    }
                     IconButton(onClick = onOpenUpdates) {
                         Icon(
                             Icons.Outlined.SystemUpdate,

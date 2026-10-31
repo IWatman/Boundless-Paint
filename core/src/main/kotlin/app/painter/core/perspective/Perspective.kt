@@ -12,7 +12,7 @@ import kotlin.math.round
 import kotlin.math.sin
 import kotlin.math.sqrt
 
-enum class PerspectiveType { ONE_POINT, TWO_POINT, THREE_POINT, ISO, GRID_2D }
+enum class PerspectiveType { ONE_POINT, TWO_POINT, THREE_POINT, ISO, GRID_2D, FIVE_POINT }
 
 /**
  * Perspective grid (spec G5). [vp] holds 1–3 vanishing points (may lie outside the canvas).
@@ -42,6 +42,9 @@ data class PerspectiveConfig(
                 PerspectiveType.TWO_POINT -> listOf(Vec2(-0.25f * w, 0.45f * h), Vec2(1.25f * w, 0.45f * h))
                 PerspectiveType.THREE_POINT ->
                     listOf(Vec2(-0.25f * w, 0.45f * h), Vec2(1.25f * w, 0.45f * h), Vec2(0.5f * w, 2f * h))
+                PerspectiveType.FIVE_POINT -> listOf(
+                    Vec2(0f, 0f), Vec2(w, 0f), Vec2(0f, h), Vec2(w, h), Vec2(w / 2, h / 2),
+                )
                 else -> emptyList()
             }
             return PerspectiveConfig(on = true, type = type, vp = vps)
@@ -87,6 +90,17 @@ class PerspectiveGuide(val cfg: PerspectiveConfig) : SnapGuide {
                 PerspectiveType.ISO -> for (deg in ISO_DEGREES) out.add(unit(h + rad(deg)))
                 PerspectiveType.GRID_2D -> {
                     out.add(unit(h)); out.add(unit(h + HALF_PI))
+                }
+                PerspectiveType.FIVE_POINT -> {
+                    // Curvilinear: the radial direction and the tangent of the ring through p0.
+                    val c = cfg.vp.getOrNull(4) ?: Vec2(0f, 0f)
+                    val dx = p0.x - c.x
+                    val dy = p0.y - c.y
+                    val d = sqrt(dx * dx + dy * dy)
+                    if (d >= VP_SKIP_DIST) {
+                        out.add(Vec2(dx / d, dy / d))
+                        out.add(Vec2(-dy / d, dx / d))
+                    }
                 }
             }
             return out

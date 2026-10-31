@@ -254,6 +254,33 @@ class FiltersTest {
     }
 
     @Test
+    fun layerStylesAddAnOutlineShadowAndGlow() {
+        val outline = grid(128, 128)
+        for (y in 54 until 74) for (x in 54 until 74) put(outline, x, y, 1f, 0f, 0f, 1f)
+        Filters.apply("l", outline, LayerStrokeParams(width = 5, outer = true, inner = false, color = "#000000"))
+        assertTrue(px(outline, 51, 64)[3] > 0f, "the outline grows outside the shape")
+
+        val shadow = grid(128, 128)
+        for (y in 54 until 74) for (x in 54 until 74) put(shadow, x, y, 1f, 0f, 0f, 1f)
+        Filters.apply("l", shadow, DropShadowParams(angleDeg = 0f, distance = 12, blur = 0, color = "#000000"))
+        assertTrue(px(shadow, 80, 64)[3] > 0f, "the shadow falls to the right")
+
+        val glow = grid(128, 128)
+        for (y in 58 until 70) for (x in 58 until 70) put(glow, x, y, 1f, 1f, 1f, 1f)
+        Filters.apply("l", glow, LayerGlowParams(radius = 10, color = "#FFFFFF"))
+        assertTrue(px(glow, 53, 64)[3] > 0f, "the glow reaches outside the shape")
+    }
+
+    @Test
+    fun panelGridDrawsOnAnEmptyLayer() {
+        val g = grid(160, 120)
+        Filters.apply("l", g, PanelGridParams(rows = 2, cols = 2, margin = 10, gutter = 12, thickness = 2))
+        assertTrue(px(g, 80, 60)[3] > 0f, "the central gutter is painted")
+        assertEquals(0f, px(g, 4, 4)[3], "outside the margin stays clear")
+        assertTrue(px(g, 10, 10)[3] > 0f, "the frame is painted")
+    }
+
+    @Test
     fun selectionAndAlphaLockTogether() {
         val doc = Document.create(96, 32)
         val layer = doc.activeRaster!!

@@ -206,6 +206,10 @@ object Filters {
         is RadialLinesParams -> mix(src, radialLines(src, w, h, ox, oy, geometry, params), params.strength)
         is SpeedLinesParams -> mix(src, speedLines(src, w, h, ox, oy, geometry, params), params.strength)
         is HalftoneParams -> mix(src, halftone(src, w, h, ox, oy, params), params.strength)
+        is LayerStrokeParams -> layerStroke(src, w, h, params)
+        is DropShadowParams -> dropShadow(src, w, h, params)
+        is LayerGlowParams -> layerGlow(src, w, h, params)
+        is PanelGridParams -> panelGrid(src, w, h, params)
     }
 
     /** `a·(1-t) + b·t` per channel, clamped to a non-negative premultiplied pixel. */
@@ -749,6 +753,193 @@ object Filters {
                 out[i + 3] = cov + out[i + 3] * (1f - cov)
             }
         }
+    }
+
+    // ---------------------------------------------------------------- raster layer styles
+
+    /** Outline around the alpha of the layer: outer, inner or both, with a hard width. */
+    private fun layerStroke(src: FloatArray, w: Int, h: Int, p: LayerStrokeParams): FloatArray {
+        val width = p.width.coerceIn(1, 100)
+        val alpha = FloatArray(w * h) { src[it * 4 + 3] }
+        val outer = if (p.outer) maxFilter(alpha, w, h, width) else null
+        val inner = if (p.inner) minFilter(alpha, w, h, width) else null
+        val ink = ink(p.color)
+        val out = src.copyOf()
+        val scale = p.opacity.coerceIn(0f, 1f)
+        for (i in 0 until w * h) {
+            var a = 0f
+            if (outer != null) a = max(a, outer[i] - alpha[i])
+            if (inner != null) a = max(a, alpha[i] - inner[i])
+            a *= scale
+            if (a > 0.001f) overInk(out, i * 4, ink, a)
+        }
+        return mix(src, out, p.strength)
+    }
+
+    /** Drop shadow: the alpha shifted by angle/distance, blurred, coloured and put under the layer. */
+    private fun dropShadow(src: FloatArray, w: Int, h: Int, p: DropShadowParams): FloatArray {
+        val dist = p.distance.coerceIn(0, 200)
+        val blur = p.blur.coerceIn(0, 100)
+        val a = Math.toRadians(p.angleDeg.toDouble())
+        val dx = (cos(a) * dist).toInt()
+        val dy = (sin(a) * dist).toInt()
+        val shifted = FloatArray(w * h)
+        for (y in 0 until h) {
+            val sy = y - dy
+            if (sy !in 0 until h) continue
+            for (x in 0 until w) {
+                val sx = x - dx
+                if (sx !in 0 until w) continue
+                shifted[y * w + x] = src[(sy * w + sx) * 4 + 3]
+            }
+        }
+        val shadow = if (blur > 0) boxBlurAlpha(shifted, w, h, blur) else shifted
+        val ink = ink(p.color)
+        val scale = p.opacity.coerceIn(0f, 1f)
+        // result = source + shadow * (1 - sourceAlpha).
+        val result = src.copyOf()
+        for (i in 0 until w * h) {
+            val j = i * 4
+            val keep = 1f - src[j + 3]
+            val sa = (shadow[i] * scale).coerceIn(0f, 1f)
+            result[j] = result[j] + ink[0] * sa * keep
+            result[j + 1] = result[j + 1] + ink[1] * sa * keep
+            result[j + 2] = result[j + 2] + ink[2] * sa * keep
+            result[j + 3] = result[j + 3] + sa * keep
+        }
+        return mix(src, result, p.strength)
+    }
+
+    /** Soft outer glow behind the layer. */
+    private fun layerGlow(src: FloatArray, w: Int, h: Int, p: LayerGlowParams): FloatArray {
+        val radius = p.radius.coerceIn(1, 100)
+        val a = FloatArray(w * h) { src[it * 4 + 3] }
+        val glow = boxBlurAlpha(a, w, h, radius)
+        val ink = ink(p.color)
+        val res = src.copyOf()
+        val scale = p.opacity.coerceIn(0f, 1f)
+        for (i in 0 until w * h) {
+            val j = i * 4
+            val keep = 1f - src[j + 3]
+            val ga = (glow[i] * scale).coerceIn(0f, 1f) * keep
+            res[j] += ink[0] * ga
+            res[j + 1] += ink[1] * ga
+            res[j + 2] += ink[2] * ga
+            res[j + 3] += ga
+        }
+        return mix(src, res, p.strength)
+    }
+
+    /** Divides the page into panels with a margin, gutters and an outer frame. */
+    private fun panelGrid(src: FloatArray, w: Int, h: Int, p: PanelGridParams): FloatArray {
+        val out = src.copyOf()
+        val rows = p.rows.coerceIn(1, 12)
+        val cols = p.cols.coerceIn(1, 12)
+        val margin = p.margin.coerceIn(0, min(w, h) / 2)
+        val gutter = p.gutter.coerceIn(0, min(w, h) / 2)
+        val thickness = p.thickness.coerceIn(1, 100)
+        val ix0 = margin
+        val iy0 = margin
+        val ix1 = w - margin
+        val iy1 = h - margin
+        if (ix1 <= ix0 || iy1 <= iy0) return out
+        val ink = ink(p.color)
+        val panelW = (ix1 - ix0 - gutter * (cols - 1)) / cols.toFloat()
+        val panelH = (iy1 - iy0 - gutter * (rows - 1)) / rows.toFloat()
+        // Gutters.
+        for (c in 1 until cols) {
+            val x0 = (ix0 + panelW * c + gutter * (c - 1)).toInt()
+            fillRect(out, w, h, x0, iy0, x0 + gutter, iy1, ink)
+        }
+        for (r in 1 until rows) {
+            val y0 = (iy0 + panelH * r + gutter * (r - 1)).toInt()
+            fillRect(out, w, h, ix0, y0, ix1, y0 + gutter, ink)
+        }
+        // Outer frame and the panel borders (margin included).
+        fillRect(out, w, h, ix0, iy0, ix1, iy0 + thickness, ink)
+        fillRect(out, w, h, ix0, iy1 - thickness, ix1, iy1, ink)
+        fillRect(out, w, h, ix0, iy0, ix0 + thickness, iy1, ink)
+        fillRect(out, w, h, ix1 - thickness, iy0, ix1, iy1, ink)
+        return mix(src, out, p.strength)
+    }
+
+    private fun fillRect(out: FloatArray, w: Int, h: Int, x0: Int, y0: Int, x1: Int, y1: Int, ink: FloatArray) {
+        val xa = x0.coerceIn(0, w)
+        val xb = x1.coerceIn(0, w)
+        val ya = y0.coerceIn(0, h)
+        val yb = y1.coerceIn(0, h)
+        for (y in ya until yb) for (x in xa until xb) overInk(out, (y * w + x) * 4, ink, 1f)
+    }
+
+    /** Premultiplied "ink over dest" at coverage [a]. */
+    private fun overInk(out: FloatArray, j: Int, ink: FloatArray, a: Float) {
+        val k = a.coerceIn(0f, 1f)
+        out[j] = ink[0] * k + out[j] * (1f - k)
+        out[j + 1] = ink[1] * k + out[j + 1] * (1f - k)
+        out[j + 2] = ink[2] * k + out[j + 2] * (1f - k)
+        out[j + 3] = k + out[j + 3] * (1f - k)
+    }
+
+    /** Separable sliding-window maximum of [a]. */
+    private fun maxFilter(a: FloatArray, w: Int, h: Int, r: Int): FloatArray =
+        windowFilter(a, w, h, r, maximum = true)
+
+    /** Separable sliding-window minimum of [a]. */
+    private fun minFilter(a: FloatArray, w: Int, h: Int, r: Int): FloatArray =
+        windowFilter(a, w, h, r, maximum = false)
+
+    private fun windowFilter(a: FloatArray, w: Int, h: Int, r: Int, maximum: Boolean): FloatArray {
+        val tmp = FloatArray(a.size)
+        for (y in 0 until h) {
+            for (x in 0 until w) {
+                var best = if (maximum) 0f else 1f
+                for (k in -r..r) {
+                    val xx = (x + k).coerceIn(0, w - 1)
+                    val v = a[y * w + xx]
+                    if (maximum) { if (v > best) best = v } else if (v < best) best = v
+                }
+                tmp[y * w + x] = best
+            }
+        }
+        val out = FloatArray(a.size)
+        for (x in 0 until w) {
+            for (y in 0 until h) {
+                var best = if (maximum) 0f else 1f
+                for (k in -r..r) {
+                    val yy = (y + k).coerceIn(0, h - 1)
+                    val v = tmp[yy * w + x]
+                    if (maximum) { if (v > best) best = v } else if (v < best) best = v
+                }
+                out[y * w + x] = best
+            }
+        }
+        return out
+    }
+
+    /** Separable box blur of a single alpha channel. */
+    private fun boxBlurAlpha(a: FloatArray, w: Int, h: Int, radius: Int): FloatArray {
+        val r = radius.coerceIn(1, 100)
+        val tmp = FloatArray(a.size)
+        val out = FloatArray(a.size)
+        for (y in 0 until h) {
+            var sum = 0f
+            for (x in -r..r) sum += a[y * w + x.coerceIn(0, w - 1)]
+            for (x in 0 until w) {
+                tmp[y * w + x] = sum / (r * 2 + 1)
+                sum += a[y * w + (x + r + 1).coerceIn(0, w - 1)]
+                sum -= a[y * w + (x - r).coerceIn(0, w - 1)]
+            }
+        }
+        for (x in 0 until w) {
+            var sum = 0f
+            for (y in -r..r) sum += tmp[y.coerceIn(0, h - 1) * w + x]
+            for (y in 0 until h) {
+                out[y * w + x] = sum / (r * 2 + 1)
+                sum += tmp[(y + r + 1).coerceIn(0, h - 1) * w + x]
+                sum -= tmp[(y - r).coerceIn(0, h - 1) * w + x]
+            }
+        }
+        return out
     }
 
     /** Bilinear sample of a premultiplied patch, clamped to its edges. */

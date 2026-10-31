@@ -40,6 +40,14 @@ class BrushLibrary(private val assets: AssetManager, private val userBrushes: Us
     private var presetCategories: List<Category> = emptyList()
     /** The "Created" category: the user brushes of [userBrushes], empty when there are none. */
     private var createdCategory = Category(UserBrushCodec.CATEGORY, "Created", emptyList())
+    /** The "Imported" category (spec/tools/brush-import.md), empty when nothing was imported. */
+    private var importedCategory = Category(UserBrushCodec.CATEGORY_IMPORTED, "Imported", emptyList())
+    /** Categories made from [userBrushes], in display order. */
+    private val userCategories: List<Category>
+        get() = listOfNotNull(
+            createdCategory.takeIf { it.brushes.isNotEmpty() },
+            importedCategory.takeIf { it.brushes.isNotEmpty() },
+        )
     private val byId = HashMap<String, Brush>()
     private val favoriteIds = HashMap<String, List<String>>()
     private val resourceCache = HashMap<String, BrushResources>()
@@ -50,9 +58,9 @@ class BrushLibrary(private val assets: AssetManager, private val userBrushes: Us
     /** True once [load] has read the whole catalog. */
     val isLoaded: Boolean get() = loaded
 
-    /** Categories of the catalog, localized for the locale the catalog was loaded with; "Created" comes first. */
+    /** Categories of the catalog, localized for the locale the catalog was loaded with; user folders come first. */
     val categories: List<Category>
-        get() = if (createdCategory.brushes.isEmpty()) presetCategories else listOf(createdCategory) + presetCategories
+        get() = userCategories + presetCategories
 
     /** Ids of the favourites of brush [mode] (`PAINT`, `ERASE`), empty for a mode without favourites. */
     fun favorites(mode: String): List<String> = favoriteIds[mode].orEmpty()
@@ -113,7 +121,15 @@ class BrushLibrary(private val assets: AssetManager, private val userBrushes: Us
     fun setCreated(brushes: List<Brush>) {
         synchronized(lock) {
             createdCategory.brushes.forEach { byId.remove(it.id) }
-            createdCategory = Category(UserBrushCodec.CATEGORY, if (lang == "ru") "Созданные" else "Created", brushes)
+            importedCategory.brushes.forEach { byId.remove(it.id) }
+            val created = brushes.filter { !UserBrushCodec.isImported(it.id) }
+            val imported = brushes.filter { UserBrushCodec.isImported(it.id) }
+            createdCategory = Category(UserBrushCodec.CATEGORY, if (lang == "ru") "Созданные" else "Created", created)
+            importedCategory = Category(
+                UserBrushCodec.CATEGORY_IMPORTED,
+                if (lang == "ru") "Импортированные" else "Imported",
+                imported,
+            )
             brushes.forEach { byId[it.id] = it }
         }
     }
@@ -157,10 +173,26 @@ class BrushLibrary(private val assets: AssetManager, private val userBrushes: Us
 
     private fun read(path: String): String = assets.open(path).use { it.readBytes().decodeToString() }
 
-    /** Decodes an `asset:<path>` reference, which points into `brushes/<path>`. */
+    /**
+     * Decodes an `asset:<path>` reference: stock images point into `brushes/<path>` of the APK, imported ones
+     * (`asset:user/<id>/<file>`) into the image directory of [UserBrushes].
+     */
     private fun image(ref: String): ImageData {
-        val path = ASSET_PATH + ref.removePrefix(BrushIO.ASSET_PREFIX)
-        return assets.open(path).use { decode(it.readBytes()) }
+        val path = ref.removePrefix(BrushIO.ASSET_PREFIX)
+        val bytes = if (path.startsWith("user/")) {
+            userBrushes?.assetBytes(path) ?: throw IOException("missing imported brush image")
+        } else {
+            assets.open(ASSET_PATH + path).use { it.readBytes() }
+        }
+        return decode(bytes)
+    }
+
+    /** Bytes behind an `asset:` reference, for exporting a brush or a pack. */
+    fun assetBytes(ref: String?): ByteArray? {
+        if (ref == null || !ref.startsWith(BrushIO.ASSET_PREFIX)) return null
+        val path = ref.removePrefix(BrushIO.ASSET_PREFIX)
+        if (path.startsWith("user/")) return userBrushes?.assetBytes(path)
+        return runCatching { assets.open(ASSET_PATH + path).use { it.readBytes() } }.getOrNull()
     }
 
     /**

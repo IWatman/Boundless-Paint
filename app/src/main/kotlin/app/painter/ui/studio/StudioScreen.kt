@@ -73,6 +73,10 @@ fun StudioScreen(
     var localHud by remember { mutableStateOf<HudUi?>(null) }
     var filtersOpen by remember { mutableStateOf(false) }
     var textOpen by remember { mutableStateOf(false) }
+    var cropOpen by remember { mutableStateOf(false) }
+    var resizeOpen by remember { mutableStateOf(false) }
+    var straightenOpen by remember { mutableStateOf(false) }
+    var timelapseOpen by remember { mutableStateOf(false) }
     if (filtersOpen) {
         FilterDialog(
             ink = state.color,
@@ -91,6 +95,50 @@ fun StudioScreen(
                 actions.stampText(text, size)
             },
         )
+    }
+    if (cropOpen) {
+        val initial = state.selectionBounds ?: RectUi(
+            state.canvasWidth * 0.05f,
+            state.canvasHeight * 0.05f,
+            state.canvasWidth * 0.95f,
+            state.canvasHeight * 0.95f,
+        )
+        CropDialog(
+            docW = state.canvasWidth,
+            docH = state.canvasHeight,
+            initial = initial,
+            onDismiss = { cropOpen = false },
+            onConfirm = { rect ->
+                cropOpen = false
+                actions.cropCanvas(rect)
+            },
+        )
+    }
+    if (resizeOpen) {
+        ResizeCanvasDialog(
+            docW = state.canvasWidth,
+            docH = state.canvasHeight,
+            onDismiss = { resizeOpen = false },
+            onConfirm = { w, h, scale, ax, ay ->
+                resizeOpen = false
+                actions.resizeCanvas(w, h, scale, ax, ay)
+            },
+        )
+    }
+    if (straightenOpen) {
+        StraightenDialog(
+            onDismiss = { straightenOpen = false },
+            onConfirm = { angle ->
+                straightenOpen = false
+                actions.straightenCanvas(angle)
+            },
+        )
+    }
+    if (state.settingsOpen) {
+        SettingsDialog(state = state, actions = actions, onDismiss = actions::closeSettings)
+    }
+    if (timelapseOpen) {
+        TimelapseDialog(state = state, actions = actions, onDismiss = { timelapseOpen = false })
     }
     Box(
         Modifier
@@ -116,6 +164,10 @@ fun StudioScreen(
                 actions = actions,
                 onFilters = { filtersOpen = true },
                 onText = { textOpen = true },
+                onCrop = { cropOpen = true },
+                onResize = { resizeOpen = true },
+                onStraighten = { straightenOpen = true },
+                onTimelapse = { timelapseOpen = true },
                 modifier = Modifier
                     .align(Alignment.TopStart)
                     .fillMaxWidth()
@@ -370,6 +422,7 @@ private fun perspectiveMenuLabel(type: PerspectiveType): String = when (type) {
     PerspectiveType.THREE_POINT -> stringResource(R.string.persp_3pt)
     PerspectiveType.ISO -> stringResource(R.string.persp_iso)
     PerspectiveType.GRID_2D -> stringResource(R.string.persp_grid)
+    PerspectiveType.FIVE_POINT -> stringResource(R.string.persp_5pt)
 }
 
 /** Names of the guides that are on, joined for the summary line of the guides group. */
@@ -554,6 +607,14 @@ private fun PerspectiveMenuItems(state: StudioUiState, actions: StudioActions, c
         close()
         actions.setPerspective(perspectiveToggle(state.perspective, PerspectiveType.GRID_2D))
     }
+    PerspectiveMenuItem(
+        PerspectiveType.FIVE_POINT,
+        stringResource(R.string.persp_5pt),
+        state.perspective?.type == PerspectiveType.FIVE_POINT,
+    ) {
+        close()
+        actions.setPerspective(perspectiveToggle(state.perspective, PerspectiveType.FIVE_POINT))
+    }
 }
 
 /** Shape items: the shape a drag creates. */
@@ -629,6 +690,10 @@ private fun StudioTopBar(
     actions: StudioActions,
     onFilters: () -> Unit,
     onText: () -> Unit,
+    onCrop: () -> Unit,
+    onResize: () -> Unit,
+    onStraighten: () -> Unit,
+    onTimelapse: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Row(modifier, verticalAlignment = Alignment.CenterVertically) {
@@ -723,6 +788,28 @@ private fun StudioTopBar(
                                 onText()
                             },
                         )
+                        HorizontalDivider()
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.canvas_crop)) },
+                            onClick = {
+                                toolsMenu = false
+                                onCrop()
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.canvas_resize)) },
+                            onClick = {
+                                toolsMenu = false
+                                onResize()
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.canvas_straighten)) },
+                            onClick = {
+                                toolsMenu = false
+                                onStraighten()
+                            },
+                        )
                         if (state.hasSelection) {
                             DropdownMenuItem(
                                 text = { Text(stringResource(R.string.deselect)) },
@@ -786,7 +873,6 @@ private fun StudioTopBar(
                 Box {
                     PainterIconButton(Icons.Outlined.MoreVert, stringResource(R.string.options), {
                         menuOpen = true
-                        actions.openOptions()
                     })
                     DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                         if (state.projectName.isNotEmpty()) {
@@ -807,6 +893,14 @@ private fun StudioTopBar(
                         DropdownMenuItem(
                             text = { Text(stringResource(R.string.export_image)) },
                             onClick = { menuOpen = false; actions.exportImage() },
+                        )
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.export_psd)) },
+                            onClick = { menuOpen = false; actions.exportPsd() },
+                        )
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.timelapse_title)) },
+                            onClick = { menuOpen = false; onTimelapse() },
                         )
                         DropdownMenuItem(
                             text = { Text(stringResource(R.string.light_background)) },

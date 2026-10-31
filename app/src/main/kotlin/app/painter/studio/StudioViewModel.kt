@@ -12,6 +12,9 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import app.painter.R
 import app.painter.core.blend.BlendMode
+import app.painter.core.canvas.CanvasOp
+import app.painter.core.canvas.canvasCommand
+import app.painter.core.canvas.clampCrop
 import app.painter.core.adjust.AdjustKind
 import app.painter.core.adjust.AdjustParams
 import app.painter.core.blend.Compositor
@@ -66,9 +69,12 @@ import app.painter.core.history.SetNodeProps
 import app.painter.core.history.TilePatchCommand
 import app.painter.core.history.Ungroup
 import app.painter.core.history.snapshotTiles
+import app.painter.core.io.BrushIO
 import app.painter.core.io.ProjectIO
 import app.painter.core.io.ProjectStore
+import app.painter.core.io.PsdIO
 import app.painter.core.io.SaveTracker
+import app.painter.core.io.import.BrushImport
 import app.painter.core.liquify.LiquifySession
 import app.painter.core.perspective.PerspectiveConfig
 import app.painter.core.perspective.PerspectiveOverlay
@@ -102,6 +108,7 @@ import app.painter.core.stroke.ResourceRefs
 import app.painter.core.stroke.StrokeMode
 import app.painter.core.stroke.StrokeOptions
 import app.painter.core.stroke.SymmetryCopies
+import app.painter.core.raster.IntRect
 import app.painter.core.raster.MaskGrid
 import app.painter.core.stroke.StrokeTarget
 import app.painter.core.geom.Vec2
@@ -124,6 +131,8 @@ import app.painter.core.select.SelectMode
 import app.painter.core.select.SelectionEdits
 import app.painter.render.CanvasInputListener
 import app.painter.render.CanvasView
+import app.painter.timelapse.TimelapseEncoder
+import app.painter.timelapse.TimelapseStore
 import app.painter.ui.home.ProjectCardUi
 import app.painter.ui.studio.AdjustEditorUi
 import app.painter.ui.studio.BrushCategoryUi
@@ -164,6 +173,8 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonObject
 import java.io.ByteArrayOutputStream
 import java.util.Locale
+import kotlin.math.abs
+import kotlin.math.roundToInt
 
 /**
  * Owns the open document and wires UI actions, the canvas view and the core engines. [prefs] carries the
@@ -208,7 +219,14 @@ class StudioViewModel(
     private var canvas: CanvasView? = null
     private var stroke: StrokeEngine? = null
     private var dirtySinceSave = false
+    /** Size the GL canvas was last reset to; undo/redo of a canvas command resets it when it differs. */
+    private var lastCanvasWidth = 1
+    private var lastCanvasHeight = 1
     private var autosaveJob: Job? = null
+    /** Timelapse of the open project and the debounced capture after a change. */
+    private var timelapseStore: TimelapseStore? = null
+    private var timelapseJob: Job? = null
+    private var lastTimelapseFrameAt = 0L
     /** A filter is being computed on a worker: strokes are ignored until it lands. */
     private var filterBusy = false
     /** Tile versions of the last successful save: only what changed since is copied (debt 10). */
@@ -264,6 +282,7 @@ class StudioViewModel(
             // View settings outlive the session (spec/tools/m0-m1-tools.md T1).
             lightBackground = prefs?.lightBackground ?: false,
             doubleTapFits = prefs?.doubleTapFits ?: true,
+            timelapseEnabled = prefs?.timelapseEnabled ?: false,
         ),
     )
     val state: StateFlow<StudioUiState> = _state
@@ -273,6 +292,9 @@ class StudioViewModel(
 
     /** Set by the UI when the user picks Export; the activity launches the system file picker. */
     val exportRequest = MutableStateFlow(false)
+
+    /** Set by Export as PSD; the activity launches the PSD file picker. */
+    val psdRequest = MutableStateFlow(false)
 
     /** Export options while the dialog is open; null when it is closed. */
     val exportOptions = MutableStateFlow<ExportOptions?>(null)
@@ -285,7 +307,12 @@ class StudioViewModel(
     val homeRequest = MutableStateFlow(false)
 
     init {
-        history.onChanged = { lastFill = null; markDirty(); refreshLayers() }
+        history.onChanged = {
+            lastFill = null
+            markDirty()
+            refreshLayers()
+            scheduleTimelapse()
+        }
         restoreToolPrefs()
         restoreInputSettings()
         syncBrushState()
@@ -329,6 +356,9 @@ class StudioViewModel(
         finishLiquify(commit = false)
         save(refreshList = false) // flush pending changes of the previous document
         doc = d
+        timelapseJob?.cancel()
+        timelapseJob = null
+        timelapseStore = TimelapseStore(store.dirFor(d.id))
         // The saved state belongs to the document that was just flushed, not to the new one.
         saveTracker.reset()
         docOnDisk = onDisk
@@ -346,9 +376,14 @@ class StudioViewModel(
         autosaveJob = null
         dirtySinceSave = false
         stroke = null
+        lastCanvasWidth = d.width
+        lastCanvasHeight = d.height
         canvas?.setDocument(doc)
         _state.update {
             it.copy(
+                canvasWidth = d.width,
+                canvasHeight = d.height,
+                timelapseFrames = timelapseStore?.frameCount ?: 0,
                 paperColor = d.paper.color,
                 paperVisible = d.paper.visible,
                 gammaCorrect = d.gammaCorrect,
@@ -707,6 +742,63 @@ class StudioViewModel(
         if (eraseBrush?.id == brush.id) eraseBrush = brush
         publishBrushes()
         syncBrushState()
+    }
+
+    /**
+     * Imports [fileName] (own `.pbrush`/`.pbrushes`, MyPaint, GIMP, Krita, Procreate or a PNG/JPG head/texture)
+     * and stores every readable brush in the Imported folder. Runs the parsers and writes off the main thread;
+     * returns the number of stored brushes and throws [BrushImport.BrushFileException] for a bad file.
+     */
+    override suspend fun importBrush(fileName: String, bytes: ByteArray, asTexture: Boolean): Int {
+        val parsed = withContext(Dispatchers.IO) { BrushImport.parse(fileName, bytes, asTexture) }
+        val stored = withContext(Dispatchers.IO) {
+            parsed.brushes.mapNotNull { userBrushes.saveImported(fileName, it) }
+        }
+        if (stored.isEmpty()) return 0
+        brushes.setCreated(userBrushes.brushes)
+        publishBrushes()
+        // Paint with the first imported brush, so the import is immediately visible on the canvas.
+        val first = stored.first()
+        if (_state.value.mode == BrushModeUi.ERASE) {
+            eraseBrush = first
+            eraseParams = first.params
+        } else {
+            paintBrush = first
+            paintParams = first.params
+        }
+        syncBrushState()
+        saveBrushPrefs()
+        return stored.size
+    }
+
+    override fun exportBrushName(): String {
+        val brush = currentBrush
+        val base = brush?.name?.text?.ifBlank { null } ?: if (_state.value.mode == BrushModeUi.BLEND) "Blend" else "Brush"
+        return base.replace(Regex("[\\\\/:*?\"<>|]"), "_").take(64)
+    }
+
+    override fun exportBrushBytes(): ByteArray? {
+        val brush = currentBrush ?: Brush(
+            id = "export.blend",
+            name = BrushName(if (Locale.getDefault().language == "ru") "Смешивание" else "Blend"),
+            params = blendParams,
+        )
+        return runCatching {
+            val out = ByteArrayOutputStream()
+            BrushIO.writePbrush(brush, emptyMap(), out) { ref -> brushes.assetBytes(ref) }
+            out.toByteArray()
+        }.getOrNull()
+    }
+
+    override fun exportBrushPackBytes(): ByteArray? {
+        val all = userBrushes.brushes
+        if (all.isEmpty()) return null
+        return runCatching {
+            val out = ByteArrayOutputStream()
+            val entries = all.map { BrushIO.PackEntry(it, emptyMap()) }
+            BrushIO.writePack("Painter brushes", entries, out) { ref -> brushes.assetBytes(ref) }
+            out.toByteArray()
+        }.getOrNull()
     }
 
     /** Default preset of [mode] (`PAINT`, `ERASE`): its favourite from the index, else the first built-in preset. */
@@ -1970,14 +2062,20 @@ class StudioViewModel(
         }
         if (transformSession != null || gradientLayerId != null) return
         commitPendingOpacity()
-        if (history.undo(doc)) canvas?.invalidate(null, null)
+        if (history.undo(doc)) {
+            syncCanvasSize()
+            canvas?.invalidate(null, null)
+        }
     }
 
     override fun redo() {
         if (shapeDraft != null) return
         if (transformSession != null || gradientLayerId != null) return
         commitPendingOpacity()
-        if (history.redo(doc)) canvas?.invalidate(null, null)
+        if (history.redo(doc)) {
+            syncCanvasSize()
+            canvas?.invalidate(null, null)
+        }
     }
 
     // ---- layers ----
@@ -2589,6 +2687,30 @@ class StudioViewModel(
         exportOptions.value = pendingExport ?: ExportOptions()
     }
 
+    override fun exportPsd() {
+        psdRequest.value = true
+    }
+
+    /** PSD bytes of the open document; called by the activity after the user picked a destination. */
+    suspend fun encodePsd(): ByteArray = withContext(Dispatchers.Default) {
+        val out = ByteArrayOutputStream()
+        PsdIO.write(doc, out)
+        out.toByteArray()
+    }
+
+    /**
+     * Imports a PSD as a new project (raster layers, names, opacity and blend modes) and returns its id.
+     * The caller opens the returned project.
+     */
+    suspend fun importPsd(fileName: String, bytes: ByteArray): String = withContext(Dispatchers.IO) {
+        val imported = PsdIO.read(java.io.ByteArrayInputStream(bytes))
+        imported.name = fileName.substringBeforeLast('.').ifBlank { "Imported PSD" }
+        val dir = store.dirFor(imported.id)
+        ioLock.withLock { ProjectIO.save(imported, dir, null) }
+        refreshProjects()
+        imported.id
+    }
+
     override fun startExport(options: ExportOptions) {
         pendingExport = options
         exportOptions.value = null
@@ -2699,8 +2821,101 @@ class StudioViewModel(
         canvas?.fitToScreen()
     }
 
+    // ---- canvas operations (M3) ----
+
+    override fun cropCanvas(rect: RectUi) {
+        val r = clampCrop(doc, IntRect(
+            rect.left.roundToInt(),
+            rect.top.roundToInt(),
+            rect.right.roundToInt(),
+            rect.bottom.roundToInt(),
+        )) ?: return
+        applyCanvasOp(CanvasOp.Crop(r), "Crop")
+    }
+
+    override fun resizeCanvas(width: Int, height: Int, scaleContent: Boolean, anchorX: Float, anchorY: Float) {
+        val w = width.coerceIn(1, 16384)
+        val h = height.coerceIn(1, 16384)
+        if (w == doc.width && h == doc.height && !scaleContent) return
+        applyCanvasOp(CanvasOp.CanvasSize(w, h, scaleContent, anchorX, anchorY), "Canvas size")
+    }
+
+    override fun straightenCanvas(angleDeg: Float) {
+        val a = angleDeg.coerceIn(-45f, 45f)
+        if (abs(a) < 0.01f) return
+        applyCanvasOp(CanvasOp.Straighten(a), "Straighten")
+    }
+
+    private fun applyCanvasOp(op: CanvasOp, name: String) {
+        finishShape(commit = true)
+        finishTransform(apply = true)
+        finishGradient(apply = true)
+        finishLiquify(commit = true)
+        commitPendingOpacity()
+        val cmd = canvasCommand(doc, op, name)
+        history.execute(doc, cmd)
+        lastCanvasWidth = doc.width
+        lastCanvasHeight = doc.height
+        canvas?.setDocument(doc)
+        _state.update { it.copy(canvasWidth = doc.width, canvasHeight = doc.height) }
+        refreshLayers()
+        refreshSelection()
+    }
+
+    /** The GL renderer allocated its tiles for [lastCanvasWidth] x [lastCanvasHeight]; reset after an undo. */
+    private fun syncCanvasSize() {
+        if (lastCanvasWidth != doc.width || lastCanvasHeight != doc.height) {
+            lastCanvasWidth = doc.width
+            lastCanvasHeight = doc.height
+            canvas?.setDocument(doc)
+            _state.update { it.copy(canvasWidth = doc.width, canvasHeight = doc.height) }
+        }
+    }
+
     override fun openEditingTools() {}
     override fun openOptions() {}
+
+    override fun openSettings() = _state.update { it.copy(settingsOpen = true) }
+
+    override fun closeSettings() = _state.update { it.copy(settingsOpen = false) }
+
+    // ---- timelapse (M3) ----
+
+    override fun setTimelapseEnabled(enabled: Boolean) {
+        prefs?.timelapseEnabled = enabled
+        _state.update { it.copy(timelapseEnabled = enabled) }
+        if (enabled) scheduleTimelapse(force = true)
+    }
+
+    /** Records a frame after a change, at most twice a second; a newer change replaces a pending capture. */
+    private fun scheduleTimelapse(force: Boolean = false) {
+        if (!_state.value.timelapseEnabled) return
+        val now = SystemClock.elapsedRealtime()
+        val wait = if (force) 0L else (TIMELAPSE_MIN_INTERVAL_MS - (now - lastTimelapseFrameAt)).coerceAtLeast(0L)
+        timelapseJob?.cancel()
+        timelapseJob = viewModelScope.launch {
+            if (wait > 0) delay(wait)
+            val store = timelapseStore ?: return@launch
+            // Copy on the main thread, encode off it: the document must not change under the encoder.
+            val snapshot = snapshotDocument(doc, pixels = true)
+            lastTimelapseFrameAt = SystemClock.elapsedRealtime()
+            val count = withContext(Dispatchers.IO) { store.capture(snapshot) }
+            _state.update { it.copy(timelapseFrames = count) }
+        }
+    }
+
+    override suspend fun encodeTimelapse(durationSec: Int, maxSide: Int): ByteArray? {
+        val store = timelapseStore ?: return null
+        val frames = withContext(Dispatchers.IO) { store.frames() }
+        if (frames.isEmpty()) return null
+        val out = java.io.File(getApplication<Application>().cacheDir, "timelapse-${doc.id}.mp4")
+        return withContext(Dispatchers.IO) {
+            runCatching {
+                TimelapseEncoder.encode(frames, out, maxSide.coerceIn(480, 2160), durationSec)
+                out.readBytes()
+            }.getOrNull()
+        }
+    }
 
     // ---- helpers ----
 
@@ -3098,6 +3313,9 @@ class StudioViewModel(
 
 /** Delay after the last change before the project is written. */
 private const val AUTOSAVE_DELAY_MS = 2_000L
+
+/** At most one timelapse frame per this interval (spec: no more than 30/s; two per second is plenty). */
+private const val TIMELAPSE_MIN_INTERVAL_MS = 500L
 
 private fun StudioViewModel.defaultLayerName(n: Int): String =
     getApplication<android.app.Application>().getString(R.string.layer_default_name, n)

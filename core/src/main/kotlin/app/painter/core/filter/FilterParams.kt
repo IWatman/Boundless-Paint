@@ -231,3 +231,63 @@ data class HalftoneParams(
     override val kind: String get() = "halftone"
     override val reach: Int get() = 0
 }
+
+/** Raster layer style: an outline outside, inside or on both sides of the painted pixels. */
+@Serializable
+@SerialName("layer-stroke")
+data class LayerStrokeParams(
+    val width: Int = 4,
+    val inner: Boolean = false,
+    val outer: Boolean = true,
+    val color: String = "#000000",
+    val opacity: Float = 1f,
+    val strength: Float = 1f,
+) : FilterParams() {
+    override val kind: String get() = "layer-stroke"
+    override val reach: Int get() = width.coerceIn(1, 100)
+}
+
+/** Raster layer style: a drop shadow behind the painted pixels. */
+@Serializable
+@SerialName("drop-shadow")
+data class DropShadowParams(
+    val angleDeg: Float = 45f,
+    val distance: Int = 8,
+    val blur: Int = 6,
+    val color: String = "#000000",
+    val opacity: Float = 0.6f,
+    val strength: Float = 1f,
+) : FilterParams() {
+    override val kind: String get() = "drop-shadow"
+    override val reach: Int get() = (distance.coerceIn(0, 200) + blur.coerceIn(0, 100)).coerceAtLeast(1)
+}
+
+/** Raster layer style: a soft glow around the painted pixels. */
+@Serializable
+@SerialName("layer-glow")
+data class LayerGlowParams(
+    val radius: Int = 12,
+    val color: String = "#FFFFFF",
+    val opacity: Float = 0.9f,
+    val strength: Float = 1f,
+) : FilterParams() {
+    override val kind: String get() = "layer-glow"
+    override val reach: Int get() = radius.coerceIn(1, 100)
+}
+
+/** Draw generator: a page divided into [rows] x [cols] panels by margins and gutters. */
+@Serializable
+@SerialName("panel-grid")
+data class PanelGridParams(
+    val rows: Int = 2,
+    val cols: Int = 2,
+    val margin: Int = 40,
+    val gutter: Int = 24,
+    val thickness: Int = 4,
+    val color: String = "#FFFFFF",
+    val strength: Float = 1f,
+) : FilterParams() {
+    override val kind: String get() = "panel-grid"
+    override val reach: Int get() = 0
+    override val coversCanvas: Boolean get() = true
+}

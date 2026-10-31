@@ -39,7 +39,8 @@ sealed class Node(
 class RasterLayer(
     id: String,
     name: String,
-    val pixels: TileGrid,
+    /** Pixel grid; the canvas command replaces it with a resampled grid. */
+    var pixels: TileGrid,
 ) : Node(id, name) {
     var alphaLock: Boolean = false
 

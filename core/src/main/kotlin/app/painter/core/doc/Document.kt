@@ -11,8 +11,10 @@ enum class ProjectType { REGULAR, PATTERN, CHALLENGE, ANIMATION, MANUSCRIPT }
  * commands so that undo works; direct field access is for reading and for commands.
  */
 class Document(
-    val width: Int,
-    val height: Int,
+    /** Canvas width in pixels; changed by the crop/resize/straighten command. */
+    var width: Int,
+    /** Canvas height in pixels; changed by the crop/resize/straighten command. */
+    var height: Int,
     val id: String = UUID.randomUUID().toString(),
     var name: String = "Untitled",
     val type: ProjectType = ProjectType.REGULAR,

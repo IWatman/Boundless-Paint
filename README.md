@@ -33,8 +33,11 @@ The app is completely free: no subscriptions, ads, watermarks or paid features.
 - Shapes: line, rectangle, ellipse, polygon, arc, drawn with the current brush; outline, fill, stamp
 - Color: HSB wheel, sliders, hex, palette, eyedropper (long press)
 - Undo and redo with buttons and gestures (two- and three-finger tap), two-finger navigation
-- Filters: blur, motion blur, pixelate, sharpen, glow, noise, find edges, chromatic aberration, fisheye, dilate, erode, zoom and spin blur, radial lines, speed lines and halftone (M3)
+- Filters: blur, motion blur, pixelate, sharpen, glow, noise, find edges, chromatic aberration, fisheye, dilate, erode, zoom and spin blur, radial lines, speed lines, halftone, outline, drop shadow, outer glow and panel grid (M3)
 - Liquify and text stamp tools, hardware-keyboard shortcuts (M3)
+- Canvas crop, canvas size with anchors, straighten; curvilinear 5-point perspective (M3)
+- Brush import/export (`.pbrush`, `.pbrushes`, MyPaint, GIMP, Krita, Procreate, PNG/JPG) (M3)
+- PSD raster-layer import/export and timelapse MP4 export (M3)
 - Autosave 2 seconds after a change, PNG/JPG export with quality and transparency options
 - In-app update from GitHub Releases
 

@@ -1,5 +1,10 @@
 package app.painter.ui.studio
 
+import android.net.Uri
+import android.provider.OpenableColumns
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -27,12 +32,14 @@ import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -40,11 +47,31 @@ import app.painter.R
 import app.painter.ui.components.PanelSurface
 import app.painter.ui.components.RenameDialog
 import app.painter.ui.theme.AccentFill
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 private val BrowserWidth = 360.dp
 private val BrowserHeight = 560.dp
 private val CategoryWidth = 110.dp
 private val BrushRowHeight = 56.dp
+
+private val IMPORT_MIME = arrayOf(
+    "application/zip",
+    "application/octet-stream",
+    "image/png",
+    "image/jpeg",
+    "application/x-myPaint-brush",
+)
+private val IMAGE_MIME = arrayOf("image/png", "image/jpeg")
+
+/** Display name of a SAF document, for the name of an imported brush. */
+private fun displayName(context: android.content.Context, uri: Uri): String? =
+    runCatching {
+        context.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c ->
+            if (c.moveToFirst()) c.getString(0) else null
+        }
+    }.getOrNull() ?: uri.lastPathSegment?.substringAfterLast('/')
 
 /**
  * Brush browser: a category column on the left and the presets of the picked category on the right.
@@ -56,6 +83,49 @@ private val BrushRowHeight = 56.dp
 internal fun BrushBrowser(state: StudioUiState, actions: StudioActions, modifier: Modifier = Modifier) {
     val categories = state.brushCategories
     if (categories.isEmpty()) return
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var importAsTexture by remember { mutableStateOf(false) }
+    var menu by remember { mutableStateOf(false) }
+    val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) scope.launch {
+            val name = displayName(context, uri) ?: "brush"
+            val bytes = withContext(Dispatchers.IO) {
+                runCatching { context.contentResolver.openInputStream(uri)?.use { it.readBytes() } }.getOrNull()
+            }
+            if (bytes == null) {
+                Toast.makeText(context, R.string.brush_import_failed, Toast.LENGTH_LONG).show()
+                return@launch
+            }
+            val count = runCatching { actions.importBrush(name, bytes, importAsTexture) }.getOrElse {
+                Toast.makeText(context, it.message ?: context.getString(R.string.brush_import_failed), Toast.LENGTH_LONG).show()
+                return@launch
+            }
+            Toast.makeText(
+                context,
+                if (count > 0) context.getString(R.string.brush_imported, count) else context.getString(R.string.brush_import_empty),
+                Toast.LENGTH_LONG,
+            ).show()
+        }
+    }
+    val exportBrush = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { uri ->
+        if (uri != null) scope.launch {
+            val bytes = withContext(Dispatchers.Default) { actions.exportBrushBytes() }
+            val ok = bytes != null && withContext(Dispatchers.IO) {
+                runCatching { context.contentResolver.openOutputStream(uri)?.use { it.write(bytes) } }.isSuccess
+            }
+            Toast.makeText(context, if (ok) R.string.brush_exported else R.string.brush_export_failed, Toast.LENGTH_SHORT).show()
+        }
+    }
+    val exportPack = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { uri ->
+        if (uri != null) scope.launch {
+            val bytes = withContext(Dispatchers.Default) { actions.exportBrushPackBytes() }
+            val ok = bytes != null && withContext(Dispatchers.IO) {
+                runCatching { context.contentResolver.openOutputStream(uri)?.use { it.write(bytes) } }.isSuccess
+            }
+            Toast.makeText(context, if (ok) R.string.brush_exported else R.string.brush_export_failed, Toast.LENGTH_SHORT).show()
+        }
+    }
     val home = categories.indexOfFirst { c -> c.brushes.any { it.id == state.currentBrushId } }.coerceAtLeast(0)
     var picked by rememberSaveable { mutableIntStateOf(home) }
     val index = picked.coerceIn(0, categories.lastIndex)
@@ -75,6 +145,41 @@ internal fun BrushBrowser(state: StudioUiState, actions: StudioActions, modifier
                 // Edits the brush of the current mode; the editor closes the browser and opens on the right (§4.2).
                 TextButton(onClick = { actions.openBrushEditor() }) {
                     Text(stringResource(R.string.brush_edit))
+                }
+                Box {
+                    TextButton(onClick = { menu = true }) { Text("⋮") }
+                    DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.brush_import)) },
+                            onClick = {
+                                menu = false
+                                importAsTexture = false
+                                importLauncher.launch(IMPORT_MIME)
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.brush_import_texture)) },
+                            onClick = {
+                                menu = false
+                                importAsTexture = true
+                                importLauncher.launch(IMAGE_MIME)
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.brush_export)) },
+                            onClick = {
+                                menu = false
+                                exportBrush.launch(actions.exportBrushName() + ".pbrush")
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.brush_export_pack)) },
+                            onClick = {
+                                menu = false
+                                exportPack.launch("Painter brushes.pbrushes")
+                            },
+                        )
+                    }
                 }
             }
             Row(Modifier.fillMaxWidth().weight(1f)) {

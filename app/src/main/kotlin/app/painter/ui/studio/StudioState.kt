@@ -177,6 +177,15 @@ data class StudioUiState(
     val liquifySize: Float = 160f,
     /** Liquify push strength 0..1. */
     val liquifyStrength: Float = 0.5f,
+    /** Canvas size of the open document, shown by the crop/resize dialogs. */
+    val canvasWidth: Int = 1,
+    val canvasHeight: Int = 1,
+    /** The full-screen settings sheet is open. */
+    val settingsOpen: Boolean = false,
+    /** Timelapse recording is on for the open project. */
+    val timelapseEnabled: Boolean = false,
+    /** Recorded frames of the open project. */
+    val timelapseFrames: Int = 0,
     val viewZoom: Float = 1f,
     /** Active tool; [ToolUi.BRUSH] paints, the SELECT_* tools drag a selection. */
     val tool: ToolUi = ToolUi.BRUSH,
@@ -428,6 +437,18 @@ interface StudioActions {
     /** Closes the editor without applying the working copy. */
     fun cancelEditor() {}
 
+    /** Imports a brush file into the Imported folder; returns how many brushes were stored. */
+    suspend fun importBrush(fileName: String, bytes: ByteArray, asTexture: Boolean = false): Int = 0
+
+    /** Name of the file the current brush should be exported under. */
+    fun exportBrushName(): String = "brush"
+
+    /** The current mode's brush as a `.pbrush`, or null when there is nothing to export. */
+    fun exportBrushBytes(): ByteArray? = null
+
+    /** Every own/imported brush as a `.pbrushes` pack, or null when the folder is empty. */
+    fun exportBrushPackBytes(): ByteArray? = null
+
     /** Sets the brush color. [commit] is false for live updates during a drag. */
     fun setColor(color: Rgba, commit: Boolean = true)
     fun undo()
@@ -592,9 +613,20 @@ interface StudioActions {
     fun stampText(text: String, sizePx: Float) {}
     /** Fits the canvas into the view (keyboard shortcut F). */
     fun fitView() {}
+
+    /** Keeps the document-space [rect] and resizes every layer/mask (one undo step). */
+    fun cropCanvas(rect: RectUi) {}
+
+    /** Changes the canvas size, scaling the artwork or anchoring it at [anchorX]/[anchorY] (0..1). */
+    fun resizeCanvas(width: Int, height: Int, scaleContent: Boolean, anchorX: Float, anchorY: Float) {}
+
+    /** Rotates the whole artwork by [angleDeg] inside the canvas (one undo step). */
+    fun straightenCanvas(angleDeg: Float) {}
     fun openHome()
     fun save()
     fun exportImage()
+    /** Asks the activity for a PSD destination and writes the layered document there. */
+    fun exportPsd() {}
     /** Starts the export with the options of the dialog; the activity opens the system file picker. */
     fun startExport(options: ExportOptions) {}
     /** Closes the export dialog without exporting. */
@@ -602,6 +634,12 @@ interface StudioActions {
     fun openEditingTools()
     fun openOptions()
     fun openSettings() {}
+    /** Closes the settings sheet. */
+    fun closeSettings() {}
+    /** Turns timelapse recording on/off (kept for the next session). */
+    fun setTimelapseEnabled(enabled: Boolean) {}
+    /** Encodes the recorded frames into an MP4; null when there is nothing to export. */
+    suspend fun encodeTimelapse(durationSec: Int, maxSide: Int): ByteArray? = null
     fun addColorToPalette(color: Rgba)
     /** Replaces the stylus settings: the pen buttons, the finger rule, the palm mode and the pressure curve. */
     fun setStylusSettings(settings: StylusSettings) {}
@@ -689,6 +727,8 @@ open class NoOpStudioActions : StudioActions {
     override fun fitView() {}
     override fun openEditingTools() {}
     override fun openOptions() {}
+    override fun openSettings() {}
+    override fun closeSettings() {}
     override fun addColorToPalette(color: Rgba) {}
     override fun applyCalibration(descriptor: String?, min: Float, max: Float) {}
     override fun resetCalibration() {}

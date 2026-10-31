@@ -7,7 +7,8 @@ import app.painter.core.raster.MaskGrid
  * "nothing selected". Tools are masked only while the selection is in effect ([coverageOrNull]).
  */
 class Selection(width: Int, height: Int) {
-    val mask = MaskGrid(width, height, 0)
+    /** Coverage mask; the canvas command replaces it with a resampled mask. */
+    var mask = MaskGrid(width, height, 0)
     var active: Boolean = true
 
     val isEmpty: Boolean get() = mask.isUniform
@@ -23,7 +24,7 @@ class Selection(width: Int, height: Int) {
 }
 
 /** Raster mask of a layer or group (spec/tools/m2-layers-adjust.md L3). 0 hides, 255 reveals. */
-class LayerMask(val tiles: MaskGrid) {
+class LayerMask(var tiles: MaskGrid) {
     var enabled: Boolean = true
     /** Moves together with the layer content in transforms. */
     var linked: Boolean = true

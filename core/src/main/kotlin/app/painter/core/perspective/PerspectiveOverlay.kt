@@ -60,6 +60,22 @@ object PerspectiveOverlay {
                 OverlayGeom.family(cfg.origin, unit(h), sy, view, OverlayRole.GRID, out)
                 OverlayGeom.family(cfg.origin, unit(h + HALF_PI), sx, view, OverlayRole.GRID, out)
             }
+            PerspectiveType.FIVE_POINT -> {
+                // Curvilinear 5-point view: concentric fisheye rings and radial spokes through the centre VP.
+                val c = cfg.vp.getOrNull(4) ?: Vec2((view.x0 + view.x1) / 2, (view.y0 + view.y1) / 2)
+                val step = OverlayGeom.thin(cfg.spacing, screenToDoc).coerceAtLeast(8f)
+                val maxR = sqrt((view.x1 - view.x0) * (view.x1 - view.x0) + (view.y1 - view.y0) * (view.y1 - view.y0))
+                var r = step
+                while (r < maxR) {
+                    addCircle(c, r, view, out)
+                    r += step
+                }
+                for (i in 0 until 24) {
+                    val a = 2 * PI * i / 24
+                    val d = Vec2(Math.cos(a).toFloat(), Math.sin(a).toFloat())
+                    OverlayGeom.clip(c, d, view, 0f)?.let { out.add(OverlayLine(it.first, it.second, OverlayRole.VP1)) }
+                }
+            }
         }
         return out
     }
@@ -89,6 +105,22 @@ object PerspectiveOverlay {
             val a = if (closedFan) start + span * i / n else start + span * (i + 0.5) / n
             val d = Vec2(kotlin.math.cos(a).toFloat(), kotlin.math.sin(a).toFloat())
             OverlayGeom.clip(vp, d, view, 0f)?.let { out.add(OverlayLine(it.first, it.second, role)) }
+        }
+    }
+
+    /** A circle approximated by short chords; only chords touching [view] are emitted. */
+    private fun addCircle(c: Vec2, r: Float, view: DocRect, out: MutableList<OverlayLine>) {
+        val n = 96
+        var px = c.x + r
+        var py = c.y
+        for (i in 1..n) {
+            val a = 2 * PI * i / n
+            val x = c.x + (r * Math.cos(a)).toFloat()
+            val y = c.y + (r * Math.sin(a)).toFloat()
+            val inside = (px in view.x0..view.x1 && py in view.y0..view.y1) ||
+                (x in view.x0..view.x1 && y in view.y0..view.y1)
+            if (inside) out.add(OverlayLine(Vec2(px, py), Vec2(x, y), OverlayRole.GRID))
+            px = x; py = y
         }
     }
 

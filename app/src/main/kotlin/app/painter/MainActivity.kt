@@ -35,7 +35,9 @@ import app.painter.ui.studio.StudioScreen
 import app.painter.ui.studio.BrushModeUi
 import app.painter.ui.theme.PainterTheme
 import app.painter.update.UpdateViewModel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class MainActivity : ComponentActivity() {
 
@@ -114,6 +116,26 @@ private fun App(vm: StudioViewModel, updateVm: UpdateViewModel) {
     val homeRequest by vm.homeRequest.collectAsState()
     val updateState by updateVm.state.collectAsState()
     val context = androidx.compose.ui.platform.LocalContext.current
+    val importPsd = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) scope.launch {
+            val bytes = withContext(Dispatchers.IO) {
+                runCatching { context.contentResolver.openInputStream(uri)?.use { it.readBytes() } }.getOrNull()
+            }
+            if (bytes == null) {
+                Toast.makeText(context, R.string.psd_import_failed, Toast.LENGTH_LONG).show()
+                return@launch
+            }
+            val name = uri.lastPathSegment?.substringAfterLast('/') ?: "Imported.psd"
+            runCatching { vm.importPsd(name, bytes) }
+                .onSuccess { id ->
+                    Toast.makeText(context, R.string.psd_imported, Toast.LENGTH_SHORT).show()
+                    runCatching { vm.openDocument(id) }.onSuccess { screen = Screen.STUDIO }
+                }
+                .onFailure {
+                    Toast.makeText(context, R.string.psd_import_failed, Toast.LENGTH_LONG).show()
+                }
+        }
+    }
 
     LaunchedEffect(homeRequest) {
         if (homeRequest) {
@@ -139,6 +161,7 @@ private fun App(vm: StudioViewModel, updateVm: UpdateViewModel) {
             onNewCanvas = { screen = Screen.NEW },
             onOpenGallery = { vm.refreshProjects(); screen = Screen.GALLERY },
             onOpenUpdates = { showUpdates = true },
+            onImportPsd = { importPsd.launch(arrayOf("image/vnd.adobe.photoshop", "application/octet-stream")) },
             recent = projects.take(8),
             onOpenProject = open,
         )
@@ -187,6 +210,7 @@ private fun Studio(vm: StudioViewModel) {
     val state by vm.state.collectAsState()
     val exportRequest by vm.exportRequest.collectAsState()
     val exportOptions by vm.exportOptions.collectAsState()
+    val psdRequest by vm.psdRequest.collectAsState()
     val scope = rememberCoroutineScope()
     val context = androidx.compose.ui.platform.LocalContext.current
 
@@ -213,6 +237,24 @@ private fun Studio(vm: StudioViewModel) {
         ActivityResultContracts.CreateDocument(ExportFormat.JPG.mime),
         writeExport,
     )
+    val psdLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("image/vnd.adobe.photoshop"),
+    ) { uri ->
+        if (uri != null) scope.launch {
+            val ok = runCatching {
+                val bytes = vm.encodePsd()
+                context.contentResolver.openOutputStream(uri)?.use { it.write(bytes) }
+            }.isSuccess
+            Toast.makeText(context, if (ok) R.string.psd_exported else R.string.psd_export_failed, Toast.LENGTH_LONG).show()
+        }
+    }
+
+    LaunchedEffect(psdRequest) {
+        if (psdRequest) {
+            vm.psdRequest.value = false
+            psdLauncher.launch("${vm.documentName}.psd")
+        }
+    }
 
     LaunchedEffect(exportRequest) {
         if (exportRequest) {

@@ -32,7 +32,11 @@ import app.painter.core.filter.PixelateParams
 import app.painter.core.filter.RadialLinesParams
 import app.painter.core.filter.SharpenParams
 import app.painter.core.filter.SpeedLinesParams
+import app.painter.core.filter.DropShadowParams
 import app.painter.core.filter.HalftoneParams
+import app.painter.core.filter.LayerGlowParams
+import app.painter.core.filter.LayerStrokeParams
+import app.painter.core.filter.PanelGridParams
 import app.painter.core.filter.SpinBlurParams
 import app.painter.core.filter.ZoomBlurParams
 import app.painter.core.color.Rgba
@@ -57,6 +61,10 @@ private enum class FilterKindUi(val label: Int) {
     RADIAL(R.string.filter_radial),
     SPEED(R.string.filter_speed),
     HALFTONE(R.string.filter_halftone),
+    STROKE(R.string.filter_layer_stroke),
+    SHADOW(R.string.filter_drop_shadow),
+    LAYER_GLOW(R.string.filter_layer_glow),
+    PANELS(R.string.filter_panels),
 }
 
 /**
@@ -78,6 +86,12 @@ fun FilterDialog(ink: Rgba, onDismiss: () -> Unit, onApply: (FilterParams) -> Un
     var count by remember { mutableStateOf(60f) }
     var thickness by remember { mutableStateOf(2f) }
     var inner by remember { mutableStateOf(0.15f) }
+    var strokeInner by remember { mutableStateOf(false) }
+    var strokeOuter by remember { mutableStateOf(true) }
+    var rows by remember { mutableStateOf(2f) }
+    var cols by remember { mutableStateOf(2f) }
+    var margin by remember { mutableStateOf(40f) }
+    var gutter by remember { mutableStateOf(24f) }
     val inkHex = remember(ink) {
         "#%02X%02X%02X".format(
             (ink.r.coerceIn(0f, 1f) * 255).roundToInt(),
@@ -88,7 +102,7 @@ fun FilterDialog(ink: Rgba, onDismiss: () -> Unit, onApply: (FilterParams) -> Un
 
     val params = kind.params(
         radius, amount, distance, angle, cell, threshold, mono, scale, strength,
-        count, thickness, inner, inkHex,
+        count, thickness, inner, inkHex, strokeInner, strokeOuter, rows, cols, margin, gutter,
     )
     val percent = { v: Float -> "${(v * 100).roundToInt()}%" }
 
@@ -231,6 +245,70 @@ fun FilterDialog(ink: Rgba, onDismiss: () -> Unit, onApply: (FilterParams) -> Un
                         stringResource(R.string.cell_size), cell, 2f..48f, { it.roundToInt().toString() },
                         { cell = it }, step = 1f, unit = "px",
                     )
+                    FilterKindUi.STROKE -> {
+                        ParamSlider(
+                            stringResource(R.string.width), thickness, 1f..50f, { it.roundToInt().toString() },
+                            { thickness = it }, step = 1f, unit = "px",
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            ToggleChip(stringResource(R.string.outer), strokeOuter) { strokeOuter = !strokeOuter }
+                            ToggleChip(stringResource(R.string.inner), strokeInner) { strokeInner = !strokeInner }
+                        }
+                        ParamSlider(
+                            stringResource(R.string.opacity), amount, 0f..1f, percent,
+                            { amount = it }, step = 0.01f,
+                        )
+                    }
+                    FilterKindUi.SHADOW -> {
+                        ParamSlider(
+                            stringResource(R.string.angle), angle, 0f..360f, { it.roundToInt().toString() },
+                            { angle = it }, step = 1f, unit = "°",
+                        )
+                        ParamSlider(
+                            stringResource(R.string.distance), distance, 0f..100f, { it.roundToInt().toString() },
+                            { distance = it }, step = 1f, unit = "px",
+                        )
+                        ParamSlider(
+                            stringResource(R.string.blur), radius, 0f..50f, { it.roundToInt().toString() },
+                            { radius = it }, step = 1f, unit = "px",
+                        )
+                        ParamSlider(
+                            stringResource(R.string.opacity), amount, 0f..1f, percent,
+                            { amount = it }, step = 0.01f,
+                        )
+                    }
+                    FilterKindUi.LAYER_GLOW -> {
+                        ParamSlider(
+                            stringResource(R.string.radius), radius, 1f..80f, { it.roundToInt().toString() },
+                            { radius = it }, step = 1f, unit = "px",
+                        )
+                        ParamSlider(
+                            stringResource(R.string.opacity), amount, 0f..1f, percent,
+                            { amount = it }, step = 0.01f,
+                        )
+                    }
+                    FilterKindUi.PANELS -> {
+                        ParamSlider(
+                            stringResource(R.string.rows), rows, 1f..8f, { it.roundToInt().toString() },
+                            { rows = it }, step = 1f,
+                        )
+                        ParamSlider(
+                            stringResource(R.string.columns), cols, 1f..8f, { it.roundToInt().toString() },
+                            { cols = it }, step = 1f,
+                        )
+                        ParamSlider(
+                            stringResource(R.string.margin), margin, 0f..300f, { it.roundToInt().toString() },
+                            { margin = it }, step = 1f, unit = "px",
+                        )
+                        ParamSlider(
+                            stringResource(R.string.gutter), gutter, 0f..100f, { it.roundToInt().toString() },
+                            { gutter = it }, step = 1f, unit = "px",
+                        )
+                        ParamSlider(
+                            stringResource(R.string.thickness), thickness, 1f..30f, { it.roundToInt().toString() },
+                            { thickness = it }, step = 1f, unit = "px",
+                        )
+                    }
                 }
                 ParamSlider(
                     stringResource(R.string.strength), strength, 0f..1f, percent,
@@ -260,6 +338,12 @@ private fun FilterKindUi.params(
     thickness: Float,
     inner: Float,
     ink: String,
+    strokeInner: Boolean,
+    strokeOuter: Boolean,
+    rows: Float,
+    cols: Float,
+    margin: Float,
+    gutter: Float,
 ): FilterParams = when (this) {
     FilterKindUi.BLUR -> BlurParams(radius, strength)
     FilterKindUi.MOTION -> MotionBlurParams(distance, angle, strength)
@@ -277,4 +361,19 @@ private fun FilterKindUi.params(
     FilterKindUi.RADIAL -> RadialLinesParams(count.roundToInt(), inner, thickness, random = 0.4f, color = ink, strength = strength)
     FilterKindUi.SPEED -> SpeedLinesParams(angle, count.roundToInt(), thickness, length = 0.9f, color = ink, strength = strength)
     FilterKindUi.HALFTONE -> HalftoneParams(cell.roundToInt(), ink, strength)
+    FilterKindUi.STROKE -> LayerStrokeParams(
+        width = thickness.roundToInt(), inner = strokeInner, outer = strokeOuter,
+        color = ink, opacity = amount, strength = strength,
+    )
+    FilterKindUi.SHADOW -> DropShadowParams(
+        angleDeg = angle, distance = distance.roundToInt(), blur = radius.roundToInt(),
+        color = ink, opacity = amount, strength = strength,
+    )
+    FilterKindUi.LAYER_GLOW -> LayerGlowParams(
+        radius = radius.roundToInt(), color = ink, opacity = amount, strength = strength,
+    )
+    FilterKindUi.PANELS -> PanelGridParams(
+        rows = rows.roundToInt(), cols = cols.roundToInt(), margin = margin.roundToInt(),
+        gutter = gutter.roundToInt(), thickness = thickness.roundToInt(), color = ink, strength = strength,
+    )
 }
