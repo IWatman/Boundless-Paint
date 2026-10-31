@@ -7,7 +7,7 @@ plugins {
 }
 
 // Single version source; CI passes -PappVersion=<tag without v>.
-val appVersion = (findProperty("appVersion") as String?) ?: "0.4.4"
+val appVersion = (findProperty("appVersion") as String?) ?: "0.4.5"
 val appVersionCode = appVersion.split(".").map { it.toInt() }.let { (major, minor, patch) ->
     major * 10000 + minor * 100 + patch
 }
@@ -32,7 +32,7 @@ android {
         targetSdk = 34
         versionCode = appVersionCode
         versionName = appVersion
-        buildConfigField("String", "UPDATE_REPO", "\"IWatman/Painter\"")
+        buildConfigField("String", "UPDATE_REPO", "\"IWatman/Boundless-Paint\"")
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 

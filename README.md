@@ -1,11 +1,13 @@
-# Painter
+# Boundless Paint
+
+<img src="docs/icon.png" width="128" alt="Boundless Paint icon">
 
 Bitmap painting editor for Android tablets. The feature set is the union of Infinite Painter and ibisPaint; the interface follows the Infinite Painter scheme. The implementation is our own, from scratch, under clean-room rules ([00-clean-room/PROCESS.md](00-clean-room/PROCESS.md)).
 
 The app is completely free: no subscriptions, ads, watermarks or paid features.
 
-[![Release](https://img.shields.io/github/v/release/IWatman/Painter?label=release)](https://github.com/IWatman/Painter/releases)
-[![CI](https://github.com/IWatman/Painter/actions/workflows/ci.yml/badge.svg)](https://github.com/IWatman/Painter/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/IWatman/Boundless-Paint?label=release)](https://github.com/IWatman/Boundless-Paint/releases)
+[![CI](https://github.com/IWatman/Boundless-Paint/actions/workflows/ci.yml/badge.svg)](https://github.com/IWatman/Boundless-Paint/actions/workflows/ci.yml)
 ![Android](https://img.shields.io/badge/Android-10%2B-3DDC84)
 ![Kotlin](https://img.shields.io/badge/Kotlin-2.0-7F52FF)
 
@@ -60,7 +62,7 @@ Full plan: [spec/ROADMAP.md](spec/ROADMAP.md), the finished M2 plan: [spec/PLAN-
 
 ## Installation
 
-1. Download `painter-X.Y.Z.apk` from the [latest release](https://github.com/IWatman/Painter/releases).
+1. Download `boundless-paint-X.Y.Z.apk` from the [latest release](https://github.com/IWatman/Boundless-Paint/releases).
 2. Open the file on the device and allow installation from this source. Android 10 or newer and OpenGL ES 3 support are required.
 3. Further updates: the "Updates" button on the app's home screen.
 

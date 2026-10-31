@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name" translatable="false">Painter</string>
+    <string name="app_name" translatable="false">Boundless Paint</string>
     <string name="add_layer">Add layer</string>
     <string name="add_to_palette">Add to palette</string>
     <string name="alpha_lock">Lock transparency</string>
@@ -445,7 +445,7 @@
     <string name="timelapse_exported">Timelapse exported</string>
     <string name="timelapse_failed">Could not export the timelapse</string>
     <string name="settings_about">About</string>
-    <string name="settings_version">Painter %1$s</string>
+    <string name="settings_version">Boundless Paint %1$s</string>
     <string name="settings_no_monetization">No ads, subscriptions or in-app purchases. Brushes are clean-room originals.</string>
     <string name="stylus">Stylus</string>
     <string name="stylus_pressure_curve">Pressure curve</string>
@@ -490,7 +490,7 @@
     <string name="tab_palette">Palette</string>
     <string name="untitled">Untitled</string>
     <string name="visibility">Visibility</string>
-    <string name="update_signature_mismatch">The installed app is signed with a different key (a test build). Uninstall it and install Painter again from GitHub.</string>
+    <string name="update_signature_mismatch">The installed app is signed with a different key (a test build). Uninstall it and install Boundless Paint again from GitHub.</string>
     <string name="update_done">Updated to version %1$s.</string>
     <string name="updates">Updates</string>
     <string name="update_check">Check for updates</string>
@@ -501,7 +501,7 @@
     <string name="update_error">Update failed: %1$s</string>
     <string name="update_grant">Allow</string>
     <string name="update_installing">Installing…</string>
-    <string name="update_needs_permission">Allow Painter to install apps in the system settings, then tap “Allow” again.</string>
+    <string name="update_needs_permission">Allow Boundless Paint to install apps in the system settings, then tap “Allow” again.</string>
     <string name="update_new_version">New version %1$s</string>
     <string name="update_notes_title">What\'s new</string>
     <string name="update_now">Update</string>

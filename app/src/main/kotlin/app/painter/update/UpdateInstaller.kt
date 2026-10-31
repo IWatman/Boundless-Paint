@@ -142,10 +142,10 @@ class UpdateInstaller(context: Context) {
     companion object {
         /** Action of the explicit broadcast that delivers the session status. */
         const val ACTION_INSTALL_STATUS = "app.painter.update.INSTALL_STATUS"
-        private const val SESSION_NAME = "painter-update"
+        private const val SESSION_NAME = "boundless-paint-update"
         private const val TIMEOUT_MS = 30_000
         private const val BUFFER_SIZE = 64 * 1024
-        private const val USER_AGENT = "Painter-Android"
+        private const val USER_AGENT = "BoundlessPaint-Android"
     }
 }
 

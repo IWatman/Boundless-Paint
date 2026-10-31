@@ -60,7 +60,7 @@ class UpdateChecker(private val repo: String) {
         const val API_URL = "https://api.github.com"
         const val TIMEOUT_MS = 10_000
         const val MAX_RELEASES = 10
-        const val USER_AGENT = "Painter-Android"
+        const val USER_AGENT = "BoundlessPaint-Android"
     }
 }
 

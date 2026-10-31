@@ -14,5 +14,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "Painter"
+rootProject.name = "Boundless Paint"
 include(":core", ":app")

@@ -1,5 +1,14 @@
 # Status
 
+## Rebrand: Boundless Paint (2026-10-31, 0.4.5)
+- The app is now **Boundless Paint** (label, settings/about, in-app update copy, README, Gradle root project and
+  GitHub repository). The Android package stays `app.painter` so existing projects and signing keys continue to
+  work.
+- New original launcher icon: `docs/icon.png` (master) plus legacy and adaptive mipmaps in `app/src/main/res`;
+  the icon is a gradient lemniscate brush stroke with paint flecks on a dark blue rounded square.
+- Release assets are named `boundless-paint-<version>.apk`; the updater reads the renamed
+  `IWatman/Boundless-Paint` repository.
+
 ## M3: done (2026-10-31)
 ### Filters (2026-10-31)
 - Core: `core/filter` — `FilterParams` (sealed, 9 kinds) and `Filters.apply`, which runs tile by tile with a patch
