@@ -2963,6 +2963,8 @@ class StudioViewModel(
             runCatching {
                 TimelapseEncoder.encode(frames, out, maxSide.coerceIn(480, 2160), durationSec)
                 out.readBytes()
+            }.onFailure {
+                android.util.Log.e("PainterTimelapse", "encode failed", it)
             }.getOrNull()
         }
     }

@@ -1,6 +1,6 @@
 # Status
 
-## M3: in progress
+## M3: done (2026-10-31)
 ### Filters (2026-10-31)
 - Core: `core/filter` — `FilterParams` (sealed, 9 kinds) and `Filters.apply`, which runs tile by tile with a patch
   padded by the filter's reach (no seams), respects the selection and alpha lock, and returns a `TilePatch` so a
@@ -38,6 +38,9 @@
 - Live filter layers: a `FilterLayer` caches the filtered composite of every root sibling below it; the compositor
   and the GPU renderer replace that lower content with the cache, and the app recomputes the cache after each
   change. Added from Editing Tools → New filter layer…, persisted in the project manifest (`kind: "filter"`).
+- Verified on `painter_tab` (2026-10-31): blur filter layer replaces the lower strokes live, crop dialog/apply,
+  settings sheet, PSD export menu, and a timelapse export whose MP4 is H.264 720p (720×404), 30 fps, 29.97 s.
+- Tests: **566 JVM tests, all green** (493 core, 73 app).
 
 ## M2: done (2026-10-31)
 - Build: `. .\tools\env.ps1; .\gradlew.bat :core:test :app:testDebugUnitTest :app:assembleDebug`.

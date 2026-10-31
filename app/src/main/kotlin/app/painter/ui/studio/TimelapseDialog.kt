@@ -40,16 +40,21 @@ fun TimelapseDialog(state: StudioUiState, actions: StudioActions, onDismiss: () 
             val bytes = actions.encodeTimelapse(pendingDuration, pendingQuality)
             if (bytes == null) {
                 Toast.makeText(context, R.string.timelapse_empty, Toast.LENGTH_LONG).show()
+                onDismiss()
                 return@launch
             }
             val ok = withContext(Dispatchers.IO) {
-                runCatching { context.contentResolver.openOutputStream(uri)?.use { it.write(bytes) } }.isSuccess
+                runCatching {
+                    val stream = context.contentResolver.openOutputStream(uri) ?: error("no output stream")
+                    stream.use { it.write(bytes) }
+                }.onFailure { android.util.Log.e("PainterTimelapse", "write failed", it) }.isSuccess
             }
             Toast.makeText(
                 context,
                 if (ok) R.string.timelapse_exported else R.string.timelapse_failed,
                 Toast.LENGTH_LONG,
             ).show()
+            onDismiss()
         }
     }
     AlertDialog(
@@ -91,7 +96,6 @@ fun TimelapseDialog(state: StudioUiState, actions: StudioActions, onDismiss: () 
                 onClick = {
                     pendingDuration = duration
                     pendingQuality = quality
-                    onDismiss()
                     picker.launch("timelapse.mp4")
                 },
             ) { Text(stringResource(R.string.timelapse_export)) }
