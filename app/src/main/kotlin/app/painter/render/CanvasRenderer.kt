@@ -664,6 +664,12 @@ internal class CanvasRenderer(
             val clipTex = if (s.clipped) baseTex else 0
             val clipMask = if (s.clipped) baseMask else null
             val mask = maskOf(s, i)
+            if (s.isFilter && g.snap.id == "root") {
+                // The filter cache already contains the paper and every sibling below it.
+                GL.glBindFramebuffer(GL.GL_FRAMEBUFFER, dst.fbo)
+                GL.glClearColor(0f, 0f, 0f, 0f)
+                GL.glClear(GL.GL_COLOR_BUFFER_BIT)
+            }
             if (s.adjust != null) {
                 // Acts on the accumulator of its parent and is never a clip base (as on the CPU).
                 dst = adjustPass(dst, c, mask, clipTex, clipMask)

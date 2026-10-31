@@ -262,6 +262,7 @@
     <string name="quality">Качество</string>
     <string name="transparent_background">Прозрачный фон</string>
     <string name="filters">Фильтры</string>
+    <string name="filter_layer">Новый слой-фильтр…</string>
     <string name="tool_liquify">Пластика</string>
     <string name="tool_text">Текст</string>
     <string name="canvas_crop">Обрезать холст</string>

@@ -76,6 +76,14 @@ object Filters {
         return TilePatch(layerId, before, after)
     }
 
+    /**
+     * Applies [params] to [grid] in place without building a history patch; used by live filter layers, whose
+     * cache is derived state and is not undoable by itself.
+     */
+    fun applyToGrid(grid: TileGrid, params: FilterParams, threads: Int = StrokeContext.defaultThreads()) {
+        apply("filter-layer", grid, params, threads = threads)
+    }
+
     /** Centre and radius of the painted area, for the radial filters. */
     private class Geometry(val content: IntRect) {
         val cx = content.x0 + content.width / 2f

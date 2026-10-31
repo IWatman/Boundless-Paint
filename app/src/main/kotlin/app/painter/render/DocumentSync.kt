@@ -5,6 +5,7 @@ import app.painter.core.adjust.AdjustParams
 import app.painter.core.blend.BlendMode
 import app.painter.core.doc.AdjustmentLayer
 import app.painter.core.doc.Document
+import app.painter.core.doc.FilterLayer
 import app.painter.core.doc.GroupNode
 import app.painter.core.doc.Node
 import app.painter.core.doc.RasterLayer
@@ -18,6 +19,8 @@ import app.painter.core.raster.TileKey
 internal data class SnapNode(
     val id: String,
     val isGroup: Boolean,
+    /** Live filter layer: replaces the root siblings below it with its cached filtered pixels. */
+    val isFilter: Boolean,
     val visible: Boolean,
     val opacity: Float,
     val mode: BlendMode,
@@ -300,6 +303,7 @@ internal class DocumentSync(private val pool: StagingPool) {
             return SnapNode(
                 id = n.id,
                 isGroup = n is GroupNode,
+                isFilter = n is FilterLayer,
                 visible = n.visible,
                 opacity = n.opacity,
                 mode = n.blendMode,

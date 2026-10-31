@@ -8,12 +8,14 @@ import app.painter.core.doc.AdjustmentLayer
 import app.painter.core.doc.ColorTag
 import app.painter.core.doc.Document
 import app.painter.core.doc.EditTarget
+import app.painter.core.doc.FilterLayer
 import app.painter.core.doc.GroupNode
 import app.painter.core.doc.LayerMask
 import app.painter.core.doc.Node
 import app.painter.core.doc.ProjectType
 import app.painter.core.doc.RasterLayer
 import app.painter.core.raster.MaskGrid
+import app.painter.core.filter.FilterCodec
 import app.painter.core.raster.MaskTile
 import app.painter.core.raster.Tile
 import app.painter.core.raster.TileGrid
@@ -581,6 +583,7 @@ object ProjectIO {
         name = n.name,
         kind = when (n) {
             is GroupNode -> NodeKind.GROUP
+            is FilterLayer -> NodeKind.FILTER
             is RasterLayer -> NodeKind.RASTER
             is AdjustmentLayer -> NodeKind.ADJUSTMENT
         },
@@ -596,6 +599,7 @@ object ProjectIO {
         reference = n.reference,
         mask = n.mask?.let { MaskDto(it.enabled, it.linked, it.density, it.tiles.defaultValue.toInt() and 0xFF) },
         adjust = (n as? AdjustmentLayer)?.let { AdjustCodec.toJson(it.params) },
+        filter = (n as? FilterLayer)?.let { FilterCodec.toJson(it.params) },
         children = (n as? GroupNode)?.children?.map(::toDto) ?: emptyList(),
     )
 
@@ -609,6 +613,16 @@ object ProjectIO {
                 val grid = TileGrid(doc.width, doc.height)
                 readTiles(grid, File(layersDir, safeName(d.id)))
                 RasterLayer(d.id, d.name, grid).also { it.alphaLock = d.alphaLock }
+            }
+            NodeKind.FILTER -> {
+                val grid = TileGrid(doc.width, doc.height)
+                readTiles(grid, File(layersDir, safeName(d.id)))
+                FilterLayer(
+                    d.id, d.name,
+                    d.filter?.let(FilterCodec::fromJson)
+                        ?: FilterCodec.fromJson(FilterCodec.toJson(app.painter.core.filter.BlurParams())),
+                    grid,
+                ).also { it.alphaLock = d.alphaLock }
             }
             NodeKind.ADJUSTMENT -> AdjustmentLayer(
                 d.id, d.name, d.adjust?.let(AdjustCodec::fromJson) ?: UnknownAdjust(JsonObject(emptyMap())),

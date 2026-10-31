@@ -263,6 +263,7 @@
     <string name="quality">Quality</string>
     <string name="transparent_background">Transparent background</string>
     <string name="filters">Filters</string>
+    <string name="filter_layer">New filter layer…</string>
     <string name="tool_liquify">Liquify</string>
     <string name="tool_text">Text</string>
     <string name="canvas_crop">Crop canvas</string>

@@ -38,6 +38,7 @@ The app is completely free: no subscriptions, ads, watermarks or paid features.
 - Canvas crop, canvas size with anchors, straighten; curvilinear 5-point perspective (M3)
 - Brush import/export (`.pbrush`, `.pbrushes`, MyPaint, GIMP, Krita, Procreate, PNG/JPG) (M3)
 - PSD raster-layer import/export and timelapse MP4 export (M3)
+- Live filter layers and a five-point curvilinear perspective grid (M3)
 - Autosave 2 seconds after a change, PNG/JPG export with quality and transparency options
 - In-app update from GitHub Releases
 

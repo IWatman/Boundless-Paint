@@ -5,6 +5,7 @@ import app.painter.core.adjust.AdjustParams
 import app.painter.core.adjust.PreparedAdjust
 import app.painter.core.doc.AdjustmentLayer
 import app.painter.core.doc.Document
+import app.painter.core.doc.FilterLayer
 import app.painter.core.doc.GroupNode
 import app.painter.core.doc.LayerMask
 import app.painter.core.doc.Node
@@ -138,7 +139,14 @@ object Compositor : NodeRenderer {
      * Adjustment layers act on the accumulator of their parent. With [includePaper] and a visible paper,
      * rendering starts from the opaque paper color.
      */
-    fun flatten(doc: Document, includePaper: Boolean): TileGrid {
+    fun flatten(doc: Document, includePaper: Boolean): TileGrid =
+        flattenNodes(doc, doc.root.children, includePaper)
+
+    /**
+     * Composites only [nodes] (bottom-to-top, from the same document) onto the paper. Used by live filter layers,
+     * whose cache is the filtered result of the siblings below them.
+     */
+    fun flattenNodes(doc: Document, nodes: List<Node>, includePaper: Boolean): TileGrid {
         val acc = TileGrid(doc.width, doc.height)
         if (includePaper && doc.paper.visible) {
             val p = doc.paper.color
@@ -151,7 +159,7 @@ object Compositor : NodeRenderer {
                 }
             }
         }
-        Stack(null, doc.gammaCorrect).render(doc.root.children, acc, false, null)
+        Stack(null, doc.gammaCorrect).render(nodes, acc, false, null)
         return acc
     }
 
@@ -242,6 +250,8 @@ object Compositor : NodeRenderer {
                 baseAlpha = null
                 if (!visible) continue
                 val hasClipped = children.getOrNull(index + 1)?.clipped == true
+                // A root filter layer replaces every sibling below it with its filtered cache.
+                if (node is FilterLayer && node.parent?.id == "root") acc.clear()
                 when (node) {
                     is RasterLayer -> {
                         val px = view(node.pixels)

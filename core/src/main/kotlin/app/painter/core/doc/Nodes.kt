@@ -3,6 +3,7 @@ package app.painter.core.doc
 import app.painter.core.adjust.AdjustParams
 import app.painter.core.blend.BlendMode
 import app.painter.core.color.Rgba
+import app.painter.core.filter.FilterParams
 import app.painter.core.raster.TileGrid
 import java.util.UUID
 
@@ -36,7 +37,7 @@ sealed class Node(
     }
 }
 
-class RasterLayer(
+open class RasterLayer(
     id: String,
     name: String,
     /** Pixel grid; the canvas command replaces it with a resampled grid. */
@@ -46,6 +47,24 @@ class RasterLayer(
 
     override fun deepCopy(newId: String): RasterLayer =
         RasterLayer(newId, name, pixels.copy()).also { copyBaseTo(it); it.alphaLock = alphaLock }
+}
+
+/**
+ * Live filter layer (M3): [pixels] caches the filtered composite of everything below it at the root. The
+ * compositor and the GPU renderer treat it as a replacement of that lower content, while the user keeps the
+ * filter [params] editable. The cache is recomputed by the app after a change, never by the compositor.
+ */
+class FilterLayer(
+    id: String,
+    name: String,
+    var params: FilterParams,
+    pixels: TileGrid,
+) : RasterLayer(id, name, pixels) {
+    override fun deepCopy(newId: String): FilterLayer =
+        FilterLayer(newId, name, params, pixels.copy()).also {
+            copyBaseTo(it)
+            it.alphaLock = alphaLock
+        }
 }
 
 /**

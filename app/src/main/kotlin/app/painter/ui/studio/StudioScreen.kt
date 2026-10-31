@@ -72,6 +72,7 @@ fun StudioScreen(
 ) {
     var localHud by remember { mutableStateOf<HudUi?>(null) }
     var filtersOpen by remember { mutableStateOf(false) }
+    var filterLayerOpen by remember { mutableStateOf(false) }
     var textOpen by remember { mutableStateOf(false) }
     var cropOpen by remember { mutableStateOf(false) }
     var resizeOpen by remember { mutableStateOf(false) }
@@ -84,6 +85,16 @@ fun StudioScreen(
             onApply = { params ->
                 filtersOpen = false
                 actions.applyFilter(params)
+            },
+        )
+    }
+    if (filterLayerOpen) {
+        FilterDialog(
+            ink = state.color,
+            onDismiss = { filterLayerOpen = false },
+            onApply = { params ->
+                filterLayerOpen = false
+                actions.addFilterLayer(params)
             },
         )
     }
@@ -163,6 +174,7 @@ fun StudioScreen(
                 state = state,
                 actions = actions,
                 onFilters = { filtersOpen = true },
+                onFilterLayer = { filterLayerOpen = true },
                 onText = { textOpen = true },
                 onCrop = { cropOpen = true },
                 onResize = { resizeOpen = true },
@@ -689,6 +701,7 @@ private fun StudioTopBar(
     state: StudioUiState,
     actions: StudioActions,
     onFilters: () -> Unit,
+    onFilterLayer: () -> Unit,
     onText: () -> Unit,
     onCrop: () -> Unit,
     onResize: () -> Unit,
@@ -772,6 +785,13 @@ private fun StudioTopBar(
                             onClick = {
                                 toolsMenu = false
                                 onFilters()
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.filter_layer)) },
+                            onClick = {
+                                toolsMenu = false
+                                onFilterLayer()
                             },
                         )
                         DropdownMenuItem(

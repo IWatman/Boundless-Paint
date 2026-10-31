@@ -35,7 +35,9 @@
 - Timelapse: a JPEG frame per change in a project (settings toggle), H.264 MP4 export via MediaCodec with
   15/30/60 s or full duration and 720p/1080p/4K quality.
 - Settings sheet: appearance, colour pipeline, timelapse, stylus and About.
-- Still open in M3: live filter layers (non-destructive filters on the GPU).
+- Live filter layers: a `FilterLayer` caches the filtered composite of every root sibling below it; the compositor
+  and the GPU renderer replace that lower content with the cache, and the app recomputes the cache after each
+  change. Added from Editing Tools → New filter layer…, persisted in the project manifest (`kind: "filter"`).
 
 ## M2: done (2026-10-31)
 - Build: `. .\tools\env.ps1; .\gradlew.bat :core:test :app:testDebugUnitTest :app:assembleDebug`.

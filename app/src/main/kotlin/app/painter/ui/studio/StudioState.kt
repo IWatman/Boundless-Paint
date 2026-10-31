@@ -603,6 +603,8 @@ interface StudioActions {
     fun setGammaCorrect(on: Boolean) {}
     /** Applies a destructive filter to the active layer; a selection clips it (spec/filters.md). */
     fun applyFilter(params: FilterParams) {}
+    /** Adds a live filter layer at the top of the root: it filters everything below it (M3). */
+    fun addFilterLayer(params: FilterParams) {}
     /** Liquify brush diameter in document pixels. */
     fun setLiquifySize(size: Float) {}
     /** Liquify push strength 0..1. */

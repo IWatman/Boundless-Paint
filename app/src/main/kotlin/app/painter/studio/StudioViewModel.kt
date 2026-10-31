@@ -21,12 +21,14 @@ import app.painter.core.blend.Compositor
 import app.painter.core.color.Rgba
 import app.painter.core.doc.Document
 import app.painter.core.doc.AdjustmentLayer
+import app.painter.core.doc.FilterLayer
 import app.painter.core.doc.ColorTag
 import app.painter.core.doc.EditTarget
 import app.painter.core.doc.GroupNode
 import app.painter.core.doc.Node
 import app.painter.core.doc.RasterLayer
 import app.painter.core.doc.effectivelyLocked
+import app.painter.core.doc.newNodeId
 import app.painter.core.fill.BucketFill
 import app.painter.core.fill.FillCommand
 import app.painter.core.fill.Gradient
@@ -113,6 +115,7 @@ import app.painter.core.raster.MaskGrid
 import app.painter.core.stroke.StrokeTarget
 import app.painter.core.geom.Vec2
 import app.painter.core.raster.Tile
+import app.painter.core.raster.TileGrid
 import app.painter.core.raster.TileKey
 import app.painter.core.raster.TilePatch
 import app.painter.core.raster.applyTiles
@@ -310,6 +313,7 @@ class StudioViewModel(
         history.onChanged = {
             lastFill = null
             markDirty()
+            refreshFilterLayers()
             refreshLayers()
             scheduleTimelapse()
         }
@@ -398,6 +402,7 @@ class StudioViewModel(
             )
         }
         adjustSession = null
+        refreshFilterLayers()
         refreshLayers()
     }
 
@@ -959,6 +964,9 @@ class StudioViewModel(
     }
 
     override fun onToolDown(x: Float, y: Float) {
+        if (doc.activeNode is FilterLayer &&
+            (_state.value.tool == ToolUi.BRUSH || _state.value.tool == ToolUi.CLONE || _state.value.tool == ToolUi.LIQUIFY)
+        ) return
         if (_state.value.tool == ToolUi.LIQUIFY) {
             liquifyDown(x, y)
             return
@@ -2351,6 +2359,7 @@ class StudioViewModel(
         finishGradient(apply = true)
         commitPendingOpacity()
         val layer = doc.activeRaster ?: return
+        if (layer is FilterLayer) return
         if (!layer.visible || layer.effectivelyLocked) return
         val id = layer.id
         val copy = layer.pixels.copy()
@@ -2747,6 +2756,47 @@ class StudioViewModel(
         session.move(clampX(x), clampY(y))
         val keys = session.takeDirty()
         if (keys.isNotEmpty()) canvas?.invalidate(doc.activeId, keys)
+    }
+
+    /**
+     * Live filter layer (M3): added above the active root layer and filters the composite of every sibling
+     * below it. Its pixels are a cache recomputed after each change; the node properties (visibility, opacity,
+     * blend) stay editable and undoable, while the cache itself is derived state.
+     */
+    override fun addFilterLayer(params: FilterParams) {
+        finishShape(commit = true)
+        finishTransform(apply = true)
+        finishGradient(apply = true)
+        commitPendingOpacity()
+        val layer = FilterLayer(
+            newNodeId(),
+            "Filter: ${params.kind}",
+            params,
+            TileGrid(doc.width, doc.height),
+        )
+        history.execute(doc, AddLayer(layer))
+        refreshFilterLayers()
+        canvas?.invalidate(null, null)
+    }
+
+    /** Recomputes the cache of every visible root filter layer, bottom-to-top. */
+    private fun refreshFilterLayers() {
+        val filters = doc.root.children.filterIsInstance<FilterLayer>()
+        if (filters.isEmpty()) return
+        for (filter in filters) {
+            if (!filter.visible) continue
+            val index = doc.root.indexOf(filter)
+            if (index <= 0) {
+                filter.pixels.clear()
+                canvas?.invalidate(filter.id, null)
+                continue
+            }
+            val below = doc.root.children.subList(0, index)
+            val grid = Compositor.flattenNodes(doc, below, includePaper = true)
+            Filters.applyToGrid(grid, filter.params, threads = STROKE_THREADS)
+            filter.pixels = grid
+            canvas?.invalidate(filter.id, null)
+        }
     }
 
     override fun setLiquifySize(size: Float) {

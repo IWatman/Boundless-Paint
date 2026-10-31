@@ -78,6 +78,8 @@ internal data class NodeDto(
     val mask: MaskDto? = null,
     /** Adjustment parameters (kind = adjustment), see [app.painter.core.adjust.AdjustCodec]. */
     val adjust: JsonObject? = null,
+    /** Live filter parameters (kind = filter), see [app.painter.core.filter.FilterCodec]. */
+    val filter: JsonObject? = null,
     val children: List<NodeDto> = emptyList(),
 )
 
@@ -95,4 +97,5 @@ internal object NodeKind {
     const val RASTER = "raster"
     const val GROUP = "group"
     const val ADJUSTMENT = "adjustment"
+    const val FILTER = "filter"
 }
