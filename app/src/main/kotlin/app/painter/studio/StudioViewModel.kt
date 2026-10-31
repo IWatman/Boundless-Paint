@@ -117,6 +117,7 @@ import app.painter.core.geom.Vec2
 import app.painter.core.raster.Tile
 import app.painter.core.raster.TileGrid
 import app.painter.core.raster.TileKey
+import app.painter.core.stroke.TilePool
 import app.painter.core.raster.TilePatch
 import app.painter.core.raster.applyTiles
 import app.painter.core.transform.Affine
@@ -218,7 +219,13 @@ class StudioViewModel(
     private var doc: Document = Document.create(1, 1)
     /** Guides, symmetry and grid settings of [doc]; symmetry is view state, so it is never undone. */
     private var guides: GuideState = GuideState()
-    private val history = History()
+    /**
+     * Undo history: 100 steps, but never more than a quarter of the process heap. The old 512 MB default could
+     * exceed a 450 MB Android heap before a watercolor stroke even allocated its buffers.
+     */
+    private val history = History(
+        maxBytes = (Runtime.getRuntime().maxMemory() / 4).coerceIn(64L shl 20, 192L shl 20),
+    )
     private var canvas: CanvasView? = null
     private var stroke: StrokeEngine? = null
     private var dirtySinceSave = false
@@ -520,8 +527,12 @@ class StudioViewModel(
 
     override fun onStrokeMove(points: List<InputPoint>) {
         val engine = stroke ?: return
-        engine.add(points)
-        flushStroke(engine)
+        try {
+            engine.add(points)
+            flushStroke(engine)
+        } catch (e: OutOfMemoryError) {
+            failStroke(engine)
+        }
     }
 
     override fun onStrokeEnd() {
@@ -529,7 +540,12 @@ class StudioViewModel(
         val engine = stroke ?: return
         stroke = null
         val layerId = doc.activeId ?: return
-        val commit = engine.end()
+        val commit = try {
+            engine.end()
+        } catch (e: OutOfMemoryError) {
+            failStroke(engine)
+            return
+        }
         saveInputSettingsAfterStroke()
         if (strokeOnMask) {
             (commit as? StrokeCommit.Mask)?.let { history.push(MaskPatchCommand(it.patch)) }
@@ -543,6 +559,26 @@ class StudioViewModel(
             canvas?.invalidate(patch.layerId, patch.after.keys)
         }
         if (_state.value.mode == BrushModeUi.PAINT && _state.value.tool != ToolUi.CLONE) rememberColor(_state.value.color)
+    }
+
+    /**
+     * A stroke could not allocate its buffers. Free the pooled tiles, roll the stroke back and say so instead of
+     * letting the OutOfMemoryError take the main thread down (which the system reports as an ANR).
+     */
+    private fun failStroke(engine: StrokeEngine) {
+        stroke = null
+        TilePool.shared.clearFree()
+        runCatching { engine.cancel() }
+        val layerId = doc.activeId
+        if (layerId != null) {
+            if (engine.directToLayer) canvas?.invalidate(layerId, null)
+            else canvas?.setStrokePreview(layerId, null, false, 1f)
+        }
+        android.widget.Toast.makeText(
+            getApplication(),
+            "Not enough memory for this stroke; undo some steps or close a filter layer",
+            android.widget.Toast.LENGTH_LONG,
+        ).show()
     }
 
     override fun onStrokeCancel() {
@@ -2792,9 +2828,8 @@ class StudioViewModel(
                 continue
             }
             val below = doc.root.children.subList(0, index)
-            val grid = Compositor.flattenNodes(doc, below, includePaper = true)
-            Filters.applyToGrid(grid, filter.params, threads = STROKE_THREADS)
-            filter.pixels = grid
+            Compositor.flattenInto(doc, below, includePaper = true, dst = filter.pixels)
+            Filters.applyToGrid(filter.pixels, filter.params, threads = STROKE_THREADS)
             canvas?.invalidate(filter.id, null)
         }
     }

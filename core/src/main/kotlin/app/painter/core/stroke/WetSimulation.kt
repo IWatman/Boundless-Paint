@@ -610,10 +610,10 @@ internal class WetSimulation(
         const val MAX_TILES = 64
 
         /** Cap of the ticks one [advance] call may run; the rest of the backlog is dropped. */
-        const val MAX_TICKS_PER_ADVANCE = 8
+        const val MAX_TICKS_PER_ADVANCE = 3
 
-        /** Cap of the drying loop of [dry], ms. */
-        const val DRY_LIMIT_MS = 4000
+        /** Cap of the drying loop of [dry], ms. Four seconds blocked the main thread on pen-up. */
+        const val DRY_LIMIT_MS = 1200
 
         /** Document px per cell. */
         const val CELL_PX = 2

@@ -33,6 +33,7 @@ import app.painter.core.stroke.SpecialParams
 import app.painter.core.stroke.ThreeDKind
 import app.painter.core.stroke.ThreeDParams
 import app.painter.core.stroke.WatercolorParams
+import app.painter.ui.components.DevRow
 import app.painter.ui.components.ParamSlider
 import app.painter.ui.components.formatSliderValue
 import app.painter.ui.components.parseHexColor
@@ -60,6 +61,9 @@ private val SpecialTypeRows = SpecialType.entries.chunked(2)
 
 /** Harmony variants split into rows that fit the editor panel. */
 private val HarmonyVariantRows = HarmonyVariant.entries.chunked(3)
+
+/** Variants with their own rule; the rest fall back to SKETCHY (HarmonyEffect TODO S7a) and are disabled. */
+private val SupportedHarmonyVariants = setOf(HarmonyVariant.SKETCHY, HarmonyVariant.SHADED, HarmonyVariant.WEB)
 
 /**
  * Special tab of the brush editor (spec/tools/m2-brush.md §4.2): one chip row picks the special engine, the sliders and
@@ -123,15 +127,8 @@ private fun WatercolorControls(params: WatercolorParams, onChange: (WatercolorPa
         step = 0.01f,
         onChange = { onChange(params.copy(glaze = it)) },
     )
-    ParamSlider(
-        label = stringResource(R.string.brush_editor_paint_mix),
-        value = params.mixIn,
-        range = 0f..1f,
-        format = { formatSliderValue(it, 100f, 0) },
-        step = 0.01f,
-        unit = "%",
-        onChange = { onChange(params.copy(mixIn = it)) },
-    )
+    // The engine does not pick up the layer colour yet (WetSimulation TODO S8b): disabled, not a lying slider.
+    DevRow(label = stringResource(R.string.brush_editor_paint_mix))
     ParamSlider(
         label = stringResource(R.string.brush_editor_wc_dryout),
         value = params.dryout,
@@ -196,7 +193,13 @@ private fun ParticlesControls(params: ParticlesParams, onChange: (ParticlesParam
 private fun HarmonyControls(params: HarmonyParams, onChange: (HarmonyParams) -> Unit) {
     EditorSection(stringResource(R.string.brush_editor_harmony_variant))
     for (row in HarmonyVariantRows) {
-        ChipRow(row, params.variant, { stringResource(harmonyVariantLabel(it)) }) { variant ->
+        ChipRow(
+            row,
+            params.variant,
+            { stringResource(harmonyVariantLabel(it)) },
+            enabled = { it in SupportedHarmonyVariants },
+            dev = { it !in SupportedHarmonyVariants },
+        ) { variant ->
             onChange(params.copy(variant = variant))
         }
     }
@@ -221,11 +224,8 @@ private fun HarmonyControls(params: HarmonyParams, onChange: (HarmonyParams) -> 
 /** Double brush (S9): a body copy and an offset shadow copy, each with its own colour and size. */
 @Composable
 private fun DoubleControls(params: DoubleParams, onChange: (DoubleParams) -> Unit) {
-    HexColorRow(
-        label = stringResource(R.string.brush_editor_double_body_color),
-        hint = stringResource(R.string.brush_editor_double_brush_color),
-        value = params.bodyColor,
-    ) { onChange(params.copy(bodyColor = it)) }
+    // The body copy still keeps the stroke colour: DoubleEffect does not apply bodyColor yet (TODO S6b).
+    DevRow(label = stringResource(R.string.brush_editor_double_body_color))
     HexColorRow(
         label = stringResource(R.string.brush_editor_double_shadow_color),
         hint = "#000000",
@@ -259,6 +259,8 @@ private fun DoubleControls(params: DoubleParams, onChange: (DoubleParams) -> Uni
     ToggleChipRow(
         labels = listOf(stringResource(R.string.brush_editor_double_texture_on_shadow)),
         checked = listOf(params.textureOnShadow),
+        enabled = false,
+        dev = true,
     ) { onChange(params.copy(textureOnShadow = !params.textureOnShadow)) }
 }
 
@@ -340,7 +342,13 @@ private fun ScreentoneControls(params: ScreentoneParams, onChange: (ScreentonePa
 @Composable
 private fun FillControls(params: FillBrushParams, onChange: (FillBrushParams) -> Unit) {
     EditorSection(stringResource(R.string.brush_editor_fill_content))
-    ChipRow(FillContent.entries, params.content, { stringResource(fillContentLabel(it)) }) { content ->
+    ChipRow(
+        FillContent.entries,
+        params.content,
+        { stringResource(fillContentLabel(it)) },
+        enabled = { it == FillContent.SOLID },
+        dev = { it != FillContent.SOLID },
+    ) { content ->
         onChange(params.copy(content = content))
     }
     ToggleChipRow(

@@ -571,4 +571,5 @@
     <string name="adjust_kind_posterize">Posterize</string>
     <string name="adjust_kind_threshold">Threshold</string>
     <string name="adjust_kind_black_white">Black &amp; white</string>
+    <string name="in_development">In development</string>
 </resources>

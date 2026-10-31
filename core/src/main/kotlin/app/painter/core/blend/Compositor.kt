@@ -148,10 +148,17 @@ object Compositor : NodeRenderer {
      */
     fun flattenNodes(doc: Document, nodes: List<Node>, includePaper: Boolean): TileGrid {
         val acc = TileGrid(doc.width, doc.height)
+        flattenInto(doc, nodes, includePaper, acc)
+        return acc
+    }
+
+    /** Renders [nodes] into an existing [dst] grid, reusing its tiles where possible. */
+    fun flattenInto(doc: Document, nodes: List<Node>, includePaper: Boolean, dst: TileGrid) {
+        dst.clear()
         if (includePaper && doc.paper.visible) {
             val p = doc.paper.color
-            for (ty in 0 until acc.tilesY) for (tx in 0 until acc.tilesX) {
-                val d = acc.getOrCreate(tx, ty)
+            for (ty in 0 until dst.tilesY) for (tx in 0 until dst.tilesX) {
+                val d = dst.getOrCreate(tx, ty)
                 var i = 0
                 while (i < Tile.CHANNELS) {
                     d.write(i, p.r, p.g, p.b, 1f)
@@ -159,8 +166,7 @@ object Compositor : NodeRenderer {
                 }
             }
         }
-        Stack(null, doc.gammaCorrect).render(nodes, acc, false, null)
-        return acc
+        Stack(null, doc.gammaCorrect).render(nodes, dst, false, null)
     }
 
     /**

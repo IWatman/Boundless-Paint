@@ -356,6 +356,8 @@ class StrokeEngine(
     /** Event time of the latest input point and the time the watercolor grid was advanced to, ms; −1 before the first. */
     private var inputTimeMs = -1L
     private var simTimeMs = -1L
+    /** Last time the watercolor pixels were painted into the preview; the simulation itself keeps ticking. */
+    private var lastWatercolorPaintMs = -1L
     private var stylus = false
 
     /** Starts the stroke at [p]. */
@@ -559,6 +561,7 @@ class StrokeEngine(
         particleSystem?.reset()
         watercolor?.reset()
         simTimeMs = -1L
+        lastWatercolorPaintMs = -1L
         generator = newGenerator()
         walker = newWalker(generator, replay = true)
         for (sub in recorded) {
@@ -611,7 +614,14 @@ class StrokeEngine(
             wc.deposit(out)
             if (simTimeMs >= 0 && inputTimeMs > simTimeMs) wc.advance(inputTimeMs - simTimeMs)
             if (inputTimeMs >= 0) simTimeMs = inputTimeMs
-            wc.write(access)
+            // A pen reports up to 120-240 points/s; copying a whole tile of pigment for every point is the
+            // expensive part. The simulation still advances on every event, the preview repaints at ~30 Hz.
+            val paintDue = inputTimeMs < 0 || lastWatercolorPaintMs < 0 ||
+                inputTimeMs - lastWatercolorPaintMs >= WATERCOLOR_PAINT_MS
+            if (paintDue) {
+                wc.write(access)
+                lastWatercolorPaintMs = inputTimeMs
+            }
             batch.clear()
             return
         }
@@ -1016,6 +1026,9 @@ class StrokeEngine(
         const val THREE_D_SPACING = 0.05f
 
         /** Radius of the wet edge box blur (§1.7); a buffer tile is read with a halo of this many pixels. */
+        /** Minimum interval between watercolor preview repaints; the simulation still advances on every event. */
+        const val WATERCOLOR_PAINT_MS = 32L
+
         const val WET_HALO = 4
 
         /** Side of the haloed alpha plane of one buffer tile: the tile plus two [WET_HALO] rims. */

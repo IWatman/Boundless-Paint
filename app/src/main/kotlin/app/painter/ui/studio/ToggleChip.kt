@@ -1,5 +1,6 @@
 package app.painter.ui.studio
 
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
@@ -10,9 +11,11 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import app.painter.ui.components.DevBadge
 import app.painter.ui.theme.AccentFill
 import app.painter.ui.theme.PainterTheme
 
@@ -24,12 +27,23 @@ private val ToggleChipHeight = 32.dp
  * a toggle reads differently from the plain action buttons next to it. [enabled] = false greys it out.
  */
 @Composable
-fun ToggleChip(label: String, checked: Boolean, enabled: Boolean = true, onToggle: () -> Unit) {
+fun ToggleChip(
+    label: String,
+    checked: Boolean,
+    enabled: Boolean = true,
+    dev: Boolean = false,
+    onToggle: () -> Unit,
+) {
     FilterChip(
         selected = checked,
         onClick = onToggle,
         enabled = enabled,
-        label = { Text(label) },
+        label = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(label)
+                if (dev) DevBadge()
+            }
+        },
         leadingIcon = if (checked) {
             {
                 Icon(

@@ -43,6 +43,20 @@
   header), and a timelapse export whose MP4 is H.264 720p (720×404), 30 fps, 29.97 s.
 - Tests: **566 JVM tests, all green** (493 core, 73 app).
 
+### Stability and control markers (2026-10-31, 0.3.7)
+- Fixed the ANR found on `painter_tab`: the stylus-up stack ended in `OutOfMemoryError` in `TilePool.obtain` from
+  `StrokeEngine.compositeBuffer`. The undo history budget was 512 MB on a 450 MB heap, the float-tile pool kept
+  96 MB, and a live filter layer recomputed its full-grid cache with before/after snapshots after every change.
+  History is now capped at a quarter of the process heap, the pool at 32 tiles, filter layers composite in place
+  with `Filters.applyToGrid` (no history copies), and an allocation failure rolls the stroke back with a message
+  instead of blocking the main thread. Watercolour repaints its preview at ~30 Hz, catch-up ticks are capped at 3,
+  and the pen-up dry loop at 1.2 s.
+- Brush editor controls with no engine behind them are disabled and marked with a small construction badge:
+  watercolour mix-in, double-brush body colour and texture-on-shadow, unsupported harmony variants (only Sketchy,
+  Shaded and Web have their own rules), and fill pattern/procedural (solid only).
+- Re-checked after the fix: 29 fast strokes on the emulator, Dalvik heap stabilises around 227 MB of the 450 MB
+  cap, no new ANR or `OutOfMemoryError`.
+
 ## M2: done (2026-10-31)
 - Build: `. .\tools\env.ps1; .\gradlew.bat :core:test :app:testDebugUnitTest :app:assembleDebug`.
 - Tests: **524 JVM tests, all green** (451 in `:core`, 73 in `:app`); GPU↔CPU parity `BlendParityTest` (33 modes, 13 adjustments, in sRGB and in linear light) green on `painter_tab` (Android 14, GLES 3.1, RGBA16F).

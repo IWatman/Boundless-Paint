@@ -28,8 +28,17 @@ class TilePool(val limit: Int = DEFAULT_LIMIT) {
         synchronized(free) { if (free.size < limit) free.addLast(t) }
     }
 
+    /** Drops the retained free tiles, e.g. just before asking the heap for a large stroke buffer. */
+    fun clearFree() {
+        synchronized(free) { free.clear() }
+    }
+
     companion object {
-        const val DEFAULT_LIMIT = 96
+        /**
+         * Free float tiles kept for reuse. One tile is 1 MB; 96 of them (the old value) plus the 512 MB history
+         * budget could exceed the whole Android heap. 32 keeps reuse useful while leaving room for a stroke.
+         */
+        const val DEFAULT_LIMIT = 32
 
         /** Process-wide pool used by [StrokeEngine]. */
         val shared = TilePool()

@@ -570,4 +570,5 @@
     <string name="adjust_kind_posterize">Постеризация</string>
     <string name="adjust_kind_threshold">Порог</string>
     <string name="adjust_kind_black_white">Чёрно-белый</string>
+    <string name="in_development">В разработке</string>
 </resources>

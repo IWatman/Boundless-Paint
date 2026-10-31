@@ -39,6 +39,7 @@ The app is completely free: no subscriptions, ads, watermarks or paid features.
 - Brush import/export (`.pbrush`, `.pbrushes`, MyPaint, GIMP, Krita, Procreate, PNG/JPG) (M3)
 - PSD raster-layer import/export and timelapse MP4 export (M3)
 - Live filter layers and a five-point curvilinear perspective grid (M3)
+- Unfinished brush-editor controls are disabled and marked with a small construction icon (M3.7)
 - Autosave 2 seconds after a change, PNG/JPG export with quality and transparency options
 - In-app update from GitHub Releases
 

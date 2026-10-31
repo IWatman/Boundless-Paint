@@ -30,14 +30,27 @@ internal fun EditorSection(text: String) {
  * is narrower than a long enum, so the caller splits it into rows with [List.chunked].
  */
 @Composable
-internal fun <T> ChipRow(options: List<T>, selected: T?, label: @Composable (T) -> String, onPick: (T) -> Unit) {
+internal fun <T> ChipRow(
+    options: List<T>,
+    selected: T?,
+    label: @Composable (T) -> String,
+    enabled: (T) -> Boolean = { true },
+    dev: (T) -> Boolean = { false },
+    onPick: (T) -> Unit,
+) {
     Row(
         Modifier.fillMaxWidth().padding(vertical = 2.dp),
         horizontalArrangement = Arrangement.spacedBy(6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         for (option in options) {
-            ToggleChip(label = label(option), checked = option == selected, onToggle = { onPick(option) })
+            ToggleChip(
+                label = label(option),
+                checked = option == selected,
+                enabled = enabled(option),
+                dev = dev(option),
+                onToggle = { onPick(option) },
+            )
         }
     }
 }
@@ -51,6 +64,7 @@ internal fun ToggleChipRow(
     labels: List<String>,
     checked: List<Boolean>,
     enabled: Boolean = true,
+    dev: Boolean = false,
     onToggle: (Int) -> Unit,
 ) {
     Row(
@@ -63,6 +77,7 @@ internal fun ToggleChipRow(
                 label = label,
                 checked = checked.getOrElse(index) { false },
                 enabled = enabled,
+                dev = dev,
                 onToggle = { onToggle(index) },
             )
         }

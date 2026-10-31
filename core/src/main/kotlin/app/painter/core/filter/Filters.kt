@@ -67,21 +67,49 @@ object Filters {
         if (keys.isEmpty()) return TilePatch(layerId, emptyMap(), emptyMap())
 
         val before = snapshotTiles(grid, keys)
-        val geometry = Geometry(content)
-        val jobs = keys.map { key ->
-            Callable { applyTile(grid, key, params, out, selection, alphaLock, geometry) }
-        }
-        runParallel(jobs, threads)
+        process(grid, params, out, keys, selection, alphaLock, Geometry(content), threads)
         val after = snapshotTiles(grid, keys)
         return TilePatch(layerId, before, after)
     }
 
     /**
      * Applies [params] to [grid] in place without building a history patch; used by live filter layers, whose
-     * cache is derived state and is not undoable by itself.
+     * cache is derived state and is not undoable by itself. This avoids the before/after copies that would double
+     * the heap while a filter layer is recomputed after every stroke.
      */
     fun applyToGrid(grid: TileGrid, params: FilterParams, threads: Int = StrokeContext.defaultThreads()) {
-        apply("filter-layer", grid, params, threads = threads)
+        val content = if (params.coversCanvas) {
+            IntRect(0, 0, grid.width, grid.height)
+        } else {
+            grid.bounds() ?: return
+        }
+        val reach = params.reach.coerceAtLeast(0)
+        val padded = IntRect(
+            (content.x0 - reach).coerceAtLeast(0),
+            (content.y0 - reach).coerceAtLeast(0),
+            (content.x1 + reach).coerceAtMost(grid.width),
+            (content.y1 + reach).coerceAtMost(grid.height),
+        )
+        val keys = padded.tileKeys(grid.width, grid.height)
+        if (keys.isEmpty()) return
+        process(grid, params, padded, keys, null, false, Geometry(content), threads)
+    }
+
+    /** Runs the tile jobs of one filter pass. */
+    private fun process(
+        grid: TileGrid,
+        params: FilterParams,
+        out: IntRect,
+        keys: List<TileKey>,
+        selection: MaskGrid?,
+        alphaLock: Boolean,
+        geometry: Geometry,
+        threads: Int,
+    ) {
+        val jobs = keys.map { key ->
+            Callable { applyTile(grid, key, params, out, selection, alphaLock, geometry) }
+        }
+        runParallel(jobs, threads)
     }
 
     /** Centre and radius of the painted area, for the radial filters. */
