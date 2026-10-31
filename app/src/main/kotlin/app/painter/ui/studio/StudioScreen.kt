@@ -158,6 +158,7 @@ fun StudioScreen(
     ) {
         Box(Modifier.fillMaxSize()) { canvas() }
         SelectionOverlay(state = state, modifier = Modifier.fillMaxSize())
+        ManuscriptOverlay(state = state, modifier = Modifier.fillMaxSize())
         TransformOverlay(state = state, modifier = Modifier.fillMaxSize())
         GradientOverlay(state = state, modifier = Modifier.fillMaxSize())
         CloneOverlay(state = state, modifier = Modifier.fillMaxSize())
@@ -960,6 +961,11 @@ private fun StudioTopBar(
                         DropdownMenuItem(
                             text = { Text(stringResource(R.string.timelapse_title)) },
                             onClick = { menuOpen = false; onTimelapse() },
+                        )
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.manuscript_guides)) },
+                            trailingIcon = { if (state.manuscriptGuides) Icon(Icons.Outlined.Check, null) },
+                            onClick = { menuOpen = false; actions.setManuscriptGuides(!state.manuscriptGuides) },
                         )
                         DropdownMenuItem(
                             text = { Text(stringResource(R.string.light_background)) },

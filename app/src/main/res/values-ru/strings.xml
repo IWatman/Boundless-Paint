@@ -583,4 +583,5 @@
     <string name="dots">Точки</string>
     <string name="lines">Линии</string>
     <string name="cross">Крест</string>
+    <string name="manuscript_guides">Границы рукописи</string>
 </resources>

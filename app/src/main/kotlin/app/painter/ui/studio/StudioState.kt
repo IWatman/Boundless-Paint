@@ -190,6 +190,8 @@ data class StudioUiState(
     val canvasHeight: Int = 1,
     /** The full-screen settings sheet is open. */
     val settingsOpen: Boolean = false,
+    /** Manuscript trim/bleed/safe guides are drawn over the canvas. */
+    val manuscriptGuides: Boolean = false,
     /** Timelapse recording is on for the open project. */
     val timelapseEnabled: Boolean = false,
     /** Recorded frames of the open project. */
@@ -652,6 +654,8 @@ interface StudioActions {
     fun openSettings() {}
     /** Closes the settings sheet. */
     fun closeSettings() {}
+    /** Shows or hides the manuscript trim/bleed/safe guides. */
+    fun setManuscriptGuides(on: Boolean) {}
     /** Turns timelapse recording on/off (kept for the next session). */
     fun setTimelapseEnabled(enabled: Boolean) {}
     /** Encodes the recorded frames into an MP4; null when there is nothing to export. */

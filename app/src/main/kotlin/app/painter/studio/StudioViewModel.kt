@@ -2989,6 +2989,8 @@ class StudioViewModel(
 
     // ---- timelapse (M3) ----
 
+    override fun setManuscriptGuides(on: Boolean) = _state.update { it.copy(manuscriptGuides = on) }
+
     override fun setTimelapseEnabled(enabled: Boolean) {
         prefs?.timelapseEnabled = enabled
         _state.update { it.copy(timelapseEnabled = enabled) }

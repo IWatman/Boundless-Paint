@@ -584,4 +584,5 @@
     <string name="dots">Dots</string>
     <string name="lines">Lines</string>
     <string name="cross">Cross</string>
+    <string name="manuscript_guides">Manuscript guides</string>
 </resources>

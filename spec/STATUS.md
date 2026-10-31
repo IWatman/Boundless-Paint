@@ -84,8 +84,9 @@
   or cleared in one undo step (`LassoFill` + the direct tools).
 - **Screentone** filter: dot/line/cross patterns on a configurable cell grid, angle and ink colour; usable on an
   empty layer as a tone layer or over existing content.
-- Still planned in M4: vector layers, radial/array rulers, animation/onion skin, manuscript, colour mode/CMYK,
-  Drive sync.
+- **Manuscript guides**: bleed (3%), trim (5%) and safe-area (10%) overlays, toggled from Options. They follow
+  the canvas transform like the other overlays.
+- Still planned in M4: vector layers, radial/array rulers, animation/onion skin, colour mode/CMYK, Drive sync.
 
 ## M2: done (2026-10-31)
 - Build: `. .\tools\env.ps1; .\gradlew.bat :core:test :app:testDebugUnitTest :app:assembleDebug`.

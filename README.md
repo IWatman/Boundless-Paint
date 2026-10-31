@@ -41,7 +41,7 @@ The app is completely free: no subscriptions, ads, watermarks or paid features.
 - Live filter layers and a five-point curvilinear perspective grid (M3)
 - Rounded rectangle, arrow and speech-balloon shape tools (M4)
 - Fill/erase selection and fill outside selection, direct lasso fill/erase (M4)
-- Screentone dot/line/cross generator (M4)
+- Screentone dot/line/cross generator and manuscript trim/bleed/safe guides (M4)
 - Unfinished brush-editor controls are disabled and marked with a small construction icon (M3.7)
 - Autosave 2 seconds after a change, PNG/JPG export with quality and transparency options
 - In-app update from GitHub Releases
