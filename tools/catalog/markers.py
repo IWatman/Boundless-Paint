@@ -109,8 +109,26 @@ ALCOHOL = preset(
     resources={"head": "asset:heads/soft_disk.png"},
 )
 
+FADE = preset(
+    "markers.fade",
+    "Marker, fading",
+    "Маркер, выцветающий",
+    ["маркер", "marker", "выцветание", "fade", "прозрачность", "opacity", "лёгкий", "light"],
+    "marker",
+    params={
+        "size": 24.0,
+        "opacity": 0.8,
+        "flow": 0.85,
+        "spacing": 0.03,
+        "hardness": 0.6,
+        "pressureToSize": curve([(0.0, 0.0), (1.0, 1.0)], 0.7),
+        # A light touch lays a fainter dab instead of a thinner one (per-dab opacity, not flow).
+        "dynamics": [link("PRESSURE", "OPACITY", [(0.0, 0.35), (1.0, 1.0)])],
+    },
+)
+
 CATEGORY = {
     "id": "markers",
     "name": {"en": "Markers", "ru": "Маркеры"},
-    "brushes": [CHISEL, ROUND, HIGHLIGHTER, FELT_TIP, ALCOHOL],
+    "brushes": [CHISEL, ROUND, HIGHLIGHTER, FELT_TIP, ALCOHOL, FADE],
 }

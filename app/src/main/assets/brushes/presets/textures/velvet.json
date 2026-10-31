@@ -1,0 +1,68 @@
+{
+  "category": "textures",
+  "id": "textures.velvet",
+  "name": {
+    "en": "Velvet",
+    "ru": "Вельвет"
+  },
+  "params": {
+    "flow": 0.85,
+    "hardness": 0.35,
+    "head": {
+      "source": "bitmap"
+    },
+    "opacity": 0.95,
+    "pressureToFlow": {
+      "min": 0.0,
+      "points": [
+        [
+          0.0,
+          0.35
+        ],
+        [
+          1.0,
+          1.0
+        ]
+      ]
+    },
+    "pressureToSize": {
+      "min": 0.4,
+      "points": [
+        [
+          0.0,
+          0.4
+        ],
+        [
+          1.0,
+          1.0
+        ]
+      ]
+    },
+    "size": 70.0,
+    "sizeMax": 360.0,
+    "sizeMin": 10.0,
+    "spacing": 0.05,
+    "texture": {
+      "angle": 90.0,
+      "depth": 0.8,
+      "lowerLimit": 0.15,
+      "mode": "moving",
+      "scale": 1.4
+    }
+  },
+  "resources": {
+    "head": "asset:heads/soft_disk.png",
+    "texture": "asset:textures/velvet.png"
+  },
+  "schema": 1,
+  "tags": [
+    "вельвет",
+    "velvet",
+    "ткань",
+    "cloth",
+    "мягкая",
+    "soft",
+    "фактура",
+    "texture"
+  ]
+}

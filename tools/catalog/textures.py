@@ -101,8 +101,52 @@ GRUNGE = preset(
     resources={"texture": "asset:textures/grunge.png"},
 )
 
+VELVET = preset(
+    "textures.velvet",
+    "Velvet",
+    "Вельвет",
+    ["вельвет", "velvet", "ткань", "cloth", "мягкая", "soft", "фактура", "texture"],
+    "ink",
+    params={
+        "size": 70.0,
+        "sizeMin": 10.0,
+        "sizeMax": 360.0,
+        "opacity": 0.95,
+        "flow": 0.85,
+        "spacing": 0.05,
+        "hardness": 0.35,
+        "pressureToSize": curve([(0.0, 0.4), (1.0, 1.0)], 0.4),
+        "head": {"source": "bitmap"},
+        # The pile slides under the stroke instead of sitting on the canvas.
+        "texture": {"mode": "moving", "depth": 0.8, "lowerLimit": 0.15, "scale": 1.4, "angle": 90.0},
+    },
+    resources={"head": "asset:heads/soft_disk.png", "texture": "asset:textures/velvet.png"},
+)
+
+MESH = preset(
+    "textures.mesh",
+    "Mesh, turning",
+    "Сетка, поворотная",
+    ["сетка", "mesh", "изометрия", "isometric", "текстура", "texture", "поворот", "rotation"],
+    "ink",
+    params={
+        "size": 50.0,
+        "sizeMin": 8.0,
+        "sizeMax": 260.0,
+        "opacity": 0.9,
+        "flow": 0.8,
+        "spacing": 0.08,
+        "hardness": 0.9,
+        "pressureToSize": curve([(0.0, 0.5), (1.0, 1.0)], 0.5),
+        "head": {"source": "round"},
+        # The grid turns with the direction of the stroke, so curved hatching keeps the mesh aligned.
+        "texture": {"mode": "rotate-with-stroke", "depth": 0.9, "lowerLimit": 0.02, "scale": 0.5},
+    },
+    resources={"texture": "asset:textures/grid_iso.png"},
+)
+
 CATEGORY = {
     "id": "textures",
     "name": {"en": "Textures", "ru": "Фактуры"},
-    "brushes": [DRY_BRUSH, HAIR, BARK, GRUNGE],
+    "brushes": [DRY_BRUSH, HAIR, BARK, GRUNGE, VELVET, MESH],
 }

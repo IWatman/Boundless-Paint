@@ -1,0 +1,75 @@
+{
+  "category": "markers",
+  "id": "markers.fade",
+  "name": {
+    "en": "Marker, fading",
+    "ru": "Маркер, выцветающий"
+  },
+  "params": {
+    "dynamics": [
+      {
+        "curve": {
+          "min": 0.0,
+          "points": [
+            [
+              0.0,
+              0.35
+            ],
+            [
+              1.0,
+              1.0
+            ]
+          ]
+        },
+        "source": "PRESSURE",
+        "target": "OPACITY"
+      }
+    ],
+    "flow": 0.85,
+    "hardness": 0.6,
+    "head": {
+      "angle": 45.0,
+      "aspect": -0.4,
+      "rotationFollow": 0.8,
+      "rotationMode": "tangent",
+      "source": "bitmap"
+    },
+    "jitter": {
+      "size": 0.02
+    },
+    "opacity": 0.8,
+    "pressureToSize": {
+      "min": 0.7,
+      "points": [
+        [
+          0.0,
+          0.0
+        ],
+        [
+          1.0,
+          1.0
+        ]
+      ]
+    },
+    "size": 24.0,
+    "sizeMax": 120.0,
+    "sizeMin": 2.0,
+    "spacing": 0.03,
+    "taperEnd": 0.0,
+    "taperStart": 0.0
+  },
+  "resources": {
+    "head": "asset:heads/rounded_square.png"
+  },
+  "schema": 1,
+  "tags": [
+    "маркер",
+    "marker",
+    "выцветание",
+    "fade",
+    "прозрачность",
+    "opacity",
+    "лёгкий",
+    "light"
+  ]
+}

@@ -162,8 +162,31 @@ WATERCOLOR_ROUND = preset(
     },
 )
 
+GOUACHE_FADE = preset(
+    "paints.gouache_fade",
+    "Gouache, drying out",
+    "Гуашь, высыхающая",
+    ["гуашь", "gouache", "высыхание", "dry", "затухание", "fade", "длинный штрих", "long stroke"],
+    "marker",
+    params={
+        "size": 26.0,
+        "sizeMin": 3.0,
+        "sizeMax": 260.0,
+        "opacity": 1.0,
+        "flow": 0.9,
+        "spacing": 0.035,
+        "hardness": 0.7,
+        "pressureToSize": curve([(0.0, 0.0), (0.5, 0.6), (1.0, 1.0)], 0.3),
+        "head": {"source": "bitmap", "aspect": 0.0, "rotationFollow": 0.4, "depth": 0.25},
+        "paint": {"mixIn": 0.25, "pull": 0.4},
+        # The paint runs out along the stroke: flow falls to a third over the first 300 px.
+        "dynamics": [link("PROGRESS", "FLOW", [(0.0, 1.0), (1.0, 0.3)])],
+    },
+    resources={"head": "asset:heads/bristle_round.png"},
+)
+
 CATEGORY = {
     "id": "paints",
     "name": {"en": "Paints", "ru": "Краски"},
-    "brushes": [OIL_ROUND, OIL_FLAT, GOUACHE, ACRYLIC_DRY, INK_WASH, WATERCOLOR_ROUND],
+    "brushes": [OIL_ROUND, OIL_FLAT, GOUACHE, ACRYLIC_DRY, INK_WASH, WATERCOLOR_ROUND, GOUACHE_FADE],
 }

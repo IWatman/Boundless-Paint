@@ -16,7 +16,7 @@ from pathlib import Path
 
 from PIL import Image
 
-from .base import curve, preset
+from .base import curve, link, preset
 
 #: The generated head PNGs, `app/src/main/assets/brushes/heads`; presets refer to them as `asset:heads/…`.
 HEADS = Path(__file__).resolve().parents[2] / "app" / "src" / "main" / "assets" / "brushes" / "heads"
@@ -95,8 +95,37 @@ STAMPS: list[tuple[str, str, str, list[str]]] = [
     ("diamond", "Diamond stamp", "Штамп-ромб", ["ромб", "diamond", "штамп", "stamp", "фигура", "shape", "грань"]),
 ]
 
+AUTUMN_LEAF = preset(
+    "stamps.leaf_autumn",
+    "Autumn leaf",
+    "Осенний лист",
+    ["лист", "leaf", "осень", "autumn", "штамп", "stamp", "клён", "maple"],
+    "ink",
+    params={
+        "size": 64.0,
+        "sizeMin": 8.0,
+        "sizeMax": 320.0,
+        "spacing": 1.3,
+        "hardness": 1.0,
+        "pressureToSize": curve([(0.0, 0.0), (1.0, 1.0)], 0.6),
+        "pressureToFlow": curve([(0.0, 0.6), (1.0, 1.0)]),
+        "head": {
+            "source": "bitmap",
+            "color": True,
+            "baseColor": base_colour("leaf"),
+            "rotationMode": "fixed",
+            "angle": 0.0,
+        },
+        "jitter": {"size": 0.2, "angle": 1.0, "scatter": 0.06, "hue": 0.08},
+        # A light touch keeps the leaf's own colour; a hard press lets the hue drift, like a pile of dry leaves.
+        "dynamics": [link("PRESSURE", "COLOR_JITTER", [(0.0, 0.2), (1.0, 1.0)])],
+        "special": {"type": "color-stamp", "colorize": 1.0},
+    },
+    resources={"head": "asset:heads/stamp_leaf.png"},
+)
+
 CATEGORY = {
     "id": "stamps",
     "name": {"en": "Stamps", "ru": "Штампы"},
-    "brushes": [stamp(i, *entry) for i, entry in enumerate(STAMPS)],
+    "brushes": [stamp(i, *entry) for i, entry in enumerate(STAMPS)] + [AUTUMN_LEAF],
 }

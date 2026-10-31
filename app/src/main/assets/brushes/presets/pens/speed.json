@@ -1,0 +1,78 @@
+{
+  "category": "pens",
+  "id": "pens.speed",
+  "name": {
+    "en": "Speed pen",
+    "ru": "Скоростная ручка"
+  },
+  "params": {
+    "dynamics": [
+      {
+        "curve": {
+          "min": 0.0,
+          "points": [
+            [
+              0.0,
+              1.0
+            ],
+            [
+              1.0,
+              0.35
+            ]
+          ]
+        },
+        "source": "VELOCITY",
+        "target": "SIZE"
+      }
+    ],
+    "flow": 0.9,
+    "hardness": 0.9,
+    "head": {
+      "source": "round"
+    },
+    "opacity": 0.95,
+    "pressureToFlow": {
+      "min": 0.0,
+      "points": [
+        [
+          0.0,
+          0.5
+        ],
+        [
+          1.0,
+          1.0
+        ]
+      ]
+    },
+    "pressureToSize": {
+      "min": 0.55,
+      "points": [
+        [
+          0.0,
+          0.5
+        ],
+        [
+          1.0,
+          1.0
+        ]
+      ]
+    },
+    "size": 4.0,
+    "sizeMax": 20.0,
+    "sizeMin": 1.0,
+    "spacing": 0.03,
+    "taperEnd": 6.0,
+    "taperStart": 3.0
+  },
+  "resources": {},
+  "schema": 1,
+  "tags": [
+    "скорость",
+    "speed",
+    "velocity",
+    "ручка",
+    "pen",
+    "динамика",
+    "dynamic"
+  ]
+}

@@ -1,5 +1,13 @@
 # Status
 
+## M2: done (2026-10-31)
+- Build: `. .\tools\env.ps1; .\gradlew.bat :core:test :app:testDebugUnitTest :app:assembleDebug`.
+- Tests: **524 JVM tests, all green** (451 in `:core`, 73 in `:app`); GPU↔CPU parity `BlendParityTest` (33 modes, 13 adjustments, in sRGB and in linear light) green on `painter_tab` (Android 14, GLES 3.1, RGBA16F).
+- Brush benchmark (`StrokeBench`, 16-core desktop JVM): A 0.23–0.27 ms/frame, B 0.87–1.69, C 1.08–2.23, D (smudge) 0.97–1.10, E (watercolor) ~8.2 mean / ~68 max. The M2 target (A–C ≤ 8 ms/frame at 2000 px/s) is met.
+- Catalog: **91 presets in 17 categories**, `gen_assets.py --check` OK. Coverage of every engine feature: all ten specials (filter, harmony, fill, screentone, double, particles, color stamp, 3D, watercolor), all four texture modes (canvas-fixed, warp-along-stroke, rotate-with-stroke, moving), taper shapes, dynamics (pressure/velocity/tilt, size/flow/scatter/tex-depth/opacity/angle/color-jitter/progress), mixing (mix-in, dilution, pull, blur), stroke effects (glaze, wet edges, adhesion, brush blend mode), buildup, double, color stamps, screentone, harmony variants, particles, 3D.
+- Emulator checks: every M2 UI flow was exercised on `painter_tab` (brush browser/editor, stylus panel and calibration wizard, layers/masks/adjustments, selection/transform/fill/gradient, guides/symmetry/perspective/shapes, export, updates, incremental autosave, zoomed-in and zoomed-out rendering).
+- Open: the stylus rows of [qa/TABLET-CHECKLIST.md](qa/TABLET-CHECKLIST.md) still need the real XP-Pen; they are marked in the file.
+
 ## M0–M1: done (2026-10-26)
 - Build: `. .\tools\env.ps1; .\gradlew.bat :core:test :app:testDebugUnitTest :app:assembleDebug`.
 - Tests: 88 JVM tests, all green:

@@ -1,0 +1,84 @@
+{
+  "category": "paints",
+  "id": "paints.gouache_fade",
+  "name": {
+    "en": "Gouache, drying out",
+    "ru": "Гуашь, высыхающая"
+  },
+  "params": {
+    "dynamics": [
+      {
+        "curve": {
+          "min": 0.0,
+          "points": [
+            [
+              0.0,
+              1.0
+            ],
+            [
+              1.0,
+              0.3
+            ]
+          ]
+        },
+        "source": "PROGRESS",
+        "target": "FLOW"
+      }
+    ],
+    "flow": 0.9,
+    "hardness": 0.7,
+    "head": {
+      "angle": 45.0,
+      "aspect": 0.0,
+      "depth": 0.25,
+      "rotationFollow": 0.4,
+      "rotationMode": "tangent",
+      "source": "bitmap"
+    },
+    "jitter": {
+      "size": 0.02
+    },
+    "opacity": 1.0,
+    "paint": {
+      "mixIn": 0.25,
+      "pull": 0.4
+    },
+    "pressureToSize": {
+      "min": 0.3,
+      "points": [
+        [
+          0.0,
+          0.0
+        ],
+        [
+          0.5,
+          0.6
+        ],
+        [
+          1.0,
+          1.0
+        ]
+      ]
+    },
+    "size": 26.0,
+    "sizeMax": 260.0,
+    "sizeMin": 3.0,
+    "spacing": 0.035,
+    "taperEnd": 0.0,
+    "taperStart": 0.0
+  },
+  "resources": {
+    "head": "asset:heads/bristle_round.png"
+  },
+  "schema": 1,
+  "tags": [
+    "гуашь",
+    "gouache",
+    "высыхание",
+    "dry",
+    "затухание",
+    "fade",
+    "длинный штрих",
+    "long stroke"
+  ]
+}

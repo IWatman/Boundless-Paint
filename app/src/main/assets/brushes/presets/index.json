@@ -47,7 +47,8 @@
         "paints.gouache",
         "paints.acrylic_dry",
         "paints.ink_wash",
-        "paints.watercolor"
+        "paints.watercolor",
+        "paints.gouache_fade"
       ],
       "id": "paints",
       "name": {
@@ -108,7 +109,8 @@
         "stamps.grass",
         "stamps.rose",
         "stamps.berry",
-        "stamps.diamond"
+        "stamps.diamond",
+        "stamps.leaf_autumn"
       ],
       "id": "stamps",
       "name": {
@@ -177,7 +179,9 @@
         "textures.dry_brush",
         "textures.hair",
         "textures.bark",
-        "textures.grunge"
+        "textures.grunge",
+        "textures.velvet",
+        "textures.mesh"
       ],
       "id": "textures",
       "name": {
@@ -204,7 +208,8 @@
         "pens.brush_pen",
         "pens.technical",
         "pens.calligraphy",
-        "pens.calligraphy_tilt"
+        "pens.calligraphy_tilt",
+        "pens.speed"
       ],
       "id": "pens",
       "name": {
@@ -218,7 +223,8 @@
         "markers.round",
         "markers.highlighter",
         "markers.felt_tip",
-        "markers.alcohol"
+        "markers.alcohol",
+        "markers.fade"
       ],
       "id": "markers",
       "name": {

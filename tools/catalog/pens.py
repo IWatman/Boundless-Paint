@@ -5,7 +5,7 @@ curve, the tapers and the dab shape. S1 only: no texture, no paint mixing, no sp
 """
 from __future__ import annotations
 
-from .base import curve, preset
+from .base import curve, link, preset
 
 FINELINER = preset(
     "pens.fineliner",
@@ -138,8 +138,31 @@ CALLIGRAPHY_TILT = preset(
     resources={"head": "asset:heads/rounded_square.png"},
 )
 
+SPEED = preset(
+    "pens.speed",
+    "Speed pen",
+    "Скоростная ручка",
+    ["скорость", "speed", "velocity", "ручка", "pen", "динамика", "dynamic"],
+    "ink",
+    params={
+        "size": 4.0,
+        "sizeMin": 1.0,
+        "sizeMax": 20.0,
+        "opacity": 0.95,
+        "flow": 0.9,
+        "spacing": 0.03,
+        "hardness": 0.9,
+        "pressureToSize": curve([(0.0, 0.5), (1.0, 1.0)], 0.55),
+        "pressureToFlow": curve([(0.0, 0.5), (1.0, 1.0)]),
+        "taperStart": 3.0,
+        "taperEnd": 6.0,
+        # A quick flick thins the line: the speed of the pen drives the width, like a felt tip dragged fast.
+        "dynamics": [link("VELOCITY", "SIZE", [(0.0, 1.0), (1.0, 0.35)])],
+    },
+)
+
 CATEGORY = {
     "id": "pens",
     "name": {"en": "Pens", "ru": "Ручки"},
-    "brushes": [FINELINER, BALLPOINT, BRUSH_PEN, TECHNICAL, CALLIGRAPHY, CALLIGRAPHY_TILT],
+    "brushes": [FINELINER, BALLPOINT, BRUSH_PEN, TECHNICAL, CALLIGRAPHY, CALLIGRAPHY_TILT, SPEED],
 }

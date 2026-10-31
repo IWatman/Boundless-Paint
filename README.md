@@ -14,13 +14,15 @@ The app is completely free: no subscriptions, ads, watermarks or paid features.
   <img src="docs/screenshots/update.png" width="49%" alt="In-app update">
 </p>
 
-> **Status:** early but usable. The drawing core (M1) is done, and most of milestone M2 is now in the app: layers with masks and adjustment layers, selections, transform, fills, gradients, symmetry, guides, perspective grids, shapes and a first brush catalog. Still in progress: the advanced brush engine (texture, paint mixing, watercolor and special brushes), the full preset catalog and the brush editor.
+> **Status:** M2 is complete (October 2026) and M3 has started. The app has the full brush engine (texture, paint mixing, watercolor, particles, harmony, 3D, filter and clone brushes), a catalog of 91 presets in 17 categories, the brush editor, stylus settings with calibration, layers with masks and adjustment layers, selections, transform, fills, gradients, symmetry, guides, perspective grids and shapes.
 
 ## Features
 
 **In the app**
 - Canvases: screen sizes and print presets, project gallery (rename, copy, delete)
-- Brushes: a browser with 20 built-in presets (pencils, pens, markers, airbrushes, erasers); stylus pressure, stabilizer, point prediction, rejection of accidental stylus touches
+- Brushes: 91 presets in 17 categories (pencils, pens, markers, paints, watercolor, chalk, charcoal, airbrushes, textures, 3D, harmony, particles, manga, stamps, effects, outline, erasers); stylus pressure and tilt, velocity, stabilizer, point prediction, rejection of accidental stylus touches
+- Brush editor: every engine parameter with a live preview; user brushes
+- Stylus: pressure curve presets, per-device calibration wizard, pen buttons, eraser end, finger/palm rules
 - Layers: groups, layer and group masks, all 33 blend modes, clipping, alpha lock, color tags, lock, reference layer
 - Adjustment layers: curves, levels, gradient map, hue/saturation and others, non-destructive
 - Selection: rectangle, ellipse, lasso, magic wand; invert, expand, feather; marching ants
@@ -31,18 +33,19 @@ The app is completely free: no subscriptions, ads, watermarks or paid features.
 - Shapes: line, rectangle, ellipse, polygon, arc, drawn with the current brush; outline, fill, stamp
 - Color: HSB wheel, sliders, hex, palette, eyedropper (long press)
 - Undo and redo with buttons and gestures (two- and three-finger tap), two-finger navigation
-- Autosave 2 seconds after a change, PNG export
+- Autosave 2 seconds after a change, PNG/JPG export with quality and transparency options
 - In-app update from GitHub Releases
 
 **Ready in the core, UI in progress**
 - Transform modes beyond the basic one: distort, perspective, warp
 - Path guide, hatching, shape detection
+- Filters (M3)
 
-**In progress**
-- Brush engine stages S2–S9: paper texture, wet edges and glaze, paint mixing and smudge, filter and clone brushes, particles, watercolor, 3D brushes
-- The full catalog of about 236 presets, the brush editor and stylus settings
+**In progress (M3)**
+- Filters and filter layers, liquify, text, PSD import/export, timelapse, canvas crop/resize/straighten
+- The full catalog of about 236 presets and brush import/export ([spec/tools/brush-import.md](spec/tools/brush-import.md))
 
-Full plan: [spec/ROADMAP.md](spec/ROADMAP.md), current milestone: [spec/PLAN-M2.md](spec/PLAN-M2.md), known issues: [spec/STATUS.md](spec/STATUS.md).
+Full plan: [spec/ROADMAP.md](spec/ROADMAP.md), the finished M2 plan: [spec/PLAN-M2.md](spec/PLAN-M2.md), known issues: [spec/STATUS.md](spec/STATUS.md).
 
 ## Installation
 
