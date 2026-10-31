@@ -65,9 +65,11 @@ import app.painter.core.history.SetMaskProps
 import app.painter.core.history.SetNodeProps
 import app.painter.core.history.TilePatchCommand
 import app.painter.core.history.Ungroup
+import app.painter.core.history.snapshotTiles
 import app.painter.core.io.ProjectIO
 import app.painter.core.io.ProjectStore
 import app.painter.core.io.SaveTracker
+import app.painter.core.liquify.LiquifySession
 import app.painter.core.perspective.PerspectiveConfig
 import app.painter.core.perspective.PerspectiveOverlay
 import app.painter.core.perspective.PerspectiveType
@@ -324,6 +326,7 @@ class StudioViewModel(
         finishShape(commit = false)
         finishTransform(apply = false)
         finishGradient(apply = false)
+        finishLiquify(commit = false)
         save(refreshList = false) // flush pending changes of the previous document
         doc = d
         // The saved state belongs to the document that was just flushed, not to the new one.
@@ -832,15 +835,19 @@ class StudioViewModel(
     /** Lasso trail in document pixels while dragging (points closer than 2 px are merged). */
     private val lassoPoints = ArrayList<PointUi>()
 
+    /** Open liquify gesture: pushes the active layer's pixels and remembers their originals. */
+    private var liquify: LiquifySession? = null
+
     override val toolActive: Boolean
         get() = _state.value.tool == ToolUi.TRANSFORM || _state.value.tool == ToolUi.FILL ||
             _state.value.tool == ToolUi.GRADIENT || _state.value.tool == ToolUi.SHAPE ||
-            _state.value.tool.isSelectionTool
+            _state.value.tool == ToolUi.LIQUIFY || _state.value.tool.isSelectionTool
 
     override fun selectTool(tool: ToolUi) {
         if (tool != ToolUi.TRANSFORM) finishTransform(apply = true)
         if (tool != ToolUi.GRADIENT) finishGradient(apply = true)
         if (tool != ToolUi.SHAPE) finishShape(commit = true)
+        if (tool != ToolUi.LIQUIFY) finishLiquify(commit = true)
         _state.update { it.copy(tool = tool, selectionDraft = null, selectionDraftPath = null) }
         if (tool == ToolUi.TRANSFORM) startTransform()
     }
@@ -860,6 +867,10 @@ class StudioViewModel(
     }
 
     override fun onToolDown(x: Float, y: Float) {
+        if (_state.value.tool == ToolUi.LIQUIFY) {
+            liquifyDown(x, y)
+            return
+        }
         if (_state.value.tool == ToolUi.SHAPE) {
             shapeDown(x, y)
             return
@@ -893,6 +904,10 @@ class StudioViewModel(
     }
 
     override fun onToolMove(x: Float, y: Float) {
+        if (_state.value.tool == ToolUi.LIQUIFY) {
+            liquifyMove(x, y)
+            return
+        }
         if (_state.value.tool == ToolUi.SHAPE) {
             shapeMove(x, y, force = false)
             return
@@ -932,6 +947,11 @@ class StudioViewModel(
     }
 
     override fun onToolUp(x: Float, y: Float) {
+        if (_state.value.tool == ToolUi.LIQUIFY) {
+            liquifyMove(x, y)
+            liquify?.end()
+            return
+        }
         if (_state.value.tool == ToolUi.SHAPE) {
             shapeUp(x, y)
             return
@@ -2467,6 +2487,7 @@ class StudioViewModel(
         finishShape(commit = true)
         finishTransform(apply = true)
         finishGradient(apply = true)
+        finishLiquify(commit = true)
         save(refreshList = true)
     }
 
@@ -2587,6 +2608,96 @@ class StudioViewModel(
         }
 
     val documentName: String get() = doc.name
+
+    // ---- liquify ----
+
+    private fun liquifyDown(x: Float, y: Float) {
+        val layer = doc.activeRaster ?: return
+        if (!layer.visible || layer.effectivelyLocked) return
+        val s = _state.value
+        liquify = LiquifySession(layer.pixels, s.liquifySize, s.liquifyStrength).also {
+            it.begin(clampX(x), clampY(y))
+        }
+    }
+
+    private fun liquifyMove(x: Float, y: Float) {
+        val session = liquify ?: return
+        session.move(clampX(x), clampY(y))
+        val keys = session.takeDirty()
+        if (keys.isNotEmpty()) canvas?.invalidate(doc.activeId, keys)
+    }
+
+    override fun setLiquifySize(size: Float) {
+        val v = size.coerceIn(8f, 800f)
+        liquify?.size = v
+        _state.update { it.copy(liquifySize = v) }
+    }
+
+    override fun setLiquifyStrength(strength: Float) {
+        val v = strength.coerceIn(0f, 1f)
+        liquify?.strength = v
+        _state.update { it.copy(liquifyStrength = v) }
+    }
+
+    override fun finishLiquify(commit: Boolean) {
+        val session = liquify ?: return
+        liquify = null
+        val layer = doc.activeRaster ?: return
+        val keys = session.touched
+        if (keys.isEmpty()) return
+        if (!commit) {
+            for ((key, tile) in session.beforeTiles) layer.pixels.put(key, tile?.copy())
+            canvas?.invalidate(layer.id, keys)
+            return
+        }
+        val after = LinkedHashMap<TileKey, Tile?>(keys.size)
+        for (key in keys) after[key] = layer.pixels.get(key)?.copy()
+        val before = LinkedHashMap<TileKey, Tile?>(keys.size)
+        for ((key, tile) in session.beforeTiles) before[key] = tile?.copy()
+        history.push(TilePatchCommand(TilePatch(layer.id, before, after), "Liquify"))
+        canvas?.invalidate(layer.id, keys)
+    }
+
+    /**
+     * Text tool (M3): rasterizes [text] at [sizePx] with the current colour and stamps it at the centre of the
+     * canvas, clipped by the selection, as one undo step. The Transform tool moves it afterwards.
+     */
+    override fun stampText(text: String, sizePx: Float) {
+        finishShape(commit = true)
+        finishTransform(apply = true)
+        finishGradient(apply = true)
+        commitPendingOpacity()
+        val layer = doc.activeRaster ?: return
+        if (!layer.visible || layer.effectivelyLocked) return
+        val stamp = renderTextStamp(text, sizePx, _state.value.color) ?: return
+        val ox = (doc.width - stamp.width) / 2
+        val oy = (doc.height - stamp.height) / 2
+        val keys = layer.pixels.keysInRect(ox, oy, ox + stamp.width, oy + stamp.height)
+        if (keys.isEmpty()) return
+        val before = snapshotTiles(layer.pixels, keys)
+        val sel = doc.selection.coverageOrNull()
+        val px = FloatArray(4)
+        for (y in 0 until stamp.height) {
+            val dy = oy + y
+            if (dy !in 0 until doc.height) continue
+            for (x in 0 until stamp.width) {
+                val dx = ox + x
+                if (dx !in 0 until doc.width) continue
+                stamp.getPixel(x, y, px)
+                if (px[3] <= 0f) continue
+                val k = if (sel != null) sel.value(dx, dy) else 1f
+                if (k <= 0f) continue
+                layer.pixels.setPixel(dx, dy, px[0] * k, px[1] * k, px[2] * k, px[3] * k)
+            }
+        }
+        val after = snapshotTiles(layer.pixels, keys)
+        history.push(TilePatchCommand(TilePatch(layer.id, before, after), "Text"))
+        canvas?.invalidate(layer.id, keys)
+    }
+
+    override fun fitView() {
+        canvas?.fitToScreen()
+    }
 
     override fun openEditingTools() {}
     override fun openOptions() {}

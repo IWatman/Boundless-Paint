@@ -247,6 +247,9 @@
     <string name="quality">Качество</string>
     <string name="transparent_background">Прозрачный фон</string>
     <string name="filters">Фильтры</string>
+    <string name="tool_liquify">Пластика</string>
+    <string name="tool_text">Текст</string>
+    <string name="text_hint">Текст</string>
     <string name="filter_blur">Размытие</string>
     <string name="filter_motion">Размытие в движении</string>
     <string name="filter_pixelate">Пикселизация</string>
@@ -256,6 +259,10 @@
     <string name="filter_edges">Контуры</string>
     <string name="filter_chromatic">Хроматика</string>
     <string name="filter_fisheye">Рыбий глаз</string>
+    <string name="filter_dilate">Расширение</string>
+    <string name="filter_erode">Сужение</string>
+    <string name="filter_zoom">Радиальное размытие</string>
+    <string name="filter_spin">Вращательное размытие</string>
     <string name="radius">Радиус</string>
     <string name="distance">Смещение</string>
     <string name="angle">Угол</string>

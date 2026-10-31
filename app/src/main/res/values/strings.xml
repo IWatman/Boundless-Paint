@@ -248,7 +248,9 @@
     <string name="quality">Quality</string>
     <string name="transparent_background">Transparent background</string>
     <string name="filters">Filters</string>
-    <string name="filter_blur">Blur</string>
+    <string name="tool_liquify">Liquify</string>
+    <string name="tool_text">Text</string>
+    <string name="text_hint">Text</string>    <string name="filter_blur">Blur</string>
     <string name="filter_motion">Motion blur</string>
     <string name="filter_pixelate">Pixelate</string>
     <string name="filter_sharpen">Sharpen</string>
@@ -257,7 +259,10 @@
     <string name="filter_edges">Find edges</string>
     <string name="filter_chromatic">Chromatic</string>
     <string name="filter_fisheye">Fisheye</string>
-    <string name="radius">Radius</string>
+    <string name="filter_dilate">Dilate</string>
+    <string name="filter_erode">Erode</string>
+    <string name="filter_zoom">Zoom blur</string>
+    <string name="filter_spin">Spin blur</string>    <string name="radius">Radius</string>
     <string name="distance">Distance</string>
     <string name="angle">Angle</string>
     <string name="cell_size">Cell</string>

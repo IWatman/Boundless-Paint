@@ -2,6 +2,7 @@ package app.painter
 
 import android.graphics.Bitmap
 import android.os.Bundle
+import android.view.KeyEvent
 import android.view.MotionEvent
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -31,6 +32,7 @@ import app.painter.ui.home.NewCanvasScreen
 import app.painter.ui.home.UpdateDialog
 import app.painter.ui.studio.ExportDialog
 import app.painter.ui.studio.StudioScreen
+import app.painter.ui.studio.BrushModeUi
 import app.painter.ui.theme.PainterTheme
 import app.painter.update.UpdateViewModel
 import kotlinx.coroutines.launch
@@ -54,6 +56,45 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         updateVm.onResume()
+    }
+
+    /** Hardware-keyboard shortcuts of the studio (M3): undo/redo, brush modes, brush size and fit. */
+    override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
+        if (event.isCtrlPressed) {
+            when (keyCode) {
+                KeyEvent.KEYCODE_Z -> {
+                    if (event.isShiftPressed) vm.redo() else vm.undo()
+                    return true
+                }
+                KeyEvent.KEYCODE_Y -> {
+                    vm.redo()
+                    return true
+                }
+            }
+        }
+        when (keyCode) {
+            KeyEvent.KEYCODE_B -> {
+                vm.setMode(BrushModeUi.PAINT)
+                return true
+            }
+            KeyEvent.KEYCODE_E -> {
+                vm.setMode(BrushModeUi.ERASE)
+                return true
+            }
+            KeyEvent.KEYCODE_LEFT_BRACKET -> {
+                vm.setBrushSize(vm.state.value.brushSize / 1.15f)
+                return true
+            }
+            KeyEvent.KEYCODE_RIGHT_BRACKET -> {
+                vm.setBrushSize(vm.state.value.brushSize * 1.15f)
+                return true
+            }
+            KeyEvent.KEYCODE_F -> {
+                vm.fitView()
+                return true
+            }
+        }
+        return super.onKeyDown(keyCode, event)
     }
 
     override fun onStop() {

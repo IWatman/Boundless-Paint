@@ -188,6 +188,37 @@ class FiltersTest {
     }
 
     @Test
+    fun dilateGrowsAndErodeShrinksTheShape() {
+        val g = grid(64, 64)
+        for (y in 28 until 36) for (x in 28 until 36) put(g, x, y, 1f, 1f, 1f, 1f)
+        val dilated = g.copy()
+        Filters.apply("l", dilated, DilateParams(radius = 4))
+        assertTrue(px(dilated, 25, 32)[3] > 0f, "dilate grows the shape")
+        Filters.apply("l", g, ErodeParams(radius = 4))
+        assertEquals(0f, px(g, 32, 32)[3], "erode takes the whole 8 px square away")
+    }
+
+    @Test
+    fun zoomBlurSmearsAwayFromTheCentre() {
+        val g = grid(128, 128)
+        // A dot off-centre: a radial blur pulls the samples toward the centre, so the smear lies outward.
+        put(g, 96, 64, 1f, 1f, 1f, 1f)
+        Filters.apply("l", g, ZoomBlurParams(amount = 0.6f))
+        assertTrue(px(g, 96, 64)[3] < 1f, "the dot fades at its own place")
+        assertTrue(px(g, 104, 64)[3] > 0f, "content appears farther from the centre")
+    }
+
+    @Test
+    fun spinBlurSmearsAroundTheCentre() {
+        val g = grid(128, 128)
+        put(g, 96, 64, 1f, 1f, 1f, 1f)
+        Filters.apply("l", g, SpinBlurParams(angleDeg = 60f))
+        assertTrue(px(g, 96, 64)[3] < 1f, "the dot is averaged with its arc")
+        // 32 px from the centre, +-30 degrees: (64 + 32·cos30, 64 + 32·sin30) ≈ (92, 80).
+        assertTrue(px(g, 92, 80)[3] > 0f, "the arc leaves a smear")
+    }
+
+    @Test
     fun selectionAndAlphaLockTogether() {
         val doc = Document.create(96, 32)
         val layer = doc.activeRaster!!

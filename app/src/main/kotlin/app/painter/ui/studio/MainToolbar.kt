@@ -17,6 +17,7 @@ import androidx.compose.material.icons.outlined.FormatColorFill
 import androidx.compose.material.icons.outlined.Gradient
 import androidx.compose.material.icons.outlined.OpenWith
 import androidx.compose.material.icons.outlined.SelectAll
+import androidx.compose.material.icons.outlined.Waves
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -311,6 +312,7 @@ private fun activeToolIcon(tool: ToolUi): ImageVector = when (tool) {
     ToolUi.GRADIENT -> Icons.Outlined.Gradient
     ToolUi.SHAPE -> Icons.Outlined.Category
     ToolUi.CLONE -> Icons.Outlined.ContentCopy
+    ToolUi.LIQUIFY -> Icons.Outlined.Waves
 }
 
 /** Localized name of [tool], the content description of the active tool indicator. */
@@ -327,6 +329,7 @@ private fun activeToolName(tool: ToolUi): String = stringResource(
         ToolUi.GRADIENT -> R.string.tool_gradient
         ToolUi.SHAPE -> R.string.shape_title
         ToolUi.CLONE -> R.string.tool_clone
+        ToolUi.LIQUIFY -> R.string.tool_liquify
     },
 )
 

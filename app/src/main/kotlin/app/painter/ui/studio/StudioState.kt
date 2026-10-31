@@ -34,6 +34,8 @@ enum class ToolUi {
     BRUSH, SELECT_RECT, SELECT_ELLIPSE, SELECT_LASSO, SELECT_WAND, TRANSFORM, FILL, GRADIENT, SHAPE,
     /** Paints copies of the active layer from a source point picked by a long-press on the canvas. */
     CLONE,
+    /** Liquify: dragging pushes the pixels of the active layer around (spec/ROADMAP.md M3). */
+    LIQUIFY,
 }
 
 /** True for the tools that build a selection instead of painting. */
@@ -171,6 +173,10 @@ data class StudioUiState(
     val doubleTapFits: Boolean = true,
     /** A destructive filter is being computed; strokes are ignored until it is applied. */
     val filterBusy: Boolean = false,
+    /** Liquify brush diameter in document pixels. */
+    val liquifySize: Float = 160f,
+    /** Liquify push strength 0..1. */
+    val liquifyStrength: Float = 0.5f,
     val viewZoom: Float = 1f,
     /** Active tool; [ToolUi.BRUSH] paints, the SELECT_* tools drag a selection. */
     val tool: ToolUi = ToolUi.BRUSH,
@@ -576,6 +582,16 @@ interface StudioActions {
     fun setGammaCorrect(on: Boolean) {}
     /** Applies a destructive filter to the active layer; a selection clips it (spec/filters.md). */
     fun applyFilter(params: FilterParams) {}
+    /** Liquify brush diameter in document pixels. */
+    fun setLiquifySize(size: Float) {}
+    /** Liquify push strength 0..1. */
+    fun setLiquifyStrength(strength: Float) {}
+    /** Ends the liquify session: keeps the pushed pixels as one undo step, or puts them back. */
+    fun finishLiquify(commit: Boolean) {}
+    /** Stamps raster text on the active layer at the centre of the canvas (M3 text tool). */
+    fun stampText(text: String, sizePx: Float) {}
+    /** Fits the canvas into the view (keyboard shortcut F). */
+    fun fitView() {}
     fun openHome()
     fun save()
     fun exportImage()
@@ -666,6 +682,11 @@ open class NoOpStudioActions : StudioActions {
     override fun setDoubleTapFits(enabled: Boolean) {}
     override fun setGammaCorrect(on: Boolean) {}
     override fun applyFilter(params: FilterParams) {}
+    override fun setLiquifySize(size: Float) {}
+    override fun setLiquifyStrength(strength: Float) {}
+    override fun finishLiquify(commit: Boolean) {}
+    override fun stampText(text: String, sizePx: Float) {}
+    override fun fitView() {}
     override fun openEditingTools() {}
     override fun openOptions() {}
     override fun addColorToPalette(color: Rgba) {}

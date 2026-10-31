@@ -72,12 +72,22 @@ fun StudioScreen(
 ) {
     var localHud by remember { mutableStateOf<HudUi?>(null) }
     var filtersOpen by remember { mutableStateOf(false) }
+    var textOpen by remember { mutableStateOf(false) }
     if (filtersOpen) {
         FilterDialog(
             onDismiss = { filtersOpen = false },
             onApply = { params ->
                 filtersOpen = false
                 actions.applyFilter(params)
+            },
+        )
+    }
+    if (textOpen) {
+        TextDialog(
+            onDismiss = { textOpen = false },
+            onConfirm = { text, size ->
+                textOpen = false
+                actions.stampText(text, size)
             },
         )
     }
@@ -104,6 +114,7 @@ fun StudioScreen(
                 state = state,
                 actions = actions,
                 onFilters = { filtersOpen = true },
+                onText = { textOpen = true },
                 modifier = Modifier
                     .align(Alignment.TopStart)
                     .fillMaxWidth()
@@ -152,6 +163,15 @@ fun StudioScreen(
             }
 
             val adjustmentEditor = state.adjustmentEditor
+            if (state.tool == ToolUi.LIQUIFY) {
+                LiquifyBar(
+                    state = state,
+                    actions = actions,
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .padding(top = 64.dp),
+                )
+            }
             if (state.tool == ToolUi.CLONE && state.cloneSource == null) {
                 PanelSurface(
                     Modifier
@@ -607,6 +627,7 @@ private fun StudioTopBar(
     state: StudioUiState,
     actions: StudioActions,
     onFilters: () -> Unit,
+    onText: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Row(modifier, verticalAlignment = Alignment.CenterVertically) {
@@ -685,6 +706,20 @@ private fun StudioTopBar(
                             onClick = {
                                 toolsMenu = false
                                 onFilters()
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.tool_liquify)) },
+                            onClick = {
+                                toolsMenu = false
+                                actions.selectTool(ToolUi.LIQUIFY)
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.tool_text)) },
+                            onClick = {
+                                toolsMenu = false
+                                onText()
                             },
                         )
                         if (state.hasSelection) {

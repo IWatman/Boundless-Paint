@@ -194,6 +194,10 @@ object Filters {
         is EdgesParams -> mix(src, edges(src, w, h, params.amount), params.strength)
         is ChromaticParams -> mix(src, chromatic(src, w, h, params), params.strength)
         is FisheyeParams -> mix(src, fisheye(src, w, h, ox, oy, geometry, params), params.strength)
+        is DilateParams -> mix(src, morph(src, w, h, params.radius, dilate = true), params.strength)
+        is ErodeParams -> mix(src, morph(src, w, h, params.radius, dilate = false), params.strength)
+        is ZoomBlurParams -> mix(src, zoomBlur(src, w, h, ox, oy, geometry, params), params.strength)
+        is SpinBlurParams -> mix(src, spinBlur(src, w, h, ox, oy, geometry, params), params.strength)
     }
 
     /** `a·(1-t) + b·t` per channel, clamped to a non-negative premultiplied pixel. */
@@ -451,9 +455,126 @@ object Filters {
         return out
     }
 
+    // ---------------------------------------------------------------- morphology and radial blur
+
+    /** Separable max (dilate) or min (erode) over a square window, per premultiplied channel. */
+    private fun morph(src: FloatArray, w: Int, h: Int, radius: Int, dilate: Boolean): FloatArray {
+        val r = radius.coerceIn(1, 20)
+        val tmp = FloatArray(src.size)
+        val out = FloatArray(src.size)
+        for (y in 0 until h) {
+            for (x in 0 until w) {
+                var r0 = if (dilate) 0f else 1f
+                var r1 = r0; var r2 = r0; var r3 = r0
+                for (k in -r..r) {
+                    val xx = (x + k).coerceIn(0, w - 1)
+                    val i = (y * w + xx) * 4
+                    if (dilate) {
+                        if (src[i] > r0) r0 = src[i]
+                        if (src[i + 1] > r1) r1 = src[i + 1]
+                        if (src[i + 2] > r2) r2 = src[i + 2]
+                        if (src[i + 3] > r3) r3 = src[i + 3]
+                    } else {
+                        if (src[i] < r0) r0 = src[i]
+                        if (src[i + 1] < r1) r1 = src[i + 1]
+                        if (src[i + 2] < r2) r2 = src[i + 2]
+                        if (src[i + 3] < r3) r3 = src[i + 3]
+                    }
+                }
+                val i = (y * w + x) * 4
+                tmp[i] = r0; tmp[i + 1] = r1; tmp[i + 2] = r2; tmp[i + 3] = r3
+            }
+        }
+        for (y in 0 until h) {
+            for (x in 0 until w) {
+                var r0 = if (dilate) 0f else 1f
+                var r1 = r0; var r2 = r0; var r3 = r0
+                for (k in -r..r) {
+                    val yy = (y + k).coerceIn(0, h - 1)
+                    val i = (yy * w + x) * 4
+                    if (dilate) {
+                        if (tmp[i] > r0) r0 = tmp[i]
+                        if (tmp[i + 1] > r1) r1 = tmp[i + 1]
+                        if (tmp[i + 2] > r2) r2 = tmp[i + 2]
+                        if (tmp[i + 3] > r3) r3 = tmp[i + 3]
+                    } else {
+                        if (tmp[i] < r0) r0 = tmp[i]
+                        if (tmp[i + 1] < r1) r1 = tmp[i + 1]
+                        if (tmp[i + 2] < r2) r2 = tmp[i + 2]
+                        if (tmp[i + 3] < r3) r3 = tmp[i + 3]
+                    }
+                }
+                val i = (y * w + x) * 4
+                out[i] = r0; out[i + 1] = r1; out[i + 2] = r2; out[i + 3] = r3
+            }
+        }
+        return out
+    }
+
+    /** Radial blur toward the content centre: samples shrink toward [Geometry.cx],[Geometry.cy]. */
+    private fun zoomBlur(
+        src: FloatArray,
+        w: Int,
+        h: Int,
+        ox: Int,
+        oy: Int,
+        geometry: Geometry,
+        p: ZoomBlurParams,
+    ): FloatArray {
+        val amount = p.amount.coerceIn(0f, 0.9f)
+        if (amount <= 0.001f) return src.copyOf()
+        val samples = 12
+        val out = FloatArray(src.size)
+        val s = FloatArray(4)
+        for (y in 0 until h) for (x in 0 until w) {
+            val px = x + ox - geometry.cx
+            val py = y + oy - geometry.cy
+            var r = 0f; var g = 0f; var b = 0f; var a = 0f
+            for (n in 0 until samples) {
+                val f = 1f - amount * (n / (samples - 1f))
+                sample(src, w, h, geometry.cx + px * f - ox, geometry.cy + py * f - oy, s)
+                r += s[0]; g += s[1]; b += s[2]; a += s[3]
+            }
+            val i = (y * w + x) * 4
+            out[i] = r / samples; out[i + 1] = g / samples; out[i + 2] = b / samples; out[i + 3] = a / samples
+        }
+        return out
+    }
+
+    /** Rotational blur around the content centre over [SpinBlurParams.angleDeg]. */
+    private fun spinBlur(
+        src: FloatArray,
+        w: Int,
+        h: Int,
+        ox: Int,
+        oy: Int,
+        geometry: Geometry,
+        p: SpinBlurParams,
+    ): FloatArray {
+        val angle = Math.toRadians(p.angleDeg.toDouble().coerceIn(-180.0, 180.0)).toFloat()
+        if (abs(angle) < 0.001f) return src.copyOf()
+        val samples = 12
+        val out = FloatArray(src.size)
+        val s = FloatArray(4)
+        for (y in 0 until h) for (x in 0 until w) {
+            val px = x + ox - geometry.cx
+            val py = y + oy - geometry.cy
+            var r = 0f; var g = 0f; var b = 0f; var a = 0f
+            for (n in 0 until samples) {
+                val t = angle * (n / (samples - 1f) - 0.5f)
+                val ca = cos(t)
+                val sa = sin(t)
+                sample(src, w, h, geometry.cx + px * ca - py * sa - ox, geometry.cy + px * sa + py * ca - oy, s)
+                r += s[0]; g += s[1]; b += s[2]; a += s[3]
+            }
+            val i = (y * w + x) * 4
+            out[i] = r / samples; out[i + 1] = g / samples; out[i + 2] = b / samples; out[i + 3] = a / samples
+        }
+        return out
+    }
+
     /** Bilinear sample of a premultiplied patch, clamped to its edges. */
-    private fun sample(buf: FloatArray, w: Int, h: Int, x: Float, y: Float, out: FloatArray) {
-        if (w <= 0 || h <= 0) { out.fill(0f); return }
+    private fun sample(buf: FloatArray, w: Int, h: Int, x: Float, y: Float, out: FloatArray) {        if (w <= 0 || h <= 0) { out.fill(0f); return }
         val fx = x.coerceIn(0f, (w - 1).toFloat())
         val fy = y.coerceIn(0f, (h - 1).toFloat())
         val x0 = floor(fx).toInt()

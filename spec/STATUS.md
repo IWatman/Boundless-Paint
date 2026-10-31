@@ -6,12 +6,22 @@
   padded by the filter's reach (no seams), respects the selection and alpha lock, and returns a `TilePatch` so a
   filter is one undo step.
 - Implemented: blur, motion blur, pixelate, sharpen (unsharp mask), glow/bloom, noise (mono/colour, deterministic),
-  find edges (Sobel), chromatic aberration, fisheye/pinch.
+  find edges (Sobel), chromatic aberration, fisheye/pinch, dilate, erode, zoom blur, spin blur.
 - UI: Editing Tools → Filters… with a chip per filter and only the sliders it needs; the filter runs on a worker
   thread over a private copy of the layer and is committed in one history step. Strokes are ignored while it runs.
-- Tests: `FiltersTest` (15) — tiling and seams, determinism, selection/alpha lock, undo, parameter round trip.
-- Next in M3: the rest of the filter list (dilate/erode, zoom/spin blur, radial and speed lines, halftone, layer
-  styles, generators), filter layers (live), liquify, text, PSD, timelapse, canvas crop/resize/straighten.
+- Tests: `FiltersTest` (18) — tiling and seams, determinism, selection/alpha lock, undo, parameter round trip.
+
+### Liquify, text, shortcuts (2026-10-31)
+- Liquify: `core/liquify/LiquifySession` pushes pixels along the drag with a smooth falloff and keeps the original
+  tiles for one undo step. Editing Tools → Liquify shows a size/strength bar with Cancel (puts the pixels back) and
+  Apply (one history step). `LiquifySessionTest` (4).
+- Text: Editing Tools → Text opens a multi-line dialog (text, em size); the text is rasterized with the current
+  colour and stamped at the centre of the canvas, clipped by the selection, as one undo step; the Transform tool
+  moves it afterwards.
+- Keyboard shortcuts: Ctrl+Z undo, Ctrl+Shift+Z / Ctrl+Y redo, B paint, E erase, `[`/`]` brush size, F fit.
+- Still open in M3: filter layers (live), generators (radial/speed lines, halftone), layer styles, curvilinear
+  perspective, canvas crop/resize/straighten, PSD import/export, timelapse, panels/frame divider, brush
+  import/export UI, a settings screen.
 
 ## M2: done (2026-10-31)
 - Build: `. .\tools\env.ps1; .\gradlew.bat :core:test :app:testDebugUnitTest :app:assembleDebug`.

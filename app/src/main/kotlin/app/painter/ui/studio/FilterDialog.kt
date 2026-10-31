@@ -20,7 +20,9 @@ import androidx.compose.ui.unit.dp
 import app.painter.R
 import app.painter.core.filter.BlurParams
 import app.painter.core.filter.ChromaticParams
+import app.painter.core.filter.DilateParams
 import app.painter.core.filter.EdgesParams
+import app.painter.core.filter.ErodeParams
 import app.painter.core.filter.FilterParams
 import app.painter.core.filter.FisheyeParams
 import app.painter.core.filter.GlowParams
@@ -28,6 +30,8 @@ import app.painter.core.filter.MotionBlurParams
 import app.painter.core.filter.NoiseParams
 import app.painter.core.filter.PixelateParams
 import app.painter.core.filter.SharpenParams
+import app.painter.core.filter.SpinBlurParams
+import app.painter.core.filter.ZoomBlurParams
 import app.painter.ui.components.ParamSlider
 import kotlin.math.roundToInt
 
@@ -42,6 +46,10 @@ private enum class FilterKindUi(val label: Int) {
     EDGES(R.string.filter_edges),
     CHROMATIC(R.string.filter_chromatic),
     FISHEYE(R.string.filter_fisheye),
+    DILATE(R.string.filter_dilate),
+    ERODE(R.string.filter_erode),
+    ZOOM(R.string.filter_zoom),
+    SPIN(R.string.filter_spin),
 }
 
 /**
@@ -159,6 +167,18 @@ fun FilterDialog(onDismiss: () -> Unit, onApply: (FilterParams) -> Unit) {
                             { scale = it }, step = 0.01f,
                         )
                     }
+                    FilterKindUi.DILATE, FilterKindUi.ERODE -> ParamSlider(
+                        stringResource(R.string.radius), radius, 1f..20f, { it.roundToInt().toString() },
+                        { radius = it }, step = 1f, unit = "px",
+                    )
+                    FilterKindUi.ZOOM -> ParamSlider(
+                        stringResource(R.string.amount), amount, 0f..0.9f, percent,
+                        { amount = it }, step = 0.01f,
+                    )
+                    FilterKindUi.SPIN -> ParamSlider(
+                        stringResource(R.string.angle), angle, -180f..180f, { it.roundToInt().toString() },
+                        { angle = it }, step = 1f, unit = "°",
+                    )
                 }
                 ParamSlider(
                     stringResource(R.string.strength), strength, 0f..1f, percent,
@@ -194,4 +214,8 @@ private fun FilterKindUi.params(
     FilterKindUi.EDGES -> EdgesParams(amount, strength)
     FilterKindUi.CHROMATIC -> ChromaticParams(distance, angle, strength)
     FilterKindUi.FISHEYE -> FisheyeParams(amount, strength, scale)
+    FilterKindUi.DILATE -> DilateParams(radius.roundToInt(), strength)
+    FilterKindUi.ERODE -> ErodeParams(radius.roundToInt(), strength)
+    FilterKindUi.ZOOM -> ZoomBlurParams(amount, strength)
+    FilterKindUi.SPIN -> SpinBlurParams(angle, strength)
 }

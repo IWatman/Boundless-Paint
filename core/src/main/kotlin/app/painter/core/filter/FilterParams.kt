@@ -130,3 +130,49 @@ data class FisheyeParams(
     override val kind: String get() = "fisheye"
     override val reach: Int get() = 256
 }
+
+/** Morphological dilate: grows the painted area by [radius] px (the alpha expands). */
+@Serializable
+@SerialName("dilate")
+data class DilateParams(
+    val radius: Int = 3,
+    val strength: Float = 1f,
+) : FilterParams() {
+    override val kind: String get() = "dilate"
+    override val reach: Int get() = radius.coerceIn(1, 20)
+}
+
+/** Morphological erode: shrinks the painted area by [radius] px. */
+@Serializable
+@SerialName("erode")
+data class ErodeParams(
+    val radius: Int = 3,
+    val strength: Float = 1f,
+) : FilterParams() {
+    override val kind: String get() = "erode"
+    override val reach: Int get() = radius.coerceIn(1, 20)
+}
+
+/** Radial blur toward the centre of the painted area (zoom blur). */
+@Serializable
+@SerialName("zoom-blur")
+data class ZoomBlurParams(
+    /** 0..0.9 of the way to the centre. */
+    val amount: Float = 0.35f,
+    val strength: Float = 1f,
+) : FilterParams() {
+    override val kind: String get() = "zoom-blur"
+    override val reach: Int get() = 256
+}
+
+/** Rotational blur around the centre of the painted area (spin blur). */
+@Serializable
+@SerialName("spin-blur")
+data class SpinBlurParams(
+    /** -180..180 degrees of the arc, positive is clockwise. */
+    val angleDeg: Float = 30f,
+    val strength: Float = 1f,
+) : FilterParams() {
+    override val kind: String get() = "spin-blur"
+    override val reach: Int get() = 256
+}
