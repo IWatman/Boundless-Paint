@@ -585,4 +585,6 @@
     <string name="lines">Lines</string>
     <string name="cross">Cross</string>
     <string name="manuscript_guides">Manuscript guides</string>
+    <string name="radial_guides">Radial ruler</string>
+    <string name="array_guides">Array ruler</string>
 </resources>

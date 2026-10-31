@@ -159,6 +159,7 @@ fun StudioScreen(
         Box(Modifier.fillMaxSize()) { canvas() }
         SelectionOverlay(state = state, modifier = Modifier.fillMaxSize())
         ManuscriptOverlay(state = state, modifier = Modifier.fillMaxSize())
+        RulerGuidesOverlay(state = state, modifier = Modifier.fillMaxSize())
         TransformOverlay(state = state, modifier = Modifier.fillMaxSize())
         GradientOverlay(state = state, modifier = Modifier.fillMaxSize())
         CloneOverlay(state = state, modifier = Modifier.fillMaxSize())
@@ -966,6 +967,16 @@ private fun StudioTopBar(
                             text = { Text(stringResource(R.string.manuscript_guides)) },
                             trailingIcon = { if (state.manuscriptGuides) Icon(Icons.Outlined.Check, null) },
                             onClick = { menuOpen = false; actions.setManuscriptGuides(!state.manuscriptGuides) },
+                        )
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.radial_guides)) },
+                            trailingIcon = { if (state.radialGuides) Icon(Icons.Outlined.Check, null) },
+                            onClick = { menuOpen = false; actions.setRadialGuides(!state.radialGuides) },
+                        )
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.array_guides)) },
+                            trailingIcon = { if (state.arrayGuides) Icon(Icons.Outlined.Check, null) },
+                            onClick = { menuOpen = false; actions.setArrayGuides(!state.arrayGuides) },
                         )
                         DropdownMenuItem(
                             text = { Text(stringResource(R.string.light_background)) },

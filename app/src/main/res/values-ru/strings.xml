@@ -584,4 +584,6 @@
     <string name="lines">Линии</string>
     <string name="cross">Крест</string>
     <string name="manuscript_guides">Границы рукописи</string>
+    <string name="radial_guides">Радиальная линейка</string>
+    <string name="array_guides">Массив линеек</string>
 </resources>

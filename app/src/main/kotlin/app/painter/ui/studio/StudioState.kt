@@ -192,6 +192,10 @@ data class StudioUiState(
     val settingsOpen: Boolean = false,
     /** Manuscript trim/bleed/safe guides are drawn over the canvas. */
     val manuscriptGuides: Boolean = false,
+    /** Radial ruler overlay (M4). */
+    val radialGuides: Boolean = false,
+    /** Array/grid ruler overlay (M4). */
+    val arrayGuides: Boolean = false,
     /** Timelapse recording is on for the open project. */
     val timelapseEnabled: Boolean = false,
     /** Recorded frames of the open project. */
@@ -656,6 +660,10 @@ interface StudioActions {
     fun closeSettings() {}
     /** Shows or hides the manuscript trim/bleed/safe guides. */
     fun setManuscriptGuides(on: Boolean) {}
+    /** Shows or hides the radial ruler overlay. */
+    fun setRadialGuides(on: Boolean) {}
+    /** Shows or hides the array ruler overlay. */
+    fun setArrayGuides(on: Boolean) {}
     /** Turns timelapse recording on/off (kept for the next session). */
     fun setTimelapseEnabled(enabled: Boolean) {}
     /** Encodes the recorded frames into an MP4; null when there is nothing to export. */
