@@ -219,6 +219,41 @@ class FiltersTest {
     }
 
     @Test
+    fun radialLinesDrawOnAnEmptyLayer() {
+        val g = grid(256, 256)
+        val patch = Filters.apply("l", g, RadialLinesParams(count = 48, inner = 0.1f, thickness = 2f))
+        assertTrue(patch.after.isNotEmpty(), "the generator creates tiles")
+        var found = false
+        for (y in 0 until 256) for (x in 0 until 256) {
+            if (px(g, x, y)[3] > 0.1f) found = true
+        }
+        assertTrue(found, "lines were drawn on an empty layer")
+        assertEquals(0f, px(g, 1, 1)[3], "the corners stay clear")
+    }
+
+    @Test
+    fun speedLinesCoverTheCanvas() {
+        val g = grid(256, 128)
+        Filters.apply("l", g, SpeedLinesParams(angleDeg = 0f, count = 20, thickness = 1.5f))
+        var found = false
+        for (y in 0 until 128) for (x in 0 until 256) if (px(g, x, y)[3] > 0.1f) found = true
+        assertTrue(found, "the lines were drawn")
+    }
+
+    @Test
+    fun halftoneDotsFollowLuminance() {
+        val g = grid(64, 64)
+        for (y in 0 until 64) for (x in 0 until 64) {
+            val v = if (x < 32) 0f else 1f
+            put(g, x, y, v, v, v, 1f)
+        }
+        Filters.apply("l", g, HalftoneParams(cell = 8))
+        // A black cell becomes a dot covering its centre; a white cell produces none.
+        assertTrue(px(g, 20, 20)[3] > 0.5f, "black cells are dots")
+        assertEquals(0f, px(g, 52, 20)[3], "white cells are empty")
+    }
+
+    @Test
     fun selectionAndAlphaLockTogether() {
         val doc = Document.create(96, 32)
         val layer = doc.activeRaster!!

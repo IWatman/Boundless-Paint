@@ -262,7 +262,13 @@
     <string name="filter_dilate">Dilate</string>
     <string name="filter_erode">Erode</string>
     <string name="filter_zoom">Zoom blur</string>
-    <string name="filter_spin">Spin blur</string>    <string name="radius">Radius</string>
+    <string name="filter_spin">Spin blur</string>
+    <string name="filter_radial">Radial lines</string>
+    <string name="filter_speed">Speed lines</string>
+    <string name="filter_halftone">Halftone</string>
+    <string name="count">Count</string>
+    <string name="thickness">Thickness</string>
+    <string name="inner_radius">Inner radius</string>    <string name="radius">Radius</string>
     <string name="distance">Distance</string>
     <string name="angle">Angle</string>
     <string name="cell_size">Cell</string>

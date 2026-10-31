@@ -33,7 +33,7 @@ The app is completely free: no subscriptions, ads, watermarks or paid features.
 - Shapes: line, rectangle, ellipse, polygon, arc, drawn with the current brush; outline, fill, stamp
 - Color: HSB wheel, sliders, hex, palette, eyedropper (long press)
 - Undo and redo with buttons and gestures (two- and three-finger tap), two-finger navigation
-- Filters: blur, motion blur, pixelate, sharpen, glow, noise, find edges, chromatic aberration, fisheye, dilate, erode, zoom and spin blur (M3)
+- Filters: blur, motion blur, pixelate, sharpen, glow, noise, find edges, chromatic aberration, fisheye, dilate, erode, zoom and spin blur, radial lines, speed lines and halftone (M3)
 - Liquify and text stamp tools, hardware-keyboard shortcuts (M3)
 - Autosave 2 seconds after a change, PNG/JPG export with quality and transparency options
 - In-app update from GitHub Releases

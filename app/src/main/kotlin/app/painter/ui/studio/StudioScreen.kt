@@ -75,6 +75,7 @@ fun StudioScreen(
     var textOpen by remember { mutableStateOf(false) }
     if (filtersOpen) {
         FilterDialog(
+            ink = state.color,
             onDismiss = { filtersOpen = false },
             onApply = { params ->
                 filtersOpen = false

@@ -263,7 +263,12 @@
     <string name="filter_erode">Сужение</string>
     <string name="filter_zoom">Радиальное размытие</string>
     <string name="filter_spin">Вращательное размытие</string>
-    <string name="radius">Радиус</string>
+    <string name="filter_radial">Радиальные линии</string>
+    <string name="filter_speed">Скоростные линии</string>
+    <string name="filter_halftone">Полутон</string>
+    <string name="count">Количество</string>
+    <string name="thickness">Толщина</string>
+    <string name="inner_radius">Внутренний радиус</string>    <string name="radius">Радиус</string>
     <string name="distance">Смещение</string>
     <string name="angle">Угол</string>
     <string name="cell_size">Ячейка</string>

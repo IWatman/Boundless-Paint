@@ -29,9 +29,13 @@ import app.painter.core.filter.GlowParams
 import app.painter.core.filter.MotionBlurParams
 import app.painter.core.filter.NoiseParams
 import app.painter.core.filter.PixelateParams
+import app.painter.core.filter.RadialLinesParams
 import app.painter.core.filter.SharpenParams
+import app.painter.core.filter.SpeedLinesParams
+import app.painter.core.filter.HalftoneParams
 import app.painter.core.filter.SpinBlurParams
 import app.painter.core.filter.ZoomBlurParams
+import app.painter.core.color.Rgba
 import app.painter.ui.components.ParamSlider
 import kotlin.math.roundToInt
 
@@ -50,6 +54,9 @@ private enum class FilterKindUi(val label: Int) {
     ERODE(R.string.filter_erode),
     ZOOM(R.string.filter_zoom),
     SPIN(R.string.filter_spin),
+    RADIAL(R.string.filter_radial),
+    SPEED(R.string.filter_speed),
+    HALFTONE(R.string.filter_halftone),
 }
 
 /**
@@ -57,7 +64,7 @@ private enum class FilterKindUi(val label: Int) {
  * needs, plus a common strength. Apply closes the dialog and runs the filter on the active layer.
  */
 @Composable
-fun FilterDialog(onDismiss: () -> Unit, onApply: (FilterParams) -> Unit) {
+fun FilterDialog(ink: Rgba, onDismiss: () -> Unit, onApply: (FilterParams) -> Unit) {
     var kind by remember { mutableStateOf(FilterKindUi.BLUR) }
     var radius by remember { mutableStateOf(8f) }
     var amount by remember { mutableStateOf(1f) }
@@ -68,8 +75,21 @@ fun FilterDialog(onDismiss: () -> Unit, onApply: (FilterParams) -> Unit) {
     var mono by remember { mutableStateOf(true) }
     var scale by remember { mutableStateOf(1f) }
     var strength by remember { mutableStateOf(1f) }
+    var count by remember { mutableStateOf(60f) }
+    var thickness by remember { mutableStateOf(2f) }
+    var inner by remember { mutableStateOf(0.15f) }
+    val inkHex = remember(ink) {
+        "#%02X%02X%02X".format(
+            (ink.r.coerceIn(0f, 1f) * 255).roundToInt(),
+            (ink.g.coerceIn(0f, 1f) * 255).roundToInt(),
+            (ink.b.coerceIn(0f, 1f) * 255).roundToInt(),
+        )
+    }
 
-    val params = kind.params(radius, amount, distance, angle, cell, threshold, mono, scale, strength)
+    val params = kind.params(
+        radius, amount, distance, angle, cell, threshold, mono, scale, strength,
+        count, thickness, inner, inkHex,
+    )
     val percent = { v: Float -> "${(v * 100).roundToInt()}%" }
 
     AlertDialog(
@@ -179,6 +199,38 @@ fun FilterDialog(onDismiss: () -> Unit, onApply: (FilterParams) -> Unit) {
                         stringResource(R.string.angle), angle, -180f..180f, { it.roundToInt().toString() },
                         { angle = it }, step = 1f, unit = "°",
                     )
+                    FilterKindUi.RADIAL -> {
+                        ParamSlider(
+                            stringResource(R.string.count), count, 6f..300f, { it.roundToInt().toString() },
+                            { count = it }, step = 1f,
+                        )
+                        ParamSlider(
+                            stringResource(R.string.thickness), thickness, 1f..20f, { "%.1f".format(it) },
+                            { thickness = it }, step = 0.5f, unit = "px",
+                        )
+                        ParamSlider(
+                            stringResource(R.string.inner_radius), inner, 0f..0.8f, percent,
+                            { inner = it }, step = 0.01f,
+                        )
+                    }
+                    FilterKindUi.SPEED -> {
+                        ParamSlider(
+                            stringResource(R.string.angle), angle, 0f..360f, { it.roundToInt().toString() },
+                            { angle = it }, step = 1f, unit = "°",
+                        )
+                        ParamSlider(
+                            stringResource(R.string.count), count, 4f..200f, { it.roundToInt().toString() },
+                            { count = it }, step = 1f,
+                        )
+                        ParamSlider(
+                            stringResource(R.string.thickness), thickness, 1f..20f, { "%.1f".format(it) },
+                            { thickness = it }, step = 0.5f, unit = "px",
+                        )
+                    }
+                    FilterKindUi.HALFTONE -> ParamSlider(
+                        stringResource(R.string.cell_size), cell, 2f..48f, { it.roundToInt().toString() },
+                        { cell = it }, step = 1f, unit = "px",
+                    )
                 }
                 ParamSlider(
                     stringResource(R.string.strength), strength, 0f..1f, percent,
@@ -204,6 +256,10 @@ private fun FilterKindUi.params(
     mono: Boolean,
     scale: Float,
     strength: Float,
+    count: Float,
+    thickness: Float,
+    inner: Float,
+    ink: String,
 ): FilterParams = when (this) {
     FilterKindUi.BLUR -> BlurParams(radius, strength)
     FilterKindUi.MOTION -> MotionBlurParams(distance, angle, strength)
@@ -218,4 +274,7 @@ private fun FilterKindUi.params(
     FilterKindUi.ERODE -> ErodeParams(radius.roundToInt(), strength)
     FilterKindUi.ZOOM -> ZoomBlurParams(amount, strength)
     FilterKindUi.SPIN -> SpinBlurParams(angle, strength)
+    FilterKindUi.RADIAL -> RadialLinesParams(count.roundToInt(), inner, thickness, random = 0.4f, color = ink, strength = strength)
+    FilterKindUi.SPEED -> SpeedLinesParams(angle, count.roundToInt(), thickness, length = 0.9f, color = ink, strength = strength)
+    FilterKindUi.HALFTONE -> HalftoneParams(cell.roundToInt(), ink, strength)
 }

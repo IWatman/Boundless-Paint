@@ -6,10 +6,12 @@
   padded by the filter's reach (no seams), respects the selection and alpha lock, and returns a `TilePatch` so a
   filter is one undo step.
 - Implemented: blur, motion blur, pixelate, sharpen (unsharp mask), glow/bloom, noise (mono/colour, deterministic),
-  find edges (Sobel), chromatic aberration, fisheye/pinch, dilate, erode, zoom blur, spin blur.
+  find edges (Sobel), chromatic aberration, fisheye/pinch, dilate, erode, zoom blur, spin blur, radial lines,
+  speed lines and halftone.
 - UI: Editing Tools → Filters… with a chip per filter and only the sliders it needs; the filter runs on a worker
   thread over a private copy of the layer and is committed in one history step. Strokes are ignored while it runs.
-- Tests: `FiltersTest` (18) — tiling and seams, determinism, selection/alpha lock, undo, parameter round trip.
+- Tests: `FiltersTest` (21) — tiling and seams, determinism, selection/alpha lock, undo, parameter round trip,
+  generators on an empty layer.
 
 ### Liquify, text, shortcuts (2026-10-31)
 - Liquify: `core/liquify/LiquifySession` pushes pixels along the drag with a smooth falloff and keeps the original

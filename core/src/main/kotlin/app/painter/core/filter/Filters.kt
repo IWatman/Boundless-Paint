@@ -14,6 +14,7 @@ import kotlin.math.abs
 import kotlin.math.ceil
 import kotlin.math.cos
 import kotlin.math.floor
+import kotlin.math.hypot
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.pow
@@ -43,7 +44,11 @@ object Filters {
         alphaLock: Boolean = false,
         threads: Int = StrokeContext.defaultThreads(),
     ): TilePatch {
-        val content = grid.bounds() ?: return TilePatch(layerId, emptyMap(), emptyMap())
+        val content = if (params.coversCanvas) {
+            IntRect(0, 0, grid.width, grid.height)
+        } else {
+            grid.bounds() ?: return TilePatch(layerId, emptyMap(), emptyMap())
+        }
         val canvas = IntRect(0, 0, grid.width, grid.height)
         val reach = params.reach.coerceAtLeast(0)
         val padded = IntRect(
@@ -198,6 +203,9 @@ object Filters {
         is ErodeParams -> mix(src, morph(src, w, h, params.radius, dilate = false), params.strength)
         is ZoomBlurParams -> mix(src, zoomBlur(src, w, h, ox, oy, geometry, params), params.strength)
         is SpinBlurParams -> mix(src, spinBlur(src, w, h, ox, oy, geometry, params), params.strength)
+        is RadialLinesParams -> mix(src, radialLines(src, w, h, ox, oy, geometry, params), params.strength)
+        is SpeedLinesParams -> mix(src, speedLines(src, w, h, ox, oy, geometry, params), params.strength)
+        is HalftoneParams -> mix(src, halftone(src, w, h, ox, oy, params), params.strength)
     }
 
     /** `a·(1-t) + b·t` per channel, clamped to a non-negative premultiplied pixel. */
@@ -571,6 +579,176 @@ object Filters {
             out[i] = r / samples; out[i + 1] = g / samples; out[i + 2] = b / samples; out[i + 3] = a / samples
         }
         return out
+    }
+
+    // ---------------------------------------------------------------- generators (draw)
+
+    /** Radial strokes from the content centre: [RadialLinesParams]. */
+    private fun radialLines(
+        src: FloatArray,
+        w: Int,
+        h: Int,
+        ox: Int,
+        oy: Int,
+        g: Geometry,
+        p: RadialLinesParams,
+    ): FloatArray {
+        val out = src.copyOf()
+        val ink = ink(p.color)
+        val count = p.count.coerceIn(2, 500)
+        val inner = g.radius * p.inner.coerceIn(0f, 0.8f)
+        val random = p.random.coerceIn(0f, 1f)
+        val thickness = p.thickness.coerceIn(0.5f, 40f)
+        val twoPi = (Math.PI * 2).toFloat()
+        for (i in 0 until count) {
+            val jitter = (hash(i, 0, p.seed) + 1f) * 0.5f
+            val a = twoPi * i / count + twoPi / count * 0.5f * jitter
+            val len = g.radius * (1f - random * ((hash(i, 1, p.seed) + 1f) * 0.5f))
+            drawLine(
+                out, w, h, ox, oy,
+                g.cx + cos(a) * inner, g.cy + sin(a) * inner,
+                g.cx + cos(a) * len, g.cy + sin(a) * len,
+                thickness / 2f, ink,
+            )
+        }
+        return out
+    }
+
+    /** Parallel lines across the canvas at [SpeedLinesParams.angleDeg]. */
+    private fun speedLines(
+        src: FloatArray,
+        w: Int,
+        h: Int,
+        ox: Int,
+        oy: Int,
+        g: Geometry,
+        p: SpeedLinesParams,
+    ): FloatArray {
+        val out = src.copyOf()
+        val ink = ink(p.color)
+        val count = p.count.coerceIn(2, 400)
+        val thickness = p.thickness.coerceIn(0.5f, 40f)
+        val a = Math.toRadians(p.angleDeg.toDouble()).toFloat()
+        val dx = cos(a)
+        val dy = sin(a)
+        val nx = -dy
+        val ny = dx
+        val half = g.radius * 1.5f
+        val spacing = 2f * half / count
+        val len = half * p.length.coerceIn(0.2f, 1f)
+        for (i in 0 until count) {
+            val off = -half + (i + 0.5f) * spacing + hash(i, 0, p.seed) * spacing * 0.25f
+            val cx = g.cx + nx * off
+            val cy = g.cy + ny * off
+            drawLine(out, w, h, ox, oy, cx - dx * len, cy - dy * len, cx + dx * len, cy + dy * len, thickness / 2f, ink)
+        }
+        return out
+    }
+
+    /** Luminance halftone: a dot per [HalftoneParams.cell] px, darker cells get bigger dots. */
+    private fun halftone(
+        src: FloatArray,
+        w: Int,
+        h: Int,
+        ox: Int,
+        oy: Int,
+        p: HalftoneParams,
+    ): FloatArray {
+        val cell = p.cell.coerceIn(2, 64)
+        val ink = ink(p.color)
+        val out = FloatArray(src.size)
+        val gx0 = (ox / cell) * cell
+        val gy0 = (oy / cell) * cell
+        for (cy in gy0 until oy + h step cell) {
+            for (cx in gx0 until ox + w step cell) {
+                val xa = max(cx, ox)
+                val xb = min(cx + cell, ox + w)
+                val ya = max(cy, oy)
+                val yb = min(cy + cell, oy + h)
+                if (xb <= xa || yb <= ya) continue
+                var lum = 0f
+                var alpha = 0f
+                var n = 0
+                for (y in ya until yb) for (x in xa until xb) {
+                    val i = ((y - oy) * w + (x - ox)) * 4
+                    val a = src[i + 3]
+                    if (a > 0f) {
+                        lum += (0.3f * src[i] + 0.59f * src[i + 1] + 0.11f * src[i + 2]) / a
+                        alpha += a
+                    }
+                    n++
+                }
+                if (n == 0 || alpha <= 0f) continue
+                lum = (lum / (alpha.coerceAtLeast(1e-4f))).coerceIn(0f, 1f)
+                val meanAlpha = (alpha / n).coerceIn(0f, 1f)
+                // Darker cell -> bigger dot (a dot of radius cell/2 covers everything at black).
+                val radius = cell / 2f * sqrt(1f - lum)
+                if (radius <= 0.05f) continue
+                val ccx = cx + cell / 2f
+                val ccy = cy + cell / 2f
+                for (y in ya until yb) for (x in xa until xb) {
+                    val dx = x + 0.5f - ccx
+                    val dy = y + 0.5f - ccy
+                    val cov = (radius + 0.5f - sqrt(dx * dx + dy * dy)).coerceIn(0f, 1f)
+                    if (cov <= 0f) continue
+                    val i = ((y - oy) * w + (x - ox)) * 4
+                    val a = cov * meanAlpha
+                    out[i] = ink[0] * a
+                    out[i + 1] = ink[1] * a
+                    out[i + 2] = ink[2] * a
+                    out[i + 3] = a
+                }
+            }
+        }
+        return out
+    }
+
+    /** "#RRGGBB" to straight (not premultiplied) rgb in 0..1; malformed input is black. */
+    private fun ink(hex: String): FloatArray {
+        val h = hex.removePrefix("#")
+        val v = if (h.length == 6) h.toLongOrNull(16) ?: 0L else 0L
+        return floatArrayOf(((v shr 16) and 0xFF) / 255f, ((v shr 8) and 0xFF) / 255f, (v and 0xFF) / 255f)
+    }
+
+    /** Anti-aliased round-cap segment stamped into a premultiplied patch buffer, clipped to the patch. */
+    private fun drawLine(
+        out: FloatArray,
+        w: Int,
+        h: Int,
+        ox: Int,
+        oy: Int,
+        x0: Float,
+        y0: Float,
+        x1: Float,
+        y1: Float,
+        radius: Float,
+        ink: FloatArray,
+    ) {
+        val dx = x1 - x0
+        val dy = y1 - y0
+        val len = hypot(dx, dy)
+        if (len < 0.01f || radius <= 0f) return
+        val steps = ceil(len / (radius.coerceAtLeast(0.5f) * 0.5f)).toInt().coerceIn(1, 4096)
+        for (s in 0..steps) {
+            val t = s / steps.toFloat()
+            val px = x0 + dx * t
+            val py = y0 + dy * t
+            val xa = max((px - radius).toInt(), ox)
+            val xb = min((px + radius).toInt() + 1, ox + w)
+            val ya = max((py - radius).toInt(), oy)
+            val yb = min((py + radius).toInt() + 1, oy + h)
+            if (xb <= xa || yb <= ya) continue
+            for (y in ya until yb) for (x in xa until xb) {
+                val d = hypot(x + 0.5f - px, y + 0.5f - py)
+                val cov = (radius + 0.5f - d).coerceIn(0f, 1f)
+                if (cov <= 0f) continue
+                val i = ((y - oy) * w + (x - ox)) * 4
+                out[i] = ink[0] * cov + out[i] * (1f - cov)
+                out[i + 1] = ink[1] * cov + out[i + 1] * (1f - cov)
+                out[i + 2] = ink[2] * cov + out[i + 2] * (1f - cov)
+                out[i + 3] = cov + out[i + 3] * (1f - cov)
+            }
+        }
     }
 
     /** Bilinear sample of a premultiplied patch, clamped to its edges. */

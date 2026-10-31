@@ -13,6 +13,12 @@ import kotlin.math.ceil
 sealed class FilterParams {
     abstract val kind: String
     abstract val reach: Int
+
+    /**
+     * True for generators that draw over the whole canvas (or selection) instead of filtering the painted
+     * pixels: an empty layer is still a valid target for them.
+     */
+    open val coversCanvas: Boolean get() = false
 }
 
 /** Gaussian-like blur: three box passes of [radius] px. [strength] mixes the result with the source. */
@@ -175,4 +181,53 @@ data class SpinBlurParams(
 ) : FilterParams() {
     override val kind: String get() = "spin-blur"
     override val reach: Int get() = 256
+}
+
+/** Radial lines from the centre of the canvas (a Draw generator). */
+@Serializable
+@SerialName("radial-lines")
+data class RadialLinesParams(
+    val count: Int = 60,
+    /** Inner radius as a fraction of the content radius (0..0.8). */
+    val inner: Float = 0.15f,
+    val thickness: Float = 2f,
+    /** Length randomness 0..1: 0 = all lines reach the edge. */
+    val random: Float = 0.4f,
+    val color: String = "#000000",
+    val seed: Long = 1L,
+    val strength: Float = 1f,
+) : FilterParams() {
+    override val kind: String get() = "radial-lines"
+    override val reach: Int get() = 0
+    override val coversCanvas: Boolean get() = true
+}
+
+/** Parallel speed lines across the canvas at [angleDeg] (a Draw generator). */
+@Serializable
+@SerialName("speed-lines")
+data class SpeedLinesParams(
+    val angleDeg: Float = 0f,
+    val count: Int = 40,
+    val thickness: Float = 2f,
+    /** Length as a fraction of the canvas diagonal (0.2..1). */
+    val length: Float = 0.9f,
+    val color: String = "#000000",
+    val seed: Long = 1L,
+    val strength: Float = 1f,
+) : FilterParams() {
+    override val kind: String get() = "speed-lines"
+    override val reach: Int get() = 0
+    override val coversCanvas: Boolean get() = true
+}
+
+/** Halftone: the layer's luminance becomes dots of [color] on white, one dot per [cell] px. */
+@Serializable
+@SerialName("halftone")
+data class HalftoneParams(
+    val cell: Int = 8,
+    val color: String = "#000000",
+    val strength: Float = 1f,
+) : FilterParams() {
+    override val kind: String get() = "halftone"
+    override val reach: Int get() = 0
 }
