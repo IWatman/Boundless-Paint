@@ -192,4 +192,29 @@ class ShapeTest {
         val flat = p.flatten()
         near(Vec2(0f, 0f), flat.first()); near(Vec2(100f, 100f), flat.last())
     }
+
+    @Test
+    fun newShapeToolsCreateClosedOutlines() {
+        val rounded = ShapeFactory.fromDrag(
+            ShapeTool.ROUNDED_RECT, Vec2(10f, 10f), Vec2(110f, 70f),
+        ) as Shape.RoundedRect
+        assertTrue(rounded.closed)
+        assertTrue(rounded.outline().size >= 20)
+        assertEquals(10.8f, rounded.r, 0.01f)
+
+        val arrow = ShapeFactory.fromDrag(ShapeTool.ARROW, Vec2(0f, 0f), Vec2(100f, 0f)) as Shape.Arrow
+        assertTrue(arrow.closed)
+        assertEquals(7, arrow.outline().size)
+        assertTrue(arrow.outline().maxOf { it.x } >= 99f)
+
+        val balloon = ShapeFactory.fromDrag(ShapeTool.BALLOON, Vec2(100f, 100f), Vec2(150f, 100f)) as Shape.Balloon
+        assertTrue(balloon.closed)
+        assertTrue(balloon.outline().size > 12)
+        assertTrue(balloon.outline().any { it.y > 150f }, "the tail points below the body")
+
+        val moved = ShapeHandles.move(arrow, Vec2(5f, 7f)) as Shape.Arrow
+        near(Vec2(5f, 7f), moved.start)
+        val handles = ShapeHandles.handles(balloon)
+        assertTrue(handles.any { it.kind == HandleKind.CORNER })
+    }
 }

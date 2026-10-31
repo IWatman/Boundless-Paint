@@ -572,4 +572,7 @@
     <string name="adjust_kind_threshold">Threshold</string>
     <string name="adjust_kind_black_white">Black &amp; white</string>
     <string name="in_development">In development</string>
+    <string name="shape_rounded_rect">Rounded rectangle</string>
+    <string name="shape_arrow">Arrow</string>
+    <string name="shape_balloon">Speech balloon</string>
 </resources>

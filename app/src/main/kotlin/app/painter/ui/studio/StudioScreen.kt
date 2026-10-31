@@ -385,9 +385,12 @@ private fun perspectiveToggle(current: PerspectiveUi?, type: PerspectiveType): P
 private val SHAPE_MENU = listOf(
     ShapeTool.LINE to R.string.shape_line,
     ShapeTool.RECT to R.string.shape_rect,
+    ShapeTool.ROUNDED_RECT to R.string.shape_rounded_rect,
     ShapeTool.ELLIPSE to R.string.shape_ellipse,
     ShapeTool.POLYGON to R.string.shape_polygon,
     ShapeTool.ARC to R.string.shape_arc,
+    ShapeTool.ARROW to R.string.shape_arrow,
+    ShapeTool.BALLOON to R.string.shape_balloon,
 )
 
 /** Checkable creative-tools item of perspective [type]; [active] draws the check mark. */

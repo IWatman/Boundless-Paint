@@ -38,6 +38,97 @@ sealed interface Shape {
         fun corners(): List<Vec2> = LOCAL_CORNERS.map { (sx, sy) -> toWorld(center, rot, Vec2(sx * w / 2, sy * h / 2)) }
     }
 
+    /** Rectangle with rounded corners; [radius] is clamped to half of the shorter side. */
+    data class RoundedRect(
+        val center: Vec2,
+        val w: Float,
+        val h: Float,
+        val radius: Float,
+        val rot: Float = 0f,
+    ) : Shape {
+        override val closed get() = true
+
+        val r: Float get() = radius.coerceIn(0f, minOf(abs(w), abs(h)) / 2f)
+
+        override fun outline(tolerance: Float): List<Vec2> {
+            val hw = w / 2f
+            val hh = h / 2f
+            val rr = r
+            val out = ArrayList<Vec2>(4 * 9)
+            // Clockwise: left-top, top-right, right-bottom, bottom-left quarter arcs.
+            val corners = listOf(
+                Vec2(-hw + rr, -hh + rr) to 180f,
+                Vec2(hw - rr, -hh + rr) to 270f,
+                Vec2(hw - rr, hh - rr) to 0f,
+                Vec2(-hw + rr, hh - rr) to 90f,
+            )
+            val steps = 6
+            for ((c, start) in corners) {
+                for (k in 0..steps) {
+                    val a = Math.toRadians((start + 90f * k / steps).toDouble())
+                    out.add(toWorld(center, rot, Vec2((c.x + rr * cos(a)).toFloat(), (c.y + rr * sin(a)).toFloat())))
+                }
+            }
+            return out
+        }
+    }
+
+    /** Filled arrow from [start] to [end]; [thickness] is the shaft width. */
+    data class Arrow(
+        val start: Vec2,
+        val end: Vec2,
+        val thickness: Float = 12f,
+    ) : Shape {
+        override val closed get() = true
+
+        override fun outline(tolerance: Float): List<Vec2> {
+            val d = end - start
+            val len = d.len
+            if (len < 1e-3f) return listOf(start, end)
+            val u = d * (1f / len)
+            val n = Vec2(-u.y, u.x)
+            val shaft = (thickness.coerceAtLeast(1f) / 2f).coerceAtMost(len * 0.4f)
+            val headHalf = (shaft * 2.4f).coerceAtMost(len * 0.55f)
+            val headLen = (shaft * 3.2f).coerceIn(2f, len * 0.65f)
+            val base = end - u * headLen
+            return listOf(
+                start + n * shaft,
+                base + n * shaft,
+                base + n * headHalf,
+                end,
+                base - n * headHalf,
+                base - n * shaft,
+                start - n * shaft,
+            )
+        }
+    }
+
+    /** Speech balloon: an ellipse with a pointed tail at [tail] (a local offset from the centre). */
+    data class Balloon(
+        val center: Vec2,
+        val rx: Float,
+        val ry: Float,
+        val tail: Vec2 = Vec2(0f, 0f),
+        val rot: Float = 0f,
+    ) : Shape {
+        override val closed get() = true
+
+        override fun outline(tolerance: Float): List<Vec2> {
+            val out = ArrayList<Vec2>()
+            val gap = 0.35
+            val tailAngle = Math.PI * 0.75
+            val start = tailAngle + gap
+            val end = tailAngle + Math.PI * 2 - gap
+            val n = segmentsFor(max(abs(rx), abs(ry)), end - start, tolerance).coerceAtLeast(12)
+            for (k in 0..n) {
+                val a = start + (end - start) * k / n
+                out.add(toWorld(center, rot, Vec2((rx * cos(a)).toFloat(), (ry * sin(a)).toFloat())))
+            }
+            out.add(toWorld(center, rot, tail))
+            return out
+        }
+    }
+
     /** Ellipse with semi-axes [rx] (along [rot]) and [ry]. */
     data class Ellipse(val center: Vec2, val rx: Float, val ry: Float, val rot: Float = 0f) : Shape {
         override val closed get() = true

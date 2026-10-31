@@ -35,7 +35,7 @@ object Constrain {
 }
 
 /** Kinds of shapes that the Shape tool creates (spec G3.1). */
-enum class ShapeTool { LINE, RECT, ELLIPSE, POLYGON, ARC }
+enum class ShapeTool { LINE, RECT, ROUNDED_RECT, ELLIPSE, POLYGON, ARC, ARROW, BALLOON }
 
 /** Creates shapes from the initial drag (spec G3.1 table, column «Creation»). */
 object ShapeFactory {
@@ -51,6 +51,18 @@ object ShapeFactory {
             }
             Shape.Rect(Vec2(start.x + dx / 2, start.y + dy / 2), abs(dx), abs(dy))
         }
+        ShapeTool.ROUNDED_RECT -> {
+            var dx = end.x - start.x; var dy = end.y - start.y
+            if (constrain) {
+                val m = max(abs(dx), abs(dy)); dx = sgn(dx) * m; dy = sgn(dy) * m
+            }
+            val w = abs(dx)
+            val h = abs(dy)
+            Shape.RoundedRect(
+                Vec2(start.x + dx / 2, start.y + dy / 2), w, h,
+                radius = minOf(w, h) * 0.18f,
+            )
+        }
         ShapeTool.ELLIPSE -> {
             val r = start.dist(end)
             Shape.Ellipse(start, r, r)
@@ -64,6 +76,16 @@ object ShapeFactory {
             val chord = end - start
             val mid = lerp(start, end, 0.5f) + chord.perp() * ARC_SAG
             Shape.Arc(start, end, mid)
+        }
+        ShapeTool.ARROW -> {
+            val stop = if (constrain) Constrain.snapDirection(start, end) else end
+            val len = start.dist(stop)
+            Shape.Arrow(start, stop, thickness = (len * 0.09f).coerceIn(3f, 60f))
+        }
+        ShapeTool.BALLOON -> {
+            val r = start.dist(end).coerceAtLeast(2f)
+            val ry = r * 0.72f
+            Shape.Balloon(start, r, ry, tail = Vec2(-r * 0.45f, ry * 1.6f))
         }
     }
 
@@ -95,6 +117,12 @@ object ShapeHandles {
             Handle(HandleKind.MOVE, lerp(shape.a, shape.b, 0.5f)),
         )
         is Shape.Rect -> frameHandles(shape.center, shape.w, shape.h, shape.rot, screenToDoc)
+        is Shape.RoundedRect -> frameHandles(shape.center, shape.w, shape.h, shape.rot, screenToDoc)
+        is Shape.Arrow -> listOf(
+            Handle(HandleKind.END_A, shape.start), Handle(HandleKind.END_B, shape.end),
+            Handle(HandleKind.MOVE, lerp(shape.start, shape.end, 0.5f)),
+        )
+        is Shape.Balloon -> frameHandles(shape.center, 2 * shape.rx, 2 * shape.ry, shape.rot, screenToDoc)
         is Shape.Ellipse -> buildList {
             add(Handle(HandleKind.RX, toWorld(shape.center, shape.rot, Vec2(shape.rx, 0f))))
             add(Handle(HandleKind.RY, toWorld(shape.center, shape.rot, Vec2(0f, shape.ry))))
@@ -140,6 +168,9 @@ object ShapeHandles {
     fun move(shape: Shape, delta: Vec2): Shape = when (shape) {
         is Shape.Line -> Shape.Line(shape.a + delta, shape.b + delta)
         is Shape.Rect -> shape.copy(center = shape.center + delta)
+        is Shape.RoundedRect -> shape.copy(center = shape.center + delta)
+        is Shape.Arrow -> shape.copy(start = shape.start + delta, end = shape.end + delta)
+        is Shape.Balloon -> shape.copy(center = shape.center + delta)
         is Shape.Ellipse -> shape.copy(center = shape.center + delta)
         is Shape.Polygon -> shape.copy(center = shape.center + delta)
         is Shape.Arc -> Shape.Arc(shape.start + delta, shape.end + delta, shape.mid + delta)
@@ -164,6 +195,31 @@ object ShapeHandles {
                 HandleKind.CORNER, HandleKind.SIDE -> {
                     val f = dragFrame(shape.center, shape.w, shape.h, shape.rot, handle, to, constrain)
                     Shape.Rect(f.first, f.second.x, f.second.y, shape.rot)
+                }
+                else -> shape
+            }
+            is Shape.RoundedRect -> when (handle.kind) {
+                HandleKind.ROTATE -> shape.copy(rot = rotateAngle(shape.center, to, constrain))
+                HandleKind.CORNER, HandleKind.SIDE -> {
+                    val f = dragFrame(shape.center, shape.w, shape.h, shape.rot, handle, to, constrain)
+                    Shape.RoundedRect(f.first, f.second.x, f.second.y, shape.radius, shape.rot)
+                }
+                else -> shape
+            }
+            is Shape.Arrow -> when (handle.kind) {
+                HandleKind.END_A -> shape.copy(start = if (constrain) Constrain.snapDirection(shape.end, to) else to)
+                HandleKind.END_B -> shape.copy(end = if (constrain) Constrain.snapDirection(shape.start, to) else to)
+                else -> shape
+            }
+            is Shape.Balloon -> when (handle.kind) {
+                HandleKind.ROTATE -> shape.copy(rot = rotateAngle(shape.center, to, constrain))
+                HandleKind.CORNER, HandleKind.SIDE -> {
+                    val f = dragFrame(shape.center, 2 * shape.rx, 2 * shape.ry, shape.rot, handle, to, constrain)
+                    Shape.Balloon(
+                        f.first, f.second.x / 2, f.second.y / 2,
+                        tail = Vec2(shape.tail.x * f.second.x / (2 * shape.rx), shape.tail.y * f.second.y / (2 * shape.ry)),
+                        rot = shape.rot,
+                    )
                 }
                 else -> shape
             }
