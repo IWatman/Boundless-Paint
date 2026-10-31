@@ -16,6 +16,7 @@ import app.painter.core.shape.ShapeTool
 import app.painter.core.stroke.BrushParams
 import app.painter.core.symmetry.MirrorAxes
 import app.painter.core.symmetry.SymmetryType
+import app.painter.studio.ExportOptions
 import app.painter.studio.StylusSettings
 
 /** Brush mode of the main toolbar. */
@@ -161,6 +162,12 @@ data class StudioUiState(
     val layerLimit: Int = 32,
     val paperColor: Rgba = Rgba.WHITE,
     val paperVisible: Boolean = true,
+    /** Document toggle "gamma-correct": blend in linear light (spec/blend-and-color.md). */
+    val gammaCorrect: Boolean = false,
+    /** Studio backdrop around the canvas: light #D0D0D0 instead of the dark #2B2B2B. */
+    val lightBackground: Boolean = false,
+    /** A finger double tap fits the canvas (spec/tools/m0-m1-tools.md T1). */
+    val doubleTapFits: Boolean = true,
     val viewZoom: Float = 1f,
     /** Active tool; [ToolUi.BRUSH] paints, the SELECT_* tools drag a selection. */
     val tool: ToolUi = ToolUi.BRUSH,
@@ -558,9 +565,19 @@ interface StudioActions {
 
     fun setPaperColor(color: Rgba) {}
     fun setPaperVisible(visible: Boolean) {}
+    /** Light or dark backdrop around the canvas (view setting, kept across sessions). */
+    fun setLightBackground(light: Boolean) {}
+    /** Whether a finger double tap fits the canvas (view setting, kept across sessions). */
+    fun setDoubleTapFits(enabled: Boolean) {}
+    /** Document toggle "gamma-correct": blend layers in linear light (saved with the project). */
+    fun setGammaCorrect(on: Boolean) {}
     fun openHome()
     fun save()
     fun exportImage()
+    /** Starts the export with the options of the dialog; the activity opens the system file picker. */
+    fun startExport(options: ExportOptions) {}
+    /** Closes the export dialog without exporting. */
+    fun dismissExport() {}
     fun openEditingTools()
     fun openOptions()
     fun openSettings() {}
@@ -638,6 +655,11 @@ open class NoOpStudioActions : StudioActions {
     override fun openHome() {}
     override fun save() {}
     override fun exportImage() {}
+    override fun startExport(options: ExportOptions) {}
+    override fun dismissExport() {}
+    override fun setLightBackground(light: Boolean) {}
+    override fun setDoubleTapFits(enabled: Boolean) {}
+    override fun setGammaCorrect(on: Boolean) {}
     override fun openEditingTools() {}
     override fun openOptions() {}
     override fun addColorToPalette(color: Rgba) {}

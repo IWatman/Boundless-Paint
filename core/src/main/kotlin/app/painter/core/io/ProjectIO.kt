@@ -99,6 +99,7 @@ object ProjectIO {
         val doc = Document(m.width, m.height, id = m.id, name = m.name, type = type, dpi = m.dpi)
         doc.created = m.created
         doc.modified = m.modified
+        doc.gammaCorrect = m.gammaCorrect
         doc.paper.color = parseHex(m.paper.color) ?: Rgba.WHITE
         doc.paper.visible = m.paper.visible
         doc.paper.textureId = m.paper.textureId
@@ -341,6 +342,8 @@ object ProjectIO {
         width = doc.width,
         height = doc.height,
         dpi = doc.dpi,
+        colorMode = "rgb",
+        gammaCorrect = doc.gammaCorrect,
         created = doc.created,
         modified = doc.modified,
         paper = PaperDto(

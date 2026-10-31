@@ -18,6 +18,9 @@ import kotlin.math.max
  *   until the finger moves more than [FINGER_START_SLOP_PX]; a finger that stays still for
  *   [LONG_PRESS_MS] fires [CanvasInputListener.onLongPress] instead, and a quick still tap
  *   produces a dot stroke. Long-press is finger-only.
+ * - The dot of a still finger tap is drawn [DOUBLE_TAP_MS] after the finger lifts: a second tap within
+ *   that window and [DOUBLE_TAP_SLOP_PX] of the first is a double tap, which fits the canvas
+ *   (spec/tools/m0-m1-tools.md T1) and draws no dot.
  * - A second finger within [CANCEL_WINDOW_MS] of stroke start (stroke moved less than
  *   [TAP_SLOP_PX]) cancels the stroke and starts navigation.
  * - Two pointers: pan + pinch-zoom + rotate around the centroid; rotation snaps to multiples of
@@ -51,6 +54,12 @@ class GestureRouter(private val view: View, private val host: Host) {
 
     /** Emits motion-predicted points (predicted = true) after the real samples of each move. */
     var predictionEnabled: Boolean = true
+
+    /**
+     * True when a double tap with one finger fits the canvas (spec/tools/m0-m1-tools.md T1). Turned off by
+     * the studio's view settings; a stylus is never affected, its taps always draw.
+     */
+    var doubleTapFits: Boolean = true
 
     /**
      * Stylus settings of the session (spec/tools/m2-brush.md §4.3): the pen button assignments, the finger
@@ -162,6 +171,51 @@ class GestureRouter(private val view: View, private val host: Host) {
         }
     }
 
+    /**
+     * Points of a still finger tap whose dot is not drawn yet: it waits [DOUBLE_TAP_MS], so the second tap of
+     * a double tap can fit the canvas instead. Empty while no dot is pending.
+     */
+    private var tapPoints: List<InputPoint> = emptyList()
+    private var tapDescriptor = CanvasInputListener.DEVICE_DEFAULT
+    private var tapUpTime = 0L
+    private var tapUpX = 0f
+    private var tapUpY = 0f
+    private val tapDotRunnable = Runnable { commitTapDot() }
+
+    /** Draws the dot of a still finger tap once its double-tap window has run out. */
+    private fun commitTapDot() {
+        view.removeCallbacks(tapDotRunnable)
+        val pts = tapPoints
+        tapPoints = emptyList()
+        val l = host.listener ?: return
+        if (pts.isEmpty()) return
+        l.onStrokeBegin(pts[0], tapDescriptor)
+        if (pts.size > 1) l.onStrokeMove(ArrayList(pts.subList(1, pts.size)))
+        l.onStrokeEnd()
+        traceStroke("end(tap)")
+    }
+
+    /** Drops a pending tap dot: the tap turned out to be the first half of a double tap. */
+    private fun dropTapDot() {
+        view.removeCallbacks(tapDotRunnable)
+        tapPoints = emptyList()
+    }
+
+    /**
+     * Fits the canvas when a finger touches down within [DOUBLE_TAP_MS] and [DOUBLE_TAP_SLOP_PX] of a tap whose
+     * dot is still pending; the whole gesture is then ignored, so the double tap draws nothing.
+     */
+    private fun consumeDoubleTap(e: MotionEvent): Boolean {
+        if (!doubleTapFits || tapPoints.isEmpty()) return false
+        if (e.eventTime - tapUpTime > DOUBLE_TAP_MS) return false
+        if (hypot(e.x - tapUpX, e.y - tapUpY) > DOUBLE_TAP_SLOP_PX) return false
+        dropTapDot()
+        state = State.IGNORE
+        trace("fit(double tap)")
+        host.requestFit()
+        return true
+    }
+
     /** Handles one touch event; always consumes it. */
     fun onTouchEvent(e: MotionEvent): Boolean {
         // Hover and button events arrive here too (CanvasView.onPenInAir); the predictor
@@ -217,6 +271,12 @@ class GestureRouter(private val view: View, private val host: Host) {
 
     private fun onDown(e: MotionEvent) {
         view.removeCallbacks(longPressRunnable)
+        val downTool = e.getToolType(0)
+        val downIsFinger = downTool == MotionEvent.TOOL_TYPE_FINGER || downTool == MotionEvent.TOOL_TYPE_UNKNOWN
+        // A second finger tap of a double tap fits the canvas and draws nothing; the pen is never affected.
+        if (downIsFinger && consumeDoubleTap(e)) return
+        // Any other touch lands a tap dot that is still waiting for its double-tap window.
+        commitTapDot()
         pending.clear()
         extraId = -1
         navActive = false
@@ -228,7 +288,7 @@ class GestureRouter(private val view: View, private val host: Host) {
         strokeDescriptor = e.device?.descriptor ?: CanvasInputListener.DEVICE_DEFAULT
         strokeStart = e.eventTime
         strokeMaxMove = 0f
-        val tool = e.getToolType(0)
+        val tool = downTool
         if (host.listener?.toolActive == true) {
             // Selection-style tool: raw single-pointer input in document coordinates.
             state = State.TOOL
@@ -390,11 +450,16 @@ class GestureRouter(private val view: View, private val host: Host) {
         val l = host.listener
         when (state) {
             State.PENDING -> {
-                if (pending.isNotEmpty() && l != null) {
-                    l.onStrokeBegin(pending[0], strokeDescriptor)
-                    if (pending.size > 1) l.onStrokeMove(ArrayList(pending.subList(1, pending.size)))
-                    l.onStrokeEnd()
-                    traceStroke("end(tap)")
+                // The dot is deferred by [DOUBLE_TAP_MS]: a second tap in that window fits instead (see onDown).
+                val pts = ArrayList(pending)
+                pending.clear()
+                if (pts.isNotEmpty() && l != null) {
+                    tapPoints = pts
+                    tapDescriptor = strokeDescriptor
+                    tapUpTime = e.eventTime
+                    tapUpX = e.x
+                    tapUpY = e.y
+                    view.postDelayed(tapDotRunnable, DOUBLE_TAP_MS)
                 }
             }
             State.STROKE -> {
@@ -429,6 +494,7 @@ class GestureRouter(private val view: View, private val host: Host) {
 
     private fun onCancel() {
         view.removeCallbacks(longPressRunnable)
+        dropTapDot()
         if (state == State.STROKE) { traceStroke("cancel(system)"); host.listener?.onStrokeCancel() } else if (state == State.TOOL) {
             host.listener?.onToolCancel()
         }
@@ -646,6 +712,9 @@ class GestureRouter(private val view: View, private val host: Host) {
         const val TAP_SLOP_PX = 20f
         const val FINGER_START_SLOP_PX = 4f
         const val QUICK_PINCH_RATIO = 0.8f
+        /** Delay between a still finger tap and its dot: a second tap within it is a double tap (fit). */
+        const val DOUBLE_TAP_MS = 280L
+        const val DOUBLE_TAP_SLOP_PX = 60f
         /** Pen-in-the-air actions that reach the router besides the touch stream. */
         val HOVER_OR_BUTTON = setOf(
             MotionEvent.ACTION_HOVER_ENTER, MotionEvent.ACTION_HOVER_MOVE, MotionEvent.ACTION_HOVER_EXIT,

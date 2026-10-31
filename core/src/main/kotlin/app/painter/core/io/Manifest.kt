@@ -24,6 +24,8 @@ internal data class ManifestDto(
     val height: Int,
     val dpi: Int = 300,
     val colorMode: String = "rgb",
+    /** Blend in linear light (spec/blend-and-color.md). */
+    val gammaCorrect: Boolean = false,
     val created: Long = 0,
     val modified: Long = 0,
     val paper: PaperDto = PaperDto(),

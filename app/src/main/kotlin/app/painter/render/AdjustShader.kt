@@ -34,6 +34,7 @@ internal class AdjustShader(private val linker: (String, String) -> Int) {
     private var uUseClipMask = 0
     private var uClipMaskDefault = 0
     private var uClipMaskDensity = 0
+    private var uGamma = 0
     private val one = IntArray(1)
     private var lutBuffer: FloatBuffer? = null
 
@@ -60,6 +61,7 @@ internal class AdjustShader(private val linker: (String, String) -> Int) {
         uUseClipMask = GL.glGetUniformLocation(prog, "u_useClipMask")
         uClipMaskDefault = GL.glGetUniformLocation(prog, "u_clipMaskDefault")
         uClipMaskDensity = GL.glGetUniformLocation(prog, "u_clipMaskDensity")
+        uGamma = GL.glGetUniformLocation(prog, "u_gamma")
         GL.glUseProgram(prog)
         GL.glUniform1i(uDst, UNIT_DST)
         GL.glUniform1i(uMask, UNIT_MASK)
@@ -92,6 +94,8 @@ internal class AdjustShader(private val linker: (String, String) -> Int) {
         clipMaskTex: Int,
         clipMaskDefault: Float,
         clipMaskDensity: Float,
+        /** Blend the correction in linear light (document toggle "gamma-correct"). */
+        gamma: Boolean = false,
     ) {
         bind(UNIT_DST, dst)
         bind(UNIT_MASK, maskTex)
@@ -110,6 +114,7 @@ internal class AdjustShader(private val linker: (String, String) -> Int) {
         GL.glUniform1i(uUseClipMask, if (clipMaskTex != 0) 1 else 0)
         GL.glUniform1f(uClipMaskDefault, clipMaskDefault)
         GL.glUniform1f(uClipMaskDensity, clipMaskDensity)
+        GL.glUniform1i(uGamma, if (gamma) 1 else 0)
         GL.glDrawArrays(GL.GL_TRIANGLE_STRIP, 0, 4)
     }
 
@@ -185,6 +190,7 @@ uniform int u_useClip;
 uniform int u_useClipMask;
 uniform float u_clipMaskDefault;
 uniform float u_clipMaskDensity;
+uniform int u_gamma;
 out vec4 o;
 """ + Shaders.BLEND_FUNCS + """
 /** AdjustLut.sample: entry i maps i / 1023, linear between entries. */
@@ -356,6 +362,6 @@ void main() {
     if (f <= 0.0) { o = d; return; }
     vec3 cb = clamp(d.rgb / d.a, 0.0, 1.0);
     vec4 s = adjustStraight(cb);
-    o = composite(u_mode, vec4(cb, 1.0), vec4(s.rgb * s.a, s.a) * f) * d.a;
+    o = compositeG(u_mode, vec4(cb, 1.0), vec4(s.rgb * s.a, s.a) * f, u_gamma) * d.a;
 }
 """

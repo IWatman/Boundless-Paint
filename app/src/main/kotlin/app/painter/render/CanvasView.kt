@@ -36,6 +36,13 @@ class CanvasView(context: Context) : GLSurfaceView(context) {
             router.stylusSettings = value
         }
 
+    /** True when a finger double tap fits the canvas (view settings, spec/tools/m0-m1-tools.md T1). */
+    var doubleTapFits: Boolean
+        get() = router.doubleTapFits
+        set(value) {
+            router.doubleTapFits = value
+        }
+
     private val _viewState = MutableStateFlow(ViewState(1f, 0f))
 
     /** Current zoom and rotation. */
@@ -188,6 +195,12 @@ class CanvasView(context: Context) : GLSurfaceView(context) {
         fitPending = false
         transform.fit(d.width, d.height, width, height)
         publishTransform()
+    }
+
+    /** Studio backdrop around the canvas: light #D0D0D0 or dark #2B2B2B (spec/tools/m0-m1-tools.md T1). */
+    fun setLightBackground(light: Boolean) {
+        renderer.post { it.lightBackground = light }
+        requestRender()
     }
 
     @SuppressLint("ClickableViewAccessibility")

@@ -3,6 +3,7 @@ package app.painter.core.blend
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.pow
 import kotlin.math.sqrt
 
 /**
@@ -24,8 +25,46 @@ object BlendMath {
      * Composites the premultiplied pixel `src[sOff..sOff+3]` onto `dst[dOff..dOff+3]` in place.
      * [opacity] scales the source alpha (and premultiplied color) before blending.
      * [BlendMode.PASSTHROUGH] behaves as [BlendMode.NORMAL] at pixel level.
+     *
+     * With [gamma] the blend happens in linear light (spec/blend-and-color.md, document toggle
+     * "gamma-correct"): both pixels are decoded from sRGB, blended as usual and encoded back. Off by default.
      */
-    fun blendPixel(mode: BlendMode, dst: FloatArray, dOff: Int, src: FloatArray, sOff: Int, opacity: Float) {
+    fun blendPixel(
+        mode: BlendMode,
+        dst: FloatArray,
+        dOff: Int,
+        src: FloatArray,
+        sOff: Int,
+        opacity: Float,
+        gamma: Boolean = false,
+    ) {
+        if (!gamma) {
+            blendPixelSrgb(mode, dst, dOff, src, sOff, opacity)
+            return
+        }
+        if (src[sOff + 3] * opacity <= 0f) return
+        val g = gammaPixel.get()
+        System.arraycopy(src, sOff, g.src, 0, 4)
+        System.arraycopy(dst, dOff, g.dst, 0, 4)
+        premulToLinear(g.src, 0)
+        premulToLinear(g.dst, 0)
+        blendPixelSrgb(mode, g.dst, 0, g.src, 0, opacity)
+        premulToSrgb(g.dst, 0)
+        dst[dOff] = g.dst[0]
+        dst[dOff + 1] = g.dst[1]
+        dst[dOff + 2] = g.dst[2]
+        dst[dOff + 3] = g.dst[3]
+    }
+
+    /** sRGB reference blend of [blendPixel] with `gamma = false`; all values are premultiplied sRGB. */
+    private fun blendPixelSrgb(
+        mode: BlendMode,
+        dst: FloatArray,
+        dOff: Int,
+        src: FloatArray,
+        sOff: Int,
+        opacity: Float,
+    ) {
         val srcA = src[sOff + 3]
         val aS = (srcA * opacity).coerceIn(0f, 1f)
         if (aS <= 0f) return
@@ -103,6 +142,63 @@ object BlendMath {
 
     /** Luminance used by the non-separable and masking modes: 0.3R + 0.59G + 0.11B. */
     fun lum(r: Float, g: Float, b: Float): Float = 0.3f * r + 0.59f * g + 0.11f * b
+
+    private class GammaPixel {
+        val src = FloatArray(4)
+        val dst = FloatArray(4)
+    }
+
+    private val gammaPixel = ThreadLocal.withInitial { GammaPixel() }
+
+    /** sRGB → linear light of the premultiplied pixel at [o] of [c], in place; alpha is unchanged. */
+    fun premulToLinear(c: FloatArray, o: Int = 0) {
+        val a = c[o + 3]
+        if (a <= EPS) return
+        val inv = 1f / a
+        for (k in 0..2) {
+            val u = (c[o + k] * inv).coerceIn(0f, 1f)
+            c[o + k] = srgbToLinear(u) * a
+        }
+    }
+
+    /** Inverse of [premulToLinear]: linear light → sRGB of the premultiplied pixel at [o] of [c], in place. */
+    fun premulToSrgb(c: FloatArray, o: Int = 0) {
+        val a = c[o + 3]
+        if (a <= EPS) return
+        val inv = 1f / a
+        for (k in 0..2) {
+            val u = (c[o + k] * inv).coerceIn(0f, 1f)
+            c[o + k] = linearToSrgb(u) * a
+        }
+    }
+
+    /** sRGB transfer function decode of [v] in 0..1 (IEC 61966-2-1). */
+    fun srgbToLinear(v: Float): Float =
+        if (v <= 0.04045f) v / 12.92f else ((v + 0.055f) / 1.055f).pow(2.4f)
+
+    /** sRGB transfer function encode of [v] in 0..1 (IEC 61966-2-1). */
+    fun linearToSrgb(v: Float): Float =
+        if (v <= 0.0031308f) v * 12.92f else 1.055f * v.pow(1f / 2.4f) - 0.055f
+
+    /**
+     * `dst = lerp(dst, src, t)` of two premultiplied pixels; with [gamma] the interpolation happens in
+     * linear light, like [blendPixel] (used by passthrough groups with opacity or a mask).
+     */
+    fun lerpPixel(dst: FloatArray, dOff: Int, src: FloatArray, sOff: Int, t: Float, gamma: Boolean) {
+        if (t <= 0f) return
+        if (!gamma) {
+            for (k in 0..3) dst[dOff + k] += (src[sOff + k] - dst[dOff + k]) * t
+            return
+        }
+        val g = gammaPixel.get()
+        System.arraycopy(src, sOff, g.src, 0, 4)
+        System.arraycopy(dst, dOff, g.dst, 0, 4)
+        premulToLinear(g.src, 0)
+        premulToLinear(g.dst, 0)
+        for (k in 0..3) g.dst[k] += (g.src[k] - g.dst[k]) * t
+        premulToSrgb(g.dst, 0)
+        for (k in 0..3) dst[dOff + k] = g.dst[k]
+    }
 
     /** W3C premultiplied source-over with blend result (xr, xg, xb). */
     private fun composeW3c(

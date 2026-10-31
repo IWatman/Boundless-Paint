@@ -6,6 +6,7 @@ import app.painter.core.adjust.AdjustCodec
 import app.painter.core.adjust.AdjustMath
 import app.painter.core.adjust.AdjustParams
 import app.painter.core.blend.BlendMode
+import app.painter.core.blend.BlendMath
 import app.painter.core.raster.TileGrid
 import app.painter.core.blend.Compositor
 import java.util.Locale
@@ -57,6 +58,7 @@ class BlendParityTest {
             // Exactly the state CanvasRenderer.blendPass sets for a layer without preview, clip or mask.
             val uMode = uniform(prog, "u_mode")
             val uOpacity = uniform(prog, "u_opacity")
+            val uGamma = uniform(prog, "u_gamma")
             GL.glUniform1i(uniform(prog, "u_dst"), 0)
             GL.glUniform1i(uniform(prog, "u_src"), 1)
             GL.glUniform1i(uniform(prog, "u_preview"), Shaders.PREVIEW_NONE)
@@ -82,19 +84,30 @@ class BlendParityTest {
                 for ((mi, mode) in modes.withIndex()) {
                     // Hard mix is a step at cb + cs = 1: half-float inputs land on either side of it.
                     if (mode == BlendMode.HARD_MIX && nearHardMixStep(case.dst, case.src)) continue
-                    val expected = case.out[mi]
-                    GL.glUniform1i(uMode, mode.shaderIndex)
-                    gl.draw(prog, fbo)
-                    val got = gl.readPixel(fbo, 0, 0)
-                    val err = maxDiff(got, expected)
-                    maxErr[mode.id] = maxOf(maxErr[mode.id] ?: 0f, err)
-                    val tol = tolerance(mode)
-                    if (err > tol) {
-                        failed++
-                        if (failures.size < MAX_DETAILS) {
-                            failures += "  case #$ci mode=${mode.id} opacity=${case.opacity} " +
-                                "dst=${case.dst.show()} src=${case.src.show()}: " +
-                                "gpu=${got.show()} cpu=${expected.show()} err=${err.show()} > $tol"
+                    // The same vectors in sRGB and in linear light (the document toggle, BlendMath gamma path).
+                    for (gammaOn in GAMMA_MODES) {
+                        val expected = if (gammaOn) {
+                            val cpu = case.dst.copyOf()
+                            BlendMath.blendPixel(mode, cpu, 0, case.src, 0, case.opacity, gamma = true)
+                            cpu
+                        } else {
+                            case.out[mi]
+                        }
+                        val label = if (gammaOn) "${mode.id}+gamma" else mode.id
+                        GL.glUniform1i(uGamma, if (gammaOn) 1 else 0)
+                        GL.glUniform1i(uMode, mode.shaderIndex)
+                        gl.draw(prog, fbo)
+                        val got = gl.readPixel(fbo, 0, 0)
+                        val err = maxDiff(got, expected)
+                        maxErr[label] = maxOf(maxErr[label] ?: 0f, err)
+                        val tol = tolerance(mode) * if (gammaOn) GAMMA_TOLERANCE_SCALE else 1f
+                        if (err > tol) {
+                            failed++
+                            if (failures.size < MAX_DETAILS) {
+                                failures += "  case #$ci mode=$label opacity=${case.opacity} " +
+                                    "dst=${case.dst.show()} src=${case.src.show()}: " +
+                                    "gpu=${got.show()} cpu=${expected.show()} err=${err.show()} > $tol"
+                            }
                         }
                     }
                 }
@@ -278,5 +291,8 @@ class BlendParityTest {
     private companion object {
         const val ADJUST_TOLERANCE = 1e-2f
         const val MAX_DETAILS = 12
+        /** Tolerances of the linear-light pass: the encode slope near black amplifies half-float steps. */
+        val GAMMA_MODES = booleanArrayOf(false, true)
+        const val GAMMA_TOLERANCE_SCALE = 4f
     }
 }

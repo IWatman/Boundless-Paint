@@ -61,6 +61,7 @@ class ProjectIOTest {
         doc.modified = 2_000L
         doc.paper.color = Rgba(0.2f, 0.4f, 0.6f, 1f)
         doc.paper.visible = false
+        doc.gammaCorrect = true
 
         val bottom = RasterLayer("l-bottom", "Bottom", TileGrid(600, 300))
         bottom.pixels.put(TileKey(0, 0), randomTile(rnd))
@@ -145,6 +146,7 @@ class ProjectIOTest {
         assertEquals(a.modified, b.modified)
         assertEquals(a.activeId, b.activeId)
         assertEquals(a.activeTarget, b.activeTarget)
+        assertEquals(a.gammaCorrect, b.gammaCorrect)
         assertEquals(a.guides, b.guides)
         assertEquals(a.selection.active, b.selection.active)
         assertEquals(a.selection.mask.keys().filter { !a.selection.mask.get(it)!!.isEmpty() }.toSet(), b.selection.mask.keys())

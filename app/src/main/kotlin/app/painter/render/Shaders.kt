@@ -119,6 +119,27 @@ vec4 composite(int m, vec4 d, vec4 s) {
     vec3 b = clamp(blendFn(m, clamp(cb, 0.0, 1.0), clamp(cs, 0.0, 1.0)), 0.0, 1.0);
     return vec4((1.0 - ab) * s.rgb + as * ab * b + (1.0 - as) * d.rgb, ao);
 }
+
+/** sRGB -> linear light, premultiplied in and out; alpha is unchanged. */
+vec4 gammaDecode(vec4 c) {
+    if (c.a <= 0.0) return c;
+    vec3 u = clamp(c.rgb / c.a, 0.0, 1.0);
+    vec3 l = mix(u / 12.92, pow((u + 0.055) / 1.055, vec3(2.4)), step(vec3(0.04045), u));
+    return vec4(l * c.a, c.a);
+}
+
+/** Linear light -> sRGB, premultiplied in and out; alpha is unchanged. */
+vec4 gammaEncode(vec4 c) {
+    if (c.a <= 0.0) return c;
+    vec3 u = clamp(c.rgb / c.a, 0.0, 1.0);
+    vec3 s = mix(u * 12.92, 1.055 * pow(u, vec3(1.0 / 2.4)) - 0.055, step(vec3(0.0031308), u));
+    return vec4(clamp(s, 0.0, 1.0) * c.a, c.a);
+}
+
+/** [composite] in linear light when the document toggle g is set (BlendMath gamma-correct). */
+vec4 compositeG(int m, vec4 d, vec4 s, int g) {
+    return g == 0 ? composite(m, d, s) : gammaEncode(composite(m, gammaDecode(d), gammaDecode(s)));
+}
 """
 
     const val BLEND_FS = """#version 300 es
@@ -144,6 +165,7 @@ uniform float u_maskDensity;
 uniform int u_useClipMask;
 uniform float u_clipMaskDefault;
 uniform float u_clipMaskDensity;
+uniform int u_gamma;
 out vec4 o;
 """ + BLEND_FUNCS + """
 void main() {
@@ -156,7 +178,10 @@ void main() {
         float cm = u_useClipMask != 0 ? texelFetch(u_clipMask, p, 0).r : u_clipMaskDefault;
         f *= texelFetch(u_clip, p, 0).a * maskEff(cm, u_clipMaskDensity);
     }
-    if (u_mode == 100) { o = mix(d, l, f); return; }
+    if (u_mode == 100) {
+        o = u_gamma != 0 ? gammaEncode(mix(gammaDecode(d), gammaDecode(l * f), f)) : mix(d, l, f);
+        return;
+    }
     if (u_preview != 0) {
         vec4 b = texelFetch(u_buf, p, 0) * u_previewOpacity;
         if (u_preview == 2) l *= 1.0 - b.a;
@@ -170,7 +195,7 @@ void main() {
             l = n;
         }
     }
-    o = composite(u_mode, d, l * f);
+    o = compositeG(u_mode, d, l * f, u_gamma);
 }
 """
 

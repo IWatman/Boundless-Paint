@@ -242,7 +242,15 @@ class StudioViewModel(
     /** Pending debounced render of the editor preview; a new change cancels the previous one. */
     private var editorRenderJob: Job? = null
 
-    private val _state = MutableStateFlow(StudioUiState(palette = DefaultPalette.colors, layerPanelOpen = false))
+    private val _state = MutableStateFlow(
+        StudioUiState(
+            palette = DefaultPalette.colors,
+            layerPanelOpen = false,
+            // View settings outlive the session (spec/tools/m0-m1-tools.md T1).
+            lightBackground = prefs?.lightBackground ?: false,
+            doubleTapFits = prefs?.doubleTapFits ?: true,
+        ),
+    )
     val state: StateFlow<StudioUiState> = _state
 
     private val _projects = MutableStateFlow<List<ProjectCardUi>>(emptyList())
@@ -250,6 +258,13 @@ class StudioViewModel(
 
     /** Set by the UI when the user picks Export; the activity launches the system file picker. */
     val exportRequest = MutableStateFlow(false)
+
+    /** Export options while the dialog is open; null when it is closed. */
+    val exportOptions = MutableStateFlow<ExportOptions?>(null)
+
+    /** Options the last confirmed export used; read by the activity when the file picker returns. */
+    var pendingExport: ExportOptions? = null
+        private set
 
     /** Set by [openHome]; the activity navigates back to Home and resets it. */
     val homeRequest = MutableStateFlow(false)
@@ -315,6 +330,7 @@ class StudioViewModel(
             it.copy(
                 paperColor = d.paper.color,
                 paperVisible = d.paper.visible,
+                gammaCorrect = d.gammaCorrect,
                 adjustmentEditor = null,
                 cloneSource = null,
                 cloneOffset = null,
@@ -343,6 +359,8 @@ class StudioViewModel(
         canvas = view
         view.inputListener = this
         view.stylusSettings = _stylusSettings.value
+        view.doubleTapFits = _state.value.doubleTapFits
+        view.setLightBackground(_state.value.lightBackground)
         view.setDocument(doc)
         viewModelScope.launch {
             view.viewState.collect { vs ->
@@ -2162,6 +2180,27 @@ class StudioViewModel(
         canvas?.invalidate(null, null)
     }
 
+    override fun setLightBackground(light: Boolean) {
+        prefs?.lightBackground = light
+        _state.update { it.copy(lightBackground = light) }
+        canvas?.setLightBackground(light)
+    }
+
+    override fun setDoubleTapFits(enabled: Boolean) {
+        prefs?.doubleTapFits = enabled
+        _state.update { it.copy(doubleTapFits = enabled) }
+        canvas?.doubleTapFits = enabled
+    }
+
+    override fun setGammaCorrect(on: Boolean) {
+        if (doc.gammaCorrect == on) return
+        doc.gammaCorrect = on
+        markDirty()
+        _state.update { it.copy(gammaCorrect = on) }
+        // Every tile is composited differently now: the scene snapshot change makes the renderer redo them all.
+        canvas?.invalidate(null, null)
+    }
+
     // ---- guides ----
 
     /** Symmetry published to the overlay, null while it is off. */
@@ -2417,7 +2456,18 @@ class StudioViewModel(
     }
 
     override fun exportImage() {
+        // The dialog picks the format, the JPG quality and the transparent background (spec T10).
+        exportOptions.value = pendingExport ?: ExportOptions()
+    }
+
+    override fun startExport(options: ExportOptions) {
+        pendingExport = options
+        exportOptions.value = null
         exportRequest.value = true
+    }
+
+    override fun dismissExport() {
+        exportOptions.value = null
     }
 
     /** Encodes the flattened image; used by the activity after the user picked a destination. */

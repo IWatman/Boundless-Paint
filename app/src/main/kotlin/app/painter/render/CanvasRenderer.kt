@@ -62,6 +62,9 @@ internal class CanvasRenderer(
     private val mvp = FloatArray(16)
     private val bounds = FloatArray(4)
 
+    /** Studio backdrop around the canvas: light #D0D0D0 when true, dark #2B2B2B otherwise (spec T1). */
+    var lightBackground = false
+
     private var blendProg = 0
     private var uDst = 0; private var uSrc = 0; private var uBuf = 0; private var uClip = 0
     private var uMode = 0; private var uOpacity = 0; private var uPreview = 0
@@ -70,6 +73,7 @@ internal class CanvasRenderer(
     private var uMask = 0; private var uClipMask = 0
     private var uUseMask = 0; private var uMaskDefault = 0; private var uMaskDensity = 0
     private var uUseClipMask = 0; private var uClipMaskDefault = 0; private var uClipMaskDensity = 0
+    private var uGamma = 0
     private var displayProg = 0
     private val adjustShader = AdjustShader(::link)
     private var uMvp = 0; private var uOrigin = 0; private var uSize = 0; private var uTex = 0
@@ -199,7 +203,8 @@ internal class CanvasRenderer(
     private fun clearScreen() {
         GL.glBindFramebuffer(GL.GL_FRAMEBUFFER, 0)
         GL.glViewport(0, 0, viewW, viewH)
-        GL.glClearColor(BG, BG, BG, 1f)
+        val bg = if (lightBackground) BG_LIGHT else BG_DARK
+        GL.glClearColor(bg, bg, bg, 1f)
         GL.glClear(GL.GL_COLOR_BUFFER_BIT)
     }
 
@@ -545,6 +550,7 @@ internal class CanvasRenderer(
             clipMaskTex = clipMask?.tex ?: 0,
             clipMaskDefault = clipMask?.default ?: 1f,
             clipMaskDensity = clipMask?.density ?: 1f,
+            gamma = scene?.gamma == true,
         )
         release(dst)
         return out
@@ -587,6 +593,8 @@ internal class CanvasRenderer(
         GL.glUniform1f(uStrokeStrength, previewStrokeStrength)
         GL.glUniform1i(uAlphaLock, if (alphaLock) 1 else 0)
         GL.glUniform1i(uUseClip, if (clip != 0) 1 else 0)
+        // Document toggle "gamma-correct": the same linear-light blend as BlendMath's gamma path.
+        GL.glUniform1i(uGamma, if (scene?.gamma == true) 1 else 0)
         GL.glDrawArrays(GL.GL_TRIANGLE_STRIP, 0, 4)
         release(dst)
         return out
@@ -656,6 +664,7 @@ internal class CanvasRenderer(
         uUseClipMask = GL.glGetUniformLocation(blendProg, "u_useClipMask")
         uClipMaskDefault = GL.glGetUniformLocation(blendProg, "u_clipMaskDefault")
         uClipMaskDensity = GL.glGetUniformLocation(blendProg, "u_clipMaskDensity")
+        uGamma = GL.glGetUniformLocation(blendProg, "u_gamma")
         GL.glUseProgram(blendProg)
         GL.glUniform1i(uDst, 0)
         GL.glUniform1i(uSrc, 1)
@@ -818,7 +827,9 @@ internal class CanvasRenderer(
 
     companion object {
         private const val TAG = "CanvasRenderer"
-        private const val BG = 0x2B / 255f
+        /** Backdrop around the canvas: #2B2B2B (dark) and #D0D0D0 (light), spec/tools/m0-m1-tools.md T1. */
+        private const val BG_DARK = 0x2B / 255f
+        private const val BG_LIGHT = 0xD0 / 255f
         private const val COMPOSITE_LEVELS = 9
         private const val MASK_BYTES = Tile.SIZE * Tile.SIZE
         private const val OFFSCREEN_TILES_PER_FRAME = 4

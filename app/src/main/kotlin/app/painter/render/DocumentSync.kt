@@ -56,6 +56,8 @@ internal data class SceneSnapshot(
     val paperB: Float,
     val paperA: Float,
     val paperVisible: Boolean,
+    /** Document toggle "gamma-correct": blend layers in linear light. */
+    val gamma: Boolean,
     val root: SnapNode,
 )
 
@@ -288,6 +290,7 @@ internal class DocumentSync(private val pool: StagingPool) {
                 paperB = c.b * c.a,
                 paperA = c.a,
                 paperVisible = d.paper.visible,
+                gamma = d.gammaCorrect,
                 root = snapshot(d.root),
             )
         }

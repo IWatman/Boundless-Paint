@@ -51,6 +51,20 @@ class ToolPrefs(context: Context) {
         edit.apply()
     }
 
+    /** Studio backdrop around the canvas: light #D0D0D0 instead of the default dark #2B2B2B. */
+    var lightBackground: Boolean
+        get() = prefs.getBoolean(KEY_LIGHT_BG, false)
+        set(value) {
+            prefs.edit().putBoolean(KEY_LIGHT_BG, value).apply()
+        }
+
+    /** True when a finger double tap fits the canvas (default on, spec/tools/m0-m1-tools.md T1). */
+    var doubleTapFits: Boolean
+        get() = prefs.getBoolean(KEY_DOUBLE_TAP_FIT, true)
+        set(value) {
+            prefs.edit().putBoolean(KEY_DOUBLE_TAP_FIT, value).apply()
+        }
+
     private fun key(mode: BrushModeUi, field: String) = "brush.${mode.name.lowercase(Locale.ROOT)}.$field"
 
     private fun SharedPreferences.floatOrNull(key: String): Float? =
@@ -63,6 +77,8 @@ class ToolPrefs(context: Context) {
         const val KEY_ID = "id"
         const val KEY_SIZE = "size"
         const val KEY_OPACITY = "opacity"
+        const val KEY_LIGHT_BG = "view.light_background"
+        const val KEY_DOUBLE_TAP_FIT = "view.double_tap_fit"
     }
 }
 

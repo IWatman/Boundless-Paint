@@ -242,6 +242,11 @@
     <string name="delete_brush_message">“%1$s” will be deleted permanently.</string>
     <string name="duplicate">Duplicate</string>
     <string name="export_image">Export image</string>
+    <string name="light_background">Light canvas background</string>
+    <string name="double_tap_fit">Double tap to fit</string>
+    <string name="gamma_correct">Gamma-correct blending</string>
+    <string name="quality">Quality</string>
+    <string name="transparent_background">Transparent background</string>
     <string name="flow">Flow</string>
     <string name="hardness">Hardness</string>
     <string name="opacity">Opacity</string>

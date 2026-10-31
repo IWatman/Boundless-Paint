@@ -22,11 +22,14 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.viewinterop.AndroidView
 import app.painter.render.CanvasView
+import app.painter.studio.ExportFormat
+import app.painter.studio.ExportOptions
 import app.painter.studio.StudioViewModel
 import app.painter.ui.home.GalleryScreen
 import app.painter.ui.home.HomeScreen
 import app.painter.ui.home.NewCanvasScreen
 import app.painter.ui.home.UpdateDialog
+import app.painter.ui.studio.ExportDialog
 import app.painter.ui.studio.StudioScreen
 import app.painter.ui.theme.PainterTheme
 import app.painter.update.UpdateViewModel
@@ -142,24 +145,40 @@ private fun App(vm: StudioViewModel, updateVm: UpdateViewModel) {
 private fun Studio(vm: StudioViewModel) {
     val state by vm.state.collectAsState()
     val exportRequest by vm.exportRequest.collectAsState()
+    val exportOptions by vm.exportOptions.collectAsState()
     val scope = rememberCoroutineScope()
     val context = androidx.compose.ui.platform.LocalContext.current
 
-    val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("image/png")) { uri ->
-        if (uri == null) return@rememberLauncherForActivityResult
-        scope.launch {
+    // The dialog picks format/quality/transparency (spec T10); the result is written when the picker returns.
+    val writeExport: (android.net.Uri?) -> Unit = { uri ->
+        if (uri != null) scope.launch {
+            val opts = vm.pendingExport ?: ExportOptions()
             val ok = runCatching {
-                val bytes = vm.encodeComposite(Bitmap.CompressFormat.PNG, 100, transparent = false)
+                val format = when (opts.format) {
+                    ExportFormat.JPG -> Bitmap.CompressFormat.JPEG
+                    ExportFormat.PNG -> Bitmap.CompressFormat.PNG
+                }
+                val bytes = vm.encodeComposite(format, opts.quality, opts.transparentBackground)
                 context.contentResolver.openOutputStream(uri)?.use { it.write(bytes) }
             }.isSuccess
             Toast.makeText(context, if (ok) "Exported" else "Export failed", Toast.LENGTH_SHORT).show()
         }
     }
+    val pngLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument(ExportFormat.PNG.mime),
+        writeExport,
+    )
+    val jpgLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument(ExportFormat.JPG.mime),
+        writeExport,
+    )
 
     LaunchedEffect(exportRequest) {
         if (exportRequest) {
             vm.exportRequest.value = false
-            exportLauncher.launch("${vm.documentName}.png")
+            val opts = vm.pendingExport ?: ExportOptions()
+            val name = "${vm.documentName}.${opts.format.extension}"
+            if (opts.format == ExportFormat.JPG) jpgLauncher.launch(name) else pngLauncher.launch(name)
         }
     }
 
@@ -167,6 +186,15 @@ private fun Studio(vm: StudioViewModel) {
         AndroidView(
             factory = { ctx -> CanvasView(ctx).also(vm::attachCanvas) },
             onRelease = vm::detachCanvas,
+        )
+    }
+
+    exportOptions?.let { opts ->
+        ExportDialog(
+            options = opts,
+            onChange = { vm.exportOptions.value = it },
+            onDismiss = vm::dismissExport,
+            onConfirm = { vm.startExport(opts) },
         )
     }
 }

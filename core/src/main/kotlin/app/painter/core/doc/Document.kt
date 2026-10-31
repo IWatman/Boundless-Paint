@@ -20,6 +20,13 @@ class Document(
 ) {
     val root = GroupNode("root", "root")
     val paper = Paper()
+
+    /**
+     * Blend layers and dabs in linear light (spec/blend-and-color.md): sRGB values are decoded before a blend
+     * and encoded back. Off by default; stored in the project file.
+     */
+    var gammaCorrect: Boolean = false
+
     var created: Long = System.currentTimeMillis()
     var modified: Long = created
 

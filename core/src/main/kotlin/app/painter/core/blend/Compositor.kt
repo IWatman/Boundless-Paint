@@ -26,6 +26,7 @@ object Compositor : NodeRenderer {
      * When [clipAlpha] is given, the source alpha is multiplied per pixel by the clip grid's alpha;
      * tiles missing from [clipAlpha] are fully clipped. A [mask] multiplies the contribution per pixel by
      * `1 - maskDensity·(1 - m)`; missing mask tiles read as the mask's default value.
+     * [gamma] blends in linear light (document toggle, spec/blend-and-color.md).
      */
     fun compositeInto(
         dst: TileGrid,
@@ -35,6 +36,7 @@ object Compositor : NodeRenderer {
         clipAlpha: TileGrid? = null,
         mask: MaskGrid? = null,
         maskDensity: Float = 1f,
+        gamma: Boolean = false,
     ) {
         if (opacity <= 0f) return
         val needsDst = mode == BlendMode.ERASE || mode == BlendMode.MASK || mode == BlendMode.INVERT
@@ -56,7 +58,7 @@ object Compositor : NodeRenderer {
                     if (op > 0f) {
                         sTile.read(i, sp)
                         dTile.read(i, dp)
-                        BlendMath.blendPixel(mode, dp, 0, sp, 0, op)
+                        BlendMath.blendPixel(mode, dp, 0, sp, 0, op, gamma)
                         dTile.write(i, dp)
                     }
                 }
@@ -80,7 +82,8 @@ object Compositor : NodeRenderer {
         clipAlpha: TileGrid? = null,
         mask: MaskGrid? = null,
         maskDensity: Float = 1f,
-    ) = adjustInto(acc, AdjustMath.prepare(params), mode, opacity, clipAlpha, mask, maskDensity)
+        gamma: Boolean = false,
+    ) = adjustInto(acc, AdjustMath.prepare(params), mode, opacity, clipAlpha, mask, maskDensity, gamma)
 
     /** [adjustInto] with prepared parameters. */
     fun adjustInto(
@@ -91,6 +94,7 @@ object Compositor : NodeRenderer {
         clipAlpha: TileGrid? = null,
         mask: MaskGrid? = null,
         maskDensity: Float = 1f,
+        gamma: Boolean = false,
     ) {
         if (opacity <= 0f || prep.isNoOp) return
         val d = FloatArray(4)
@@ -116,7 +120,7 @@ object Compositor : NodeRenderer {
                         AdjustMath.applyStraight(prep, s)
                         val sa = s[3]
                         s[0] *= sa; s[1] *= sa; s[2] *= sa
-                        BlendMath.blendPixel(mode, d, 0, s, 0, f)
+                        BlendMath.blendPixel(mode, d, 0, s, 0, f, gamma)
                         tile.write(i, d[0] * a, d[1] * a, d[2] * a, d[3] * a)
                     }
                 }
@@ -147,7 +151,7 @@ object Compositor : NodeRenderer {
                 }
             }
         }
-        Stack(null).render(doc.root.children, acc, false, null)
+        Stack(null, doc.gammaCorrect).render(doc.root.children, acc, false, null)
         return acc
     }
 
@@ -163,20 +167,20 @@ object Compositor : NodeRenderer {
             var i = 0
             while (i < Tile.CHANNELS) { d.write(i, p.r, p.g, p.b, 1f); i += 4 }
         }
-        Stack(key).render(doc.root.children, acc, false, null)
+        Stack(key, doc.gammaCorrect).render(doc.root.children, acc, false, null)
         return acc.get(key)
     }
 
     override fun renderInto(dst: TileGrid, nodes: List<Node>, ignoreVisibility: Boolean, clipBase: TileGrid?) =
-        Stack(null).render(nodes, dst, ignoreVisibility, clipBase)
+        Stack(null, false).render(nodes, dst, ignoreVisibility, clipBase)
 
     /** Isolated render of [group]'s visible children onto transparent (the group's own props are not applied). */
     fun renderGroup(group: GroupNode, width: Int, height: Int): TileGrid =
-        TileGrid(width, height).also { Stack(null).render(group.children, it, false, null) }
+        TileGrid(width, height).also { Stack(null, false).render(group.children, it, false, null) }
 
     /** [renderGroup] limited to the tile at [key]. */
     fun renderGroupTile(group: GroupNode, key: TileKey, width: Int, height: Int): Tile? =
-        TileGrid(width, height).also { Stack(key).render(group.children, it, false, null) }.get(key)
+        TileGrid(width, height).also { Stack(key, false).render(group.children, it, false, null) }.get(key)
 
     /** Copy of [grid] with every pixel multiplied by the effective value of [mask] (null = [grid] itself). */
     fun applyMask(grid: TileGrid, mask: LayerMask?): TileGrid {
@@ -213,8 +217,8 @@ object Compositor : NodeRenderer {
 
     private fun Node.activeMask(): LayerMask? = mask?.takeIf { it.enabled }
 
-    /** One render pass; [only] limits every grid to that tile (for [flattenTile]). */
-    private class Stack(val only: TileKey?) {
+    /** One render pass; [only] limits every grid to that tile (for [flattenTile]); [gamma] blends in linear light. */
+    private class Stack(val only: TileKey?, val gamma: Boolean) {
         private val prepared = HashMap<AdjustParams, PreparedAdjust>()
 
         fun render(children: List<Node>, acc: TileGrid, ignoreVisibility: Boolean, clipBase: TileGrid?) {
@@ -230,7 +234,7 @@ object Compositor : NodeRenderer {
                     } else {
                         compositeInto(
                             acc, contentOf(node, acc), node.blendMode, node.opacity, base,
-                            mask?.tiles, mask?.density ?: 1f,
+                            mask?.tiles, mask?.density ?: 1f, gamma,
                         )
                     }
                     continue
@@ -241,7 +245,7 @@ object Compositor : NodeRenderer {
                 when (node) {
                     is RasterLayer -> {
                         val px = view(node.pixels)
-                        compositeInto(acc, px, node.blendMode, node.opacity, null, mask?.tiles, mask?.density ?: 1f)
+                        compositeInto(acc, px, node.blendMode, node.opacity, null, mask?.tiles, mask?.density ?: 1f, gamma)
                         if (hasClipped) baseAlpha = applyMask(px, mask)
                     }
                     is GroupNode -> if (node.blendMode == BlendMode.PASSTHROUGH) {
@@ -249,7 +253,7 @@ object Compositor : NodeRenderer {
                         passthrough(node, acc, mask)
                     } else {
                         val off = isolated(node, acc)
-                        compositeInto(acc, off, node.blendMode, node.opacity, null, mask?.tiles, mask?.density ?: 1f)
+                        compositeInto(acc, off, node.blendMode, node.opacity, null, mask?.tiles, mask?.density ?: 1f, gamma)
                         if (hasClipped) baseAlpha = applyMask(off, mask)
                     }
                     is AdjustmentLayer -> adjust(acc, node, null)
@@ -260,7 +264,7 @@ object Compositor : NodeRenderer {
         private fun adjust(acc: TileGrid, node: AdjustmentLayer, clip: TileGrid?) {
             val mask = node.activeMask()
             val prep = prepared.getOrPut(node.params) { AdjustMath.prepare(node.params) }
-            adjustInto(acc, prep, node.blendMode, node.opacity, clip, mask?.tiles, mask?.density ?: 1f)
+            adjustInto(acc, prep, node.blendMode, node.opacity, clip, mask?.tiles, mask?.density ?: 1f, gamma)
         }
 
         /** [grid] limited to the tile at [only] (sharing the tile), or [grid] itself when [only] is null. */
@@ -303,17 +307,45 @@ object Compositor : NodeRenderer {
                 val tile = a ?: Tile(acc.precise).also { acc.put(key, it) }
                 if (mTile == null) {
                     val k = t * mConst
-                    if (r == null) tile.scale(1f - k)
-                    else for (i in 0 until Tile.CHANNELS) tile[i] = tile[i] + (r[i] - tile[i]) * k
+                    if (!gamma) {
+                        if (r == null) tile.scale(1f - k)
+                        else for (i in 0 until Tile.CHANNELS) tile[i] = tile[i] + (r[i] - tile[i]) * k
+                    } else {
+                        val d = FloatArray(4)
+                        val s = FloatArray(4)
+                        var i = 0
+                        for (p in 0 until PIXELS) {
+                            tile.read(i, d)
+                            if (r != null) r.read(i, s) else s.fill(0f)
+                            BlendMath.lerpPixel(d, 0, s, 0, k, true)
+                            tile.write(i, d[0], d[1], d[2], d[3])
+                            i += 4
+                        }
+                    }
                 } else {
                     var i = 0
-                    for (p in 0 until PIXELS) {
-                        val k = t * effective(mTile.data[p].toInt() and 0xFF, mask.density)
-                        if (k > 0f) for (c in 0..3) {
-                            val rv = r?.get(i + c) ?: 0f
-                            tile[i + c] = tile[i + c] + (rv - tile[i + c]) * k
+                    if (!gamma) {
+                        for (p in 0 until PIXELS) {
+                            val k = t * effective(mTile.data[p].toInt() and 0xFF, mask.density)
+                            if (k > 0f) for (c in 0..3) {
+                                val rv = r?.get(i + c) ?: 0f
+                                tile[i + c] = tile[i + c] + (rv - tile[i + c]) * k
+                            }
+                            i += 4
                         }
-                        i += 4
+                    } else {
+                        val d = FloatArray(4)
+                        val s = FloatArray(4)
+                        for (p in 0 until PIXELS) {
+                            val k = t * effective(mTile.data[p].toInt() and 0xFF, mask.density)
+                            if (k > 0f) {
+                                tile.read(i, d)
+                                if (r != null) r.read(i, s) else s.fill(0f)
+                                BlendMath.lerpPixel(d, 0, s, 0, k, true)
+                                tile.write(i, d[0], d[1], d[2], d[3])
+                            }
+                            i += 4
+                        }
                     }
                 }
                 tile.markDirty()

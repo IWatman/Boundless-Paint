@@ -749,6 +749,21 @@ private fun StudioTopBar(state: StudioUiState, actions: StudioActions, modifier:
                             onClick = { menuOpen = false; actions.exportImage() },
                         )
                         DropdownMenuItem(
+                            text = { Text(stringResource(R.string.light_background)) },
+                            trailingIcon = { if (state.lightBackground) Icon(Icons.Outlined.Check, null) },
+                            onClick = { menuOpen = false; actions.setLightBackground(!state.lightBackground) },
+                        )
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.double_tap_fit)) },
+                            trailingIcon = { if (state.doubleTapFits) Icon(Icons.Outlined.Check, null) },
+                            onClick = { menuOpen = false; actions.setDoubleTapFits(!state.doubleTapFits) },
+                        )
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.gamma_correct)) },
+                            trailingIcon = { if (state.gammaCorrect) Icon(Icons.Outlined.Check, null) },
+                            onClick = { menuOpen = false; actions.setGammaCorrect(!state.gammaCorrect) },
+                        )
+                        DropdownMenuItem(
                             text = { Text(stringResource(R.string.settings)) },
                             onClick = { menuOpen = false; actions.openSettings() },
                         )

@@ -241,6 +241,11 @@
     <string name="delete_brush_message">«%1$s» будет удалена без возможности восстановления.</string>
     <string name="duplicate">Дублировать</string>
     <string name="export_image">Экспорт изображения</string>
+    <string name="light_background">Светлый фон холста</string>
+    <string name="double_tap_fit">Двойной тап — вписать</string>
+    <string name="gamma_correct">Гамма-корректное смешивание</string>
+    <string name="quality">Качество</string>
+    <string name="transparent_background">Прозрачный фон</string>
     <string name="flow">Поток</string>
     <string name="hardness">Жёсткость</string>
     <string name="opacity">Непрозрачность</string>
