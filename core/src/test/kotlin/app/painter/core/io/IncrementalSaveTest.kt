@@ -1,4 +1,4 @@
-﻿package app.painter.core.io
+package app.painter.core.io
 
 import app.painter.core.doc.Document
 import app.painter.core.doc.LayerMask

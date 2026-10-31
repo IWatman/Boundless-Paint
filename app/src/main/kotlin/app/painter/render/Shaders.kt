@@ -204,10 +204,11 @@ layout(location = 0) in vec2 a_pos;
 uniform mat4 u_mvp;
 uniform vec2 u_origin;
 uniform vec2 u_size;
+uniform vec2 u_uvScale;
 out vec2 v_uv;
 void main() {
     vec2 p = a_pos * u_size;
-    v_uv = p / 256.0;
+    v_uv = p * u_uvScale;
     gl_Position = u_mvp * vec4(u_origin + p, 0.0, 1.0);
 }
 """

@@ -2,6 +2,7 @@ package app.painter.render
 
 import android.opengl.GLES30 as GL
 import android.opengl.GLSurfaceView
+import android.os.SystemClock
 import android.util.Log
 import app.painter.core.blend.BlendMode
 import app.painter.core.raster.Tile
@@ -13,11 +14,13 @@ import javax.microedition.khronos.egl.EGLConfig
 import javax.microedition.khronos.opengles.GL10
 import kotlin.math.ceil
 import kotlin.math.floor
+import kotlin.math.roundToInt
 
 /**
  * GL-thread side of [CanvasView]. Keeps per-layer tile textures, composites the layer stack
- * tile-by-tile into per-tile composite textures (only dirty tiles), and draws them with the
- * view transform. All public methods except [post]/[setView] must be called on the GL thread.
+ * tile-by-tile into a bounded LRU cache of composite tiles (only visible ones), and draws them with the
+ * view transform. Zoomed out it draws a single mipmapped overview instead (debt 6).
+ * All public methods except [post]/[setView] must be called on the GL thread.
  */
 internal class CanvasRenderer(
     private val pool: StagingPool,
@@ -77,6 +80,7 @@ internal class CanvasRenderer(
     private var displayProg = 0
     private val adjustShader = AdjustShader(::link)
     private var uMvp = 0; private var uOrigin = 0; private var uSize = 0; private var uTex = 0
+    private var uUvScale = 0
     private var vao = 0
     private var samplerNearest = 0
     private var samplerLinear = 0
@@ -99,8 +103,32 @@ internal class CanvasRenderer(
     private val maskTex = HashMap<String, IntArray>()
     private val adjustLut = HashMap<String, LutRef>()
     private val lutSeen = HashSet<String>()
-    private var composite: Array<Target?> = emptyArray()
-    private var mipValid = BooleanArray(0)
+
+    /**
+     * Composite tiles on the GPU, least recently used first (debt 6). Only visible tiles are cached, and the
+     * cache stays under [compositeLimit] tiles, so a large canvas no longer allocates a mipmapped texture per
+     * document tile. Tiles are recomposited when they are panned back into view.
+     */
+    private val compositeCache = object : LinkedHashMap<Int, Target>(64, 0.75f, true) {}
+    /** Cache limit from the memory budget; [compositeLimit] grows to the visible tile count when that is larger. */
+    private var baseCompositeLimit = 64
+    private var compositeLimit = 64
+
+    /** Downscaled, mipmapped copy of the whole document, drawn at zoom < 1 instead of every tile. */
+    private var overviewTex = 0
+    private var overviewFbo = 0
+    private var overviewW = 0
+    private var overviewH = 0
+    private var overviewScale = 1f
+    private var overviewValid = false
+    /** Rebuild every overview tile on the next draw (scene change, first draw, new canvas size). */
+    private var overviewFull = true
+    /** Tiles that changed since the overview was last updated. */
+    private val overviewTiles = LinkedHashSet<Int>()
+    /** False after an update: the mip chain is regenerated only when a far zoom needs it. */
+    private var overviewMipsValid = false
+    private var lastMipGenMs = 0L
+
     private var dirty = BooleanArray(0)
     private var dirtyCount = 0
 
@@ -110,6 +138,9 @@ internal class CanvasRenderer(
     private var previewStrokeMode = 0
     private var previewStrokeStrength = 0f
     private var previewTex = IntArray(0)
+
+    /** Last draw mode logged, so a zoom crossing 1.0 leaves one diagnostic line. */
+    private var loggedOverview = false
 
     /** Queues [op] to run on the GL thread before the next frame. Thread-safe. */
     fun post(op: (CanvasRenderer) -> Unit) {
@@ -131,8 +162,14 @@ internal class CanvasRenderer(
         layerTex.clear()
         maskTex.clear()
         adjustLut.clear()
-        composite = arrayOfNulls(composite.size)
-        mipValid.fill(false)
+        compositeCache.values.forEach(::deleteTarget)
+        compositeCache.clear()
+        // GL objects died with the context: sizes stay, contents do not.
+        overviewTex = 0
+        overviewFbo = 0
+        overviewValid = false
+        overviewFull = true
+        overviewTiles.clear()
         previewTex.fill(0)
         root = null
         scene = null
@@ -178,26 +215,37 @@ internal class CanvasRenderer(
         val ty1 = (ceil(bounds[3] / Tile.SIZE).toInt() - 1).coerceIn(0, tilesY - 1)
         val visible = bounds[2] > 0 && bounds[3] > 0 && bounds[0] < docW && bounds[1] < docH
 
-        if (dirtyCount > 0) {
-            beginComposite()
-            if (visible) {
-                for (ty in ty0..ty1) for (tx in tx0..tx1) {
-                    val i = ty * tilesX + tx
-                    if (dirty[i]) compositeTile(r, tx, ty)
-                }
-            }
-            var budget = OFFSCREEN_TILES_PER_FRAME
-            var i = 0
-            while (dirtyCount > 0 && budget > 0 && i < dirty.size) {
-                if (dirty[i]) { compositeTile(r, i % tilesX, i / tilesX); budget-- }
-                i++
-            }
-            if (dirtyCount > 0) callbacks.requestRender()
+        // Zoomed out the whole canvas is on screen: one mipmapped overview costs a fraction of the per-tile
+        // textures and keeps the tile cache for the zoomed-in case (debt 6).
+        val useOverview = visible && view.zoom < 1f
+        if (useOverview != loggedOverview) {
+            loggedOverview = useOverview
+            Log.d(
+                TAG,
+                "draw mode=${if (useOverview) "overview" else "tiles"} zoom=${view.zoom} doc=${docW}x$docH " +
+                    "overview=${overviewW}x$overviewH scale=$overviewScale uvWindow=${viewW}x$viewH",
+            )
+        }
+        // Compose before clearing: every pass below leaves a tile-sized FBO and viewport behind, and
+        // clearScreen puts the framebuffer and the viewport back for the display pass.
+        if (visible) {
+            if (useOverview) updateOverview(r) else compositeVisibleTiles(r, tx0, ty0, tx1, ty1)
         }
 
         clearScreen()
         if (!visible) return
-        drawTiles(tx0, ty0, tx1, ty1)
+        if (useOverview) drawOverview() else drawTiles(tx0, ty0, tx1, ty1)
+    }
+
+    /** Composites the visible tiles that are missing from the cache or changed since the last frame. */
+    private fun compositeVisibleTiles(r: GNode, tx0: Int, ty0: Int, tx1: Int, ty1: Int) {
+        // Never thrash on the tiles that are on screen: allow the visible set even when it is over the budget.
+        val visible = (tx1 - tx0 + 1) * (ty1 - ty0 + 1)
+        compositeLimit = maxOf(baseCompositeLimit, visible + 8).coerceAtMost(dirty.size)
+        for (ty in ty0..ty1) for (tx in tx0..tx1) {
+            val i = ty * tilesX + tx
+            if (compositeCache[i] == null || dirty[i]) tileTarget(i, r)
+        }
     }
 
     private fun clearScreen() {
@@ -210,27 +258,19 @@ internal class CanvasRenderer(
 
     private fun drawTiles(tx0: Int, ty0: Int, tx1: Int, ty1: Int) {
         val zoom = view.zoom
-        val sampler = when {
-            zoom >= 4f -> samplerNearest
-            zoom < 1f -> samplerMip
-            else -> samplerLinear
-        }
-        val needMips = zoom < 1f
+        val sampler = if (zoom >= 4f) samplerNearest else samplerLinear
+        GL.glViewport(0, 0, viewW, viewH)
         view.toNdcMatrix(viewW, viewH, mvp)
         GL.glUseProgram(displayProg)
         GL.glUniformMatrix4fv(uMvp, 1, false, mvp, 0)
         GL.glUniform1i(uTex, 0)
+        GL.glUniform2f(uUvScale, 1f / Tile.SIZE, 1f / Tile.SIZE)
         GL.glActiveTexture(GL.GL_TEXTURE0)
         GL.glBindSampler(0, sampler)
         GL.glBindVertexArray(vao)
         for (ty in ty0..ty1) for (tx in tx0..tx1) {
-            val i = ty * tilesX + tx
-            val t = composite[i] ?: continue
+            val t = compositeCache[ty * tilesX + tx] ?: continue
             GL.glBindTexture(GL.GL_TEXTURE_2D, t.tex)
-            if (needMips && !mipValid[i]) {
-                GL.glGenerateMipmap(GL.GL_TEXTURE_2D)
-                mipValid[i] = true
-            }
             val ox = tx * Tile.SIZE
             val oy = ty * Tile.SIZE
             GL.glUniform2f(uOrigin, ox.toFloat(), oy.toFloat())
@@ -241,24 +281,187 @@ internal class CanvasRenderer(
         GL.glBindVertexArray(0)
     }
 
+    /** Cached composite of tile [i], composited on the spot when it is missing or dirty. */
+    private fun tileTarget(i: Int, r: GNode): Target {
+        val cached = compositeCache[i]
+        if (cached != null && !dirty[i]) return cached
+        val target = cached ?: createTarget(1).also {
+            compositeCache[i] = it
+            trimCompositeCache()
+        }
+        compositeTileInto(target, r, i % tilesX, i / tilesX)
+        return target
+    }
+
+    /** Evicts the least recently used composite tiles until the cache fits its budget. */
+    private fun trimCompositeCache() {
+        while (compositeCache.size > compositeLimit) {
+            val it = compositeCache.entries.iterator()
+            if (!it.hasNext()) return
+            val eldest = it.next()
+            it.remove()
+            deleteTarget(eldest.value)
+        }
+    }
+
+    // ---------------------------------------------------------------- overview (zoom < 1)
+
+    /**
+     * Creates the overview texture: the document at up to [OVERVIEW_MAX] on the long side, RGBA16F like the
+     * tile composites, with a full mip chain. Mips exist only here, never per tile (debt 6).
+     */
+    private fun ensureOverview() {
+        if (overviewTex != 0) return
+        val maxSide = maxOf(docW, docH)
+        val scale = if (maxSide <= OVERVIEW_MAX) 1f else OVERVIEW_MAX.toFloat() / maxSide
+        val w = (docW * scale).roundToInt().coerceAtLeast(1)
+        val h = (docH * scale).roundToInt().coerceAtLeast(1)
+        overviewW = w
+        overviewH = h
+        overviewScale = w.toFloat() / docW
+        GL.glGenTextures(1, ints, 0)
+        overviewTex = ints[0]
+        GL.glBindTexture(GL.GL_TEXTURE_2D, overviewTex)
+        // Mutable storage with level 0 only: glGenerateMipmap allocates the chain the first time it is needed.
+        GL.glTexImage2D(
+            GL.GL_TEXTURE_2D, 0, targetInternal, w, h, 0,
+            GL.GL_RGBA, if (targetInternal == GL.GL_RGBA16F) GL.GL_HALF_FLOAT else GL.GL_UNSIGNED_BYTE, null,
+        )
+        setNearest()
+        GL.glGenFramebuffers(1, ints, 0)
+        overviewFbo = ints[0]
+        GL.glBindFramebuffer(GL.GL_FRAMEBUFFER, overviewFbo)
+        GL.glFramebufferTexture2D(GL.GL_FRAMEBUFFER, GL.GL_COLOR_ATTACHMENT0, GL.GL_TEXTURE_2D, overviewTex, 0)
+        GL.glBindFramebuffer(GL.GL_FRAMEBUFFER, 0)
+        overviewValid = false
+        overviewFull = true
+        overviewMipsValid = false
+        overviewTiles.clear()
+    }
+
+    private fun deleteOverview() {
+        if (overviewFbo != 0) {
+            ints[0] = overviewFbo
+            GL.glDeleteFramebuffers(1, ints, 0)
+            overviewFbo = 0
+        }
+        if (overviewTex != 0) {
+            deleteTexture(overviewTex)
+            overviewTex = 0
+        }
+        overviewW = 0
+        overviewH = 0
+    }
+
+    /** Draws the whole document from the overview (zoom < 1): mips only when the canvas is really small on screen. */
+    private fun drawOverview() {
+        if (overviewTex == 0) return
+        // The overview update above composited tiles and left the viewport at 256x256.
+        GL.glViewport(0, 0, viewW, viewH)
+        val wantMips = view.zoom < MIP_ZOOM
+        if (wantMips && !overviewMipsValid && mipBudgetAllows()) {
+            GL.glBindTexture(GL.GL_TEXTURE_2D, overviewTex)
+            GL.glGenerateMipmap(GL.GL_TEXTURE_2D)
+            overviewMipsValid = true
+            lastMipGenMs = SystemClock.uptimeMillis()
+        }
+        view.toNdcMatrix(viewW, viewH, mvp)
+        GL.glUseProgram(displayProg)
+        GL.glUniformMatrix4fv(uMvp, 1, false, mvp, 0)
+        GL.glUniform1i(uTex, 0)
+        GL.glUniform2f(uOrigin, 0f, 0f)
+        GL.glUniform2f(uSize, docW.toFloat(), docH.toFloat())
+        GL.glUniform2f(uUvScale, 1f / overviewW, 1f / overviewH)
+        GL.glActiveTexture(GL.GL_TEXTURE0)
+        GL.glBindTexture(GL.GL_TEXTURE_2D, overviewTex)
+        GL.glBindSampler(0, if (wantMips) samplerMip else samplerLinear)
+        GL.glBindVertexArray(vao)
+        GL.glDrawArrays(GL.GL_TRIANGLE_STRIP, 0, 4)
+        GL.glBindSampler(0, 0)
+        GL.glBindVertexArray(0)
+    }
+
+    /** Regenerating the mip chain is throttled: a stroke redraws the overview many times per second. */
+    private fun mipBudgetAllows(): Boolean =
+        SystemClock.uptimeMillis() - lastMipGenMs >= MIP_MIN_INTERVAL_MS
+    /** Brings the overview up to date: a full rebuild, or only the tiles changed since the last frame. */
+    private fun updateOverview(r: GNode) {
+        ensureOverview()
+        if (overviewValid && !overviewFull && overviewTiles.isEmpty()) return
+        val full = overviewFull || !overviewValid
+        // The tile cache is not drawn while the overview is on screen, and its entries would be stale here.
+        compositeCache.values.forEach(::deleteTarget)
+        compositeCache.clear()
+        val scratch = acquire()
+        try {
+            if (full) {
+                for (i in 0 until tilesX * tilesY) {
+                    compositeTileInto(scratch, r, i % tilesX, i / tilesX, clearDirty = false)
+                    blitIntoOverview(scratch, i % tilesX, i / tilesX)
+                }
+            } else {
+                for (i in overviewTiles) {
+                    compositeTileInto(scratch, r, i % tilesX, i / tilesX, clearDirty = false)
+                    blitIntoOverview(scratch, i % tilesX, i / tilesX)
+                }
+            }
+        } finally {
+            release(scratch)
+        }
+        overviewMipsValid = false
+        // What was composed is on screen; the tile path recomposites a tile when it is drawn again.
+        if (full) {
+            dirty.fill(false)
+            dirtyCount = 0
+        } else {
+            for (i in overviewTiles) if (dirty[i]) { dirty[i] = false; dirtyCount-- }
+        }
+        overviewTiles.clear()
+        overviewFull = false
+        overviewValid = true
+    }
+
+    /** Copies one 256ВІ scratch tile into its place in the scaled overview. */
+    private fun blitIntoOverview(scratch: Target, tx: Int, ty: Int) {
+        GL.glBindFramebuffer(GL.GL_READ_FRAMEBUFFER, scratch.fbo)
+        GL.glBindFramebuffer(GL.GL_DRAW_FRAMEBUFFER, overviewFbo)
+        val s = overviewScale
+        val x0 = (tx * Tile.SIZE * s).roundToInt().coerceIn(0, overviewW)
+        val y0 = (ty * Tile.SIZE * s).roundToInt().coerceIn(0, overviewH)
+        val x1 = ((tx + 1) * Tile.SIZE * s).roundToInt().coerceIn(0, overviewW)
+        val y1 = ((ty + 1) * Tile.SIZE * s).roundToInt().coerceIn(0, overviewH)
+        if (x1 > x0 && y1 > y0) {
+            GL.glBlitFramebuffer(
+                0, 0, Tile.SIZE, Tile.SIZE, x0, y0, x1, y1,
+                GL.GL_COLOR_BUFFER_BIT, GL.GL_LINEAR,
+            )
+        }
+        GL.glBindFramebuffer(GL.GL_FRAMEBUFFER, 0)
+    }
+
     // ---------------------------------------------------------------- ops (GL thread)
 
-    /** Re-initializes all document state for a [w]×[h] document (or none if 0). */
+    /** Re-initializes all document state for a [w]Г—[h] document (or none if 0). */
     fun resetDocument(w: Int, h: Int) {
         deleteAllLayerTextures()
         deleteAllMaskTextures()
         deleteAllLuts()
-        for (t in composite) if (t != null) deleteTarget(t)
+        compositeCache.values.forEach(::deleteTarget)
+        compositeCache.clear()
+        deleteOverview()
         clearPreviewTextures()
         previewLayerId = null
         docW = w; docH = h
         tilesX = (w + Tile.MASK) shr Tile.SHIFT
         tilesY = (h + Tile.MASK) shr Tile.SHIFT
         val n = tilesX * tilesY
-        composite = arrayOfNulls(n)
-        mipValid = BooleanArray(n)
+        // A tile composite is 256ВІ RGBA16F; keep the cache within the budget and never above the tile count.
+        baseCompositeLimit = (COMPOSITE_BUDGET / TILE_BYTES).toInt().coerceIn(8, maxOf(8, n))
+        compositeLimit = baseCompositeLimit
         dirty = BooleanArray(n)
         dirtyCount = 0
+        overviewFull = true
+        overviewTiles.clear()
         previewTex = IntArray(n)
         scene = null
         root = null
@@ -293,7 +496,7 @@ internal class CanvasRenderer(
     /**
      * Sets the stroke preview. Pass [layerId] null to clear it; [replace] drops all previously
      * uploaded buffer tiles first. [blend] and [blendStrength] are the brush blend mode of the buffered
-     * stroke (spec/tools/m2-brush.md §1.7): `out = lerp(source-over, blend(mode), strength)`;
+     * stroke (spec/tools/m2-brush.md В§1.7): `out = lerp(source-over, blend(mode), strength)`;
      * [BlendMode.NORMAL] or a zero strength keeps the plain source-over preview.
      */
     fun applyPreview(
@@ -398,6 +601,7 @@ internal class CanvasRenderer(
     private fun markAllDirty() {
         dirty.fill(true)
         dirtyCount = dirty.size
+        overviewFull = true
     }
 
     private fun markDirty(packed: Long) {
@@ -408,6 +612,8 @@ internal class CanvasRenderer(
 
     private fun markDirtyIndex(i: Int) {
         if (!dirty[i]) { dirty[i] = true; dirtyCount++ }
+        // The overview follows the document too; too many separate changes are cheaper as one rebuild.
+        if (overviewTiles.size < OVERVIEW_INCREMENTAL_MAX) overviewTiles.add(i) else overviewFull = true
     }
 
     // ---------------------------------------------------------------- compositing
@@ -418,21 +624,23 @@ internal class CanvasRenderer(
         GL.glBindVertexArray(vao)
     }
 
-    private fun compositeTile(r: GNode, tx: Int, ty: Int) {
+    /**
+     * Composites tile ([tx], [ty]) of [r] into [dst]. Clears the tile's dirty flag unless [clearDirty] is false:
+     * the overview pass composes into a scratch target and leaves the flag for the tile cache.
+     */
+    private fun compositeTileInto(dst: Target, r: GNode, tx: Int, ty: Int, clearDirty: Boolean = true) {
         val i = ty * tilesX + tx
-        dirty[i] = false
-        dirtyCount--
+        if (clearDirty && dirty[i]) { dirty[i] = false; dirtyCount-- }
         val sc = scene ?: return
+        beginComposite()
         var cur = acquire()
         GL.glBindFramebuffer(GL.GL_FRAMEBUFFER, cur.fbo)
         if (sc.paperVisible) GL.glClearColor(sc.paperR, sc.paperG, sc.paperB, sc.paperA)
         else GL.glClearColor(0f, 0f, 0f, 0f)
         GL.glClear(GL.GL_COLOR_BUFFER_BIT)
         cur = renderChildren(r, cur, i)
-        val dst = composite[i] ?: createTarget(COMPOSITE_LEVELS).also { composite[i] = it }
         blit(cur, dst)
         release(cur)
-        mipValid[i] = false
     }
 
     /** Composites [g]'s children onto [backdrop] for tile index [i]; returns the result target. */
@@ -678,6 +886,7 @@ internal class CanvasRenderer(
         uOrigin = GL.glGetUniformLocation(displayProg, "u_origin")
         uSize = GL.glGetUniformLocation(displayProg, "u_size")
         uTex = GL.glGetUniformLocation(displayProg, "u_tex")
+        uUvScale = GL.glGetUniformLocation(displayProg, "u_uvScale")
         adjustShader.create()
         GL.glUseProgram(0)
 
@@ -830,8 +1039,18 @@ internal class CanvasRenderer(
         /** Backdrop around the canvas: #2B2B2B (dark) and #D0D0D0 (light), spec/tools/m0-m1-tools.md T1. */
         private const val BG_DARK = 0x2B / 255f
         private const val BG_LIGHT = 0xD0 / 255f
-        private const val COMPOSITE_LEVELS = 9
+        /** Bytes of one composite tile in RGBA16F: 256ВІ Г— 8. */
+        private const val TILE_BYTES = Tile.SIZE * Tile.SIZE * 8L
+        /** Composite tile cache budget (debt 6); the cache never holds more than the document's tile count. */
+        private const val COMPOSITE_BUDGET = 32L * 1024 * 1024
+        /** Longest side of the mipmapped overview drawn at zoom < 1: 1:1 for the common tablet canvases. */
+        private const val OVERVIEW_MAX = 2560
+        /** Up to this many changed tiles the overview is updated in place; more trigger a full rebuild. */
+        private const val OVERVIEW_INCREMENTAL_MAX = 64
+        /** Below this zoom the overview is sampled with mips (and the chain is regenerated after changes). */
+        private const val MIP_ZOOM = 0.5f
+        /** Shortest interval between two mip regenerations of the overview, ms. */
+        private const val MIP_MIN_INTERVAL_MS = 200L
         private const val MASK_BYTES = Tile.SIZE * Tile.SIZE
-        private const val OFFSCREEN_TILES_PER_FRAME = 4
     }
 }

@@ -2931,12 +2931,11 @@ class StudioViewModel(
         return bmp
     }
 
-    /** Layer limit per spec/GAPS.md: 40% of the large heap budget over 8 bytes/px at 50% fill. */
+    /** Layer limit per spec/GAPS.md: 40% of the large heap, and the GPU tiles get their own budget (debt 6). */
     fun layerLimitFor(w: Int, h: Int): Int {
         val am = getApplication<Application>().getSystemService(ActivityManager::class.java)
         val budget = am.largeMemoryClass.toLong() * 1024 * 1024 * 4 / 10
-        val perLayer = (w.toLong() * h * 8 / 2).coerceAtLeast(1)
-        return (budget / perLayer).toInt().coerceIn(1, 999)
+        return LayerLimit.maxLayers(w, h, budget)
     }
 
     private fun renderThumbnailPng(d: Document): ByteArray {
