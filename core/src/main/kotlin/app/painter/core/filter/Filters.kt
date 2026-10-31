@@ -1,0 +1,501 @@
+package app.painter.core.filter
+
+import app.painter.core.history.snapshotTiles
+import app.painter.core.raster.IntRect
+import app.painter.core.raster.MaskGrid
+import app.painter.core.raster.Tile
+import app.painter.core.raster.TileGrid
+import app.painter.core.raster.TileKey
+import app.painter.core.raster.TilePatch
+import app.painter.core.stroke.StrokeContext
+import java.util.concurrent.Callable
+import java.util.concurrent.Executors
+import kotlin.math.abs
+import kotlin.math.ceil
+import kotlin.math.cos
+import kotlin.math.floor
+import kotlin.math.max
+import kotlin.math.min
+import kotlin.math.pow
+import kotlin.math.sin
+import kotlin.math.sqrt
+
+/**
+ * Destructive filters of spec/filters.md (M3 set). A filter runs over the painted area of one layer, tile by
+ * tile: each tile is processed with a patch padded by [FilterParams.reach], so neighbouring tiles never show a
+ * seam. Pixels outside [out] (the content expanded by the reach, clipped by the selection) are left alone.
+ *
+ * All arithmetic is on premultiplied RGBA floats, like the rest of the raster code.
+ */
+object Filters {
+
+    private const val TILE = Tile.SIZE
+
+    /**
+     * Applies [params] to [grid] in place and returns the before/after patch for the history.
+     * [selection] limits the write to its coverage; [alphaLock] keeps the original alpha per pixel.
+     */
+    fun apply(
+        layerId: String,
+        grid: TileGrid,
+        params: FilterParams,
+        selection: MaskGrid? = null,
+        alphaLock: Boolean = false,
+        threads: Int = StrokeContext.defaultThreads(),
+    ): TilePatch {
+        val content = grid.bounds() ?: return TilePatch(layerId, emptyMap(), emptyMap())
+        val canvas = IntRect(0, 0, grid.width, grid.height)
+        val reach = params.reach.coerceAtLeast(0)
+        val padded = IntRect(
+            (content.x0 - reach).coerceAtLeast(0),
+            (content.y0 - reach).coerceAtLeast(0),
+            (content.x1 + reach).coerceAtMost(grid.width),
+            (content.y1 + reach).coerceAtMost(grid.height),
+        )
+        val out = if (selection != null) {
+            val sel = selection.bounds() ?: return TilePatch(layerId, emptyMap(), emptyMap())
+            padded.intersect(sel) ?: return TilePatch(layerId, emptyMap(), emptyMap())
+        } else {
+            padded
+        }
+        val keys = out.tileKeys(grid.width, grid.height)
+        if (keys.isEmpty()) return TilePatch(layerId, emptyMap(), emptyMap())
+
+        val before = snapshotTiles(grid, keys)
+        val geometry = Geometry(content)
+        val jobs = keys.map { key ->
+            Callable { applyTile(grid, key, params, out, selection, alphaLock, geometry) }
+        }
+        runParallel(jobs, threads)
+        val after = snapshotTiles(grid, keys)
+        return TilePatch(layerId, before, after)
+    }
+
+    /** Centre and radius of the painted area, for the radial filters. */
+    private class Geometry(val content: IntRect) {
+        val cx = content.x0 + content.width / 2f
+        val cy = content.y0 + content.height / 2f
+        val radius = max(content.width, content.height) / 2f
+    }
+
+    private fun applyTile(
+        grid: TileGrid,
+        key: TileKey,
+        params: FilterParams,
+        out: IntRect,
+        selection: MaskGrid?,
+        alphaLock: Boolean,
+        geometry: Geometry,
+    ) {
+        val tileX = key.tx * TILE
+        val tileY = key.ty * TILE
+        val x0 = max(out.x0, tileX)
+        val y0 = max(out.y0, tileY)
+        val x1 = min(out.x1, tileX + TILE)
+        val y1 = min(out.y1, tileY + TILE)
+        if (x1 <= x0 || y1 <= y0) return
+
+        val reach = params.reach
+        val ox = (tileX - reach).coerceAtLeast(0)
+        val oy = (tileY - reach).coerceAtLeast(0)
+        val ex = (tileX + TILE + reach).coerceAtMost(grid.width)
+        val ey = (tileY + TILE + reach).coerceAtMost(grid.height)
+        val w = ex - ox
+        val h = ey - oy
+        val src = readRect(grid, ox, oy, w, h)
+        val dst = filter(params, src, w, h, ox, oy, geometry)
+
+        val tile = grid.getOrCreate(key.tx, key.ty)
+        val maskTile = selection?.get(key)
+        val maskConst = if (selection != null && maskTile == null) {
+            (selection.defaultValue.toInt() and 0xFF) / 255f
+        } else {
+            1f
+        }
+        val px = FloatArray(4)
+        for (y in y0 until y1) {
+            val tyi = y - tileY
+            for (x in x0 until x1) {
+                val i = tile.index(x - tileX, tyi)
+                val j = ((y - oy) * w + (x - ox)) * 4
+                var r = dst[j]
+                var g = dst[j + 1]
+                var b = dst[j + 2]
+                var a = dst[j + 3]
+                if (alphaLock) {
+                    tile.read(i, px)
+                    val alpha = px[3]
+                    if (alpha > 0f) {
+                        val k = if (a > 0f) alpha / a else 0f
+                        r *= k; g *= k; b *= k; a = alpha
+                    } else {
+                        r = 0f; g = 0f; b = 0f; a = 0f
+                    }
+                }
+                val cov = when {
+                    selection == null -> 1f
+                    maskTile != null -> (maskTile.data[tyi * TILE + (x - tileX)].toInt() and 0xFF) / 255f
+                    else -> maskConst
+                }
+                if (cov < 1f) {
+                    tile.read(i, px)
+                    r = px[0] + (r - px[0]) * cov
+                    g = px[1] + (g - px[1]) * cov
+                    b = px[2] + (b - px[2]) * cov
+                    a = px[3] + (a - px[3]) * cov
+                }
+                tile.write(i, r, g, b, a)
+            }
+        }
+        tile.markDirty()
+    }
+
+    /** Copies the [ox],[oy]-based [w]×[h] rect of [grid] into a premultiplied float buffer. */
+    private fun readRect(grid: TileGrid, ox: Int, oy: Int, w: Int, h: Int): FloatArray {
+        val out = FloatArray(w * h * 4)
+        for (key in IntRect(ox, oy, ox + w, oy + h).tileKeys(grid.width, grid.height)) {
+            val tile = grid.get(key) ?: continue
+            val tx0 = max(ox, key.tx * TILE)
+            val ty0 = max(oy, key.ty * TILE)
+            val tx1 = min(ox + w, key.tx * TILE + TILE)
+            val ty1 = min(oy + h, key.ty * TILE + TILE)
+            for (y in ty0 until ty1) {
+                val tyi = y - key.ty * TILE
+                for (x in tx0 until tx1) {
+                    val i = tile.index(x - key.tx * TILE, tyi)
+                    val j = ((y - oy) * w + (x - ox)) * 4
+                    out[j] = tile[i]
+                    out[j + 1] = tile[i + 1]
+                    out[j + 2] = tile[i + 2]
+                    out[j + 3] = tile[i + 3]
+                }
+            }
+        }
+        return out
+    }
+
+    // ---------------------------------------------------------------- the filters
+
+    private fun filter(
+        params: FilterParams,
+        src: FloatArray,
+        w: Int,
+        h: Int,
+        ox: Int,
+        oy: Int,
+        geometry: Geometry,
+    ): FloatArray = when (params) {
+        is BlurParams -> mix(src, gaussian(src, w, h, params.radius.roundToInt()), params.strength)
+        is MotionBlurParams -> mix(src, motionBlur(src, w, h, params), params.strength)
+        is PixelateParams -> mix(src, pixelate(src, w, h, ox, oy, params.cell), params.strength)
+        is SharpenParams -> mix(src, sharpen(src, w, h, params), params.strength)
+        is GlowParams -> mix(src, glow(src, w, h, params), params.strength)
+        is NoiseParams -> mix(src, noise(src, w, h, ox, oy, params), params.strength)
+        is EdgesParams -> mix(src, edges(src, w, h, params.amount), params.strength)
+        is ChromaticParams -> mix(src, chromatic(src, w, h, params), params.strength)
+        is FisheyeParams -> mix(src, fisheye(src, w, h, ox, oy, geometry, params), params.strength)
+    }
+
+    /** `a·(1-t) + b·t` per channel, clamped to a non-negative premultiplied pixel. */
+    private fun mix(a: FloatArray, b: FloatArray, t: Float): FloatArray {
+        val k = t.coerceIn(0f, 1f)
+        if (k >= 1f) return b
+        if (k <= 0f) return a
+        val out = FloatArray(a.size)
+        for (i in a.indices) out[i] = a[i] + (b[i] - a[i]) * k
+        return out
+    }
+
+    /** Three box passes with a sliding window; [radius] is the box radius in px. */
+    private fun gaussian(src: FloatArray, w: Int, h: Int, radius: Int): FloatArray {
+        val r = radius.coerceIn(0, 250)
+        if (r == 0) return src.copyOf()
+        val a = src.copyOf()
+        val temp = FloatArray(src.size)
+        repeat(3) {
+            boxH(a, temp, w, h, r)
+            boxV(temp, a, w, h, r)
+        }
+        return a
+    }
+
+    private fun boxH(src: FloatArray, dst: FloatArray, w: Int, h: Int, r: Int) {
+        val n = 2 * r + 1
+        for (y in 0 until h) {
+            val row = y * w * 4
+            var sr = 0f; var sg = 0f; var sb = 0f; var sa = 0f
+            for (k in -r..r) {
+                val x = k.coerceIn(0, w - 1)
+                val i = row + x * 4
+                sr += src[i]; sg += src[i + 1]; sb += src[i + 2]; sa += src[i + 3]
+            }
+            for (x in 0 until w) {
+                val i = row + x * 4
+                dst[i] = sr / n; dst[i + 1] = sg / n; dst[i + 2] = sb / n; dst[i + 3] = sa / n
+                val outX = (x - r).coerceIn(0, w - 1)
+                val inX = (x + r + 1).coerceIn(0, w - 1)
+                val o = row + outX * 4
+                val q = row + inX * 4
+                sr += src[q] - src[o]
+                sg += src[q + 1] - src[o + 1]
+                sb += src[q + 2] - src[o + 2]
+                sa += src[q + 3] - src[o + 3]
+            }
+        }
+    }
+
+    private fun boxV(src: FloatArray, dst: FloatArray, w: Int, h: Int, r: Int) {
+        val n = 2 * r + 1
+        val stride = w * 4
+        for (x in 0 until w) {
+            val col = x * 4
+            var sr = 0f; var sg = 0f; var sb = 0f; var sa = 0f
+            for (k in -r..r) {
+                val y = k.coerceIn(0, h - 1)
+                val i = col + y * stride
+                sr += src[i]; sg += src[i + 1]; sb += src[i + 2]; sa += src[i + 3]
+            }
+            for (y in 0 until h) {
+                val i = col + y * stride
+                dst[i] = sr / n; dst[i + 1] = sg / n; dst[i + 2] = sb / n; dst[i + 3] = sa / n
+                val outY = (y - r).coerceIn(0, h - 1)
+                val inY = (y + r + 1).coerceIn(0, h - 1)
+                val o = col + outY * stride
+                val q = col + inY * stride
+                sr += src[q] - src[o]
+                sg += src[q + 1] - src[o + 1]
+                sb += src[q + 2] - src[o + 2]
+                sa += src[q + 3] - src[o + 3]
+            }
+        }
+    }
+
+    private fun motionBlur(src: FloatArray, w: Int, h: Int, p: MotionBlurParams): FloatArray {
+        val dist = p.distance.coerceIn(0f, 500f)
+        if (dist <= 0.5f) return src.copyOf()
+        val rad = Math.toRadians(p.angleDeg.toDouble())
+        val dx = cos(rad).toFloat()
+        val dy = sin(rad).toFloat()
+        val samples = dist.roundToInt().coerceIn(2, 64)
+        val out = FloatArray(src.size)
+        val s = FloatArray(4)
+        for (y in 0 until h) for (x in 0 until w) {
+            var r = 0f; var g = 0f; var b = 0f; var a = 0f
+            for (n in 0 until samples) {
+                val t = (n / (samples - 1f) - 0.5f) * dist
+                sample(src, w, h, x + dx * t, y + dy * t, s)
+                r += s[0]; g += s[1]; b += s[2]; a += s[3]
+            }
+            val i = (y * w + x) * 4
+            out[i] = r / samples; out[i + 1] = g / samples; out[i + 2] = b / samples; out[i + 3] = a / samples
+        }
+        return out
+    }
+
+    private fun pixelate(src: FloatArray, w: Int, h: Int, ox: Int, oy: Int, cellPx: Int): FloatArray {
+        val cell = cellPx.coerceIn(2, 200)
+        val out = src.copyOf()
+        val gx0 = (ox / cell) * cell
+        val gy0 = (oy / cell) * cell
+        for (cy in gy0 until oy + h step cell) {
+            for (cx in gx0 until ox + w step cell) {
+                var r = 0f; var g = 0f; var b = 0f; var a = 0f
+                var n = 0
+                val xa = max(cx, ox); val xb = min(cx + cell, ox + w)
+                val ya = max(cy, oy); val yb = min(cy + cell, oy + h)
+                if (xb <= xa || yb <= ya) continue
+                for (y in ya until yb) for (x in xa until xb) {
+                    val i = ((y - oy) * w + (x - ox)) * 4
+                    r += src[i]; g += src[i + 1]; b += src[i + 2]; a += src[i + 3]
+                    n++
+                }
+                if (n == 0) continue
+                r /= n; g /= n; b /= n; a /= n
+                for (y in ya until yb) for (x in xa until xb) {
+                    val i = ((y - oy) * w + (x - ox)) * 4
+                    out[i] = r; out[i + 1] = g; out[i + 2] = b; out[i + 3] = a
+                }
+            }
+        }
+        return out
+    }
+
+    private fun sharpen(src: FloatArray, w: Int, h: Int, p: SharpenParams): FloatArray {
+        val blurred = gaussian(src, w, h, ceil(p.radius.coerceIn(0.1f, 100f)).toInt())
+        val amount = p.amount.coerceIn(0f, 5f)
+        val out = FloatArray(src.size)
+        for (i in src.indices) {
+            out[i] = (src[i] + (src[i] - blurred[i]) * amount).coerceIn(0f, 1f)
+        }
+        // Unsharp keeps the source alpha: a sharpened edge must not grow the layer.
+        for (i in src.indices step 4) out[i + 3] = src[i + 3]
+        return out
+    }
+
+    private fun glow(src: FloatArray, w: Int, h: Int, p: GlowParams): FloatArray {
+        val threshold = p.threshold.coerceIn(0f, 1f)
+        val bright = FloatArray(src.size)
+        for (i in src.indices step 4) {
+            val a = src[i + 3]
+            if (a <= 0f) continue
+            val l = (0.3f * src[i] + 0.59f * src[i + 1] + 0.11f * src[i + 2]) / a
+            if (l >= threshold) {
+                val k = (l - threshold) / max(1f - threshold, 1e-4f)
+                bright[i] = src[i] * k; bright[i + 1] = src[i + 1] * k; bright[i + 2] = src[i + 2] * k
+                bright[i + 3] = a * k
+            }
+        }
+        val halo = gaussian(bright, w, h, ceil(p.radius.coerceIn(0f, 250f)).toInt())
+        val strength = p.strength.coerceIn(0f, 2f)
+        val out = src.copyOf()
+        for (i in src.indices step 4) {
+            // Additive bloom on the premultiplied colour, alpha only grows.
+            out[i] = (src[i] + halo[i] * strength).coerceIn(0f, 1f)
+            out[i + 1] = (src[i + 1] + halo[i + 1] * strength).coerceIn(0f, 1f)
+            out[i + 2] = (src[i + 2] + halo[i + 2] * strength).coerceIn(0f, 1f)
+            out[i + 3] = max(src[i + 3], (halo[i + 3] * strength).coerceIn(0f, 1f))
+        }
+        return out
+    }
+
+    private fun noise(src: FloatArray, w: Int, h: Int, ox: Int, oy: Int, p: NoiseParams): FloatArray {
+        val amount = p.amount.coerceIn(0f, 1f)
+        val out = src.copyOf()
+        for (y in 0 until h) for (x in 0 until w) {
+            val i = (y * w + x) * 4
+            val a = src[i + 3]
+            if (a <= 0f) continue
+            val nr = hash(x + ox, y + oy, p.seed)
+            val ng = if (p.mono) nr else hash(x + ox, y + oy, p.seed + 1)
+            val nb = if (p.mono) nr else hash(x + ox, y + oy, p.seed + 2)
+            out[i] = (src[i] + nr * amount * a).coerceIn(0f, 1f)
+            out[i + 1] = (src[i + 1] + ng * amount * a).coerceIn(0f, 1f)
+            out[i + 2] = (src[i + 2] + nb * amount * a).coerceIn(0f, 1f)
+        }
+        return out
+    }
+
+    private fun edges(src: FloatArray, w: Int, h: Int, amount: Float): FloatArray {
+        val out = FloatArray(src.size)
+        val a = amount.coerceIn(0f, 3f)
+        fun lum(x: Int, y: Int): Float {
+            val i = (y.coerceIn(0, h - 1) * w + x.coerceIn(0, w - 1)) * 4
+            val alpha = src[i + 3]
+            if (alpha <= 0f) return 0f
+            return (0.3f * src[i] + 0.59f * src[i + 1] + 0.11f * src[i + 2]) / alpha * alpha
+        }
+        for (y in 0 until h) for (x in 0 until w) {
+            val gx = lum(x - 1, y - 1) + 2f * lum(x - 1, y) + lum(x - 1, y + 1) -
+                lum(x + 1, y - 1) - 2f * lum(x + 1, y) - lum(x + 1, y + 1)
+            val gy = lum(x - 1, y - 1) + 2f * lum(x, y - 1) + lum(x + 1, y - 1) -
+                lum(x - 1, y + 1) - 2f * lum(x, y + 1) - lum(x + 1, y + 1)
+            val e = (sqrt(gx * gx + gy * gy) * a).coerceIn(0f, 1f)
+            val i = (y * w + x) * 4
+            val alpha = src[i + 3]
+            out[i] = e * alpha
+            out[i + 1] = e * alpha
+            out[i + 2] = e * alpha
+            out[i + 3] = alpha
+        }
+        return out
+    }
+
+    private fun chromatic(src: FloatArray, w: Int, h: Int, p: ChromaticParams): FloatArray {
+        val d = p.distance.coerceIn(0f, 200f)
+        if (d <= 0.01f) return src.copyOf()
+        val rad = Math.toRadians(p.angleDeg.toDouble())
+        val dx = cos(rad).toFloat() * d
+        val dy = sin(rad).toFloat() * d
+        val out = src.copyOf()
+        val s = FloatArray(4)
+        for (y in 0 until h) for (x in 0 until w) {
+            val i = (y * w + x) * 4
+            sample(src, w, h, x + dx, y + dy, s)
+            out[i] = s[0]
+            sample(src, w, h, x - dx, y - dy, s)
+            out[i + 2] = s[2]
+        }
+        return out
+    }
+
+    private fun fisheye(
+        src: FloatArray,
+        w: Int,
+        h: Int,
+        ox: Int,
+        oy: Int,
+        geometry: Geometry,
+        p: FisheyeParams,
+    ): FloatArray {
+        val amount = p.amount.coerceIn(-1f, 1f)
+        if (abs(amount) < 0.001f) return src.copyOf()
+        val radius = (geometry.radius * p.scale.coerceIn(0.1f, 2f)).coerceAtLeast(1f)
+        val out = FloatArray(src.size)
+        val s = FloatArray(4)
+        for (y in 0 until h) for (x in 0 until w) {
+            val dx = (x + ox) - geometry.cx
+            val dy = (y + oy) - geometry.cy
+            val r = sqrt(dx * dx + dy * dy)
+            val i = (y * w + x) * 4
+            if (r >= radius || r < 1e-4f) {
+                out[i] = src[i]; out[i + 1] = src[i + 1]; out[i + 2] = src[i + 2]; out[i + 3] = src[i + 3]
+                continue
+            }
+            val t = r / radius
+            val f = 1f + amount * (1f - t) * (1f - t)
+            val sx = geometry.cx + dx * f
+            val sy = geometry.cy + dy * f
+            sample(src, w, h, sx - ox, sy - oy, s)
+            out[i] = s[0]; out[i + 1] = s[1]; out[i + 2] = s[2]; out[i + 3] = s[3]
+        }
+        return out
+    }
+
+    /** Bilinear sample of a premultiplied patch, clamped to its edges. */
+    private fun sample(buf: FloatArray, w: Int, h: Int, x: Float, y: Float, out: FloatArray) {
+        if (w <= 0 || h <= 0) { out.fill(0f); return }
+        val fx = x.coerceIn(0f, (w - 1).toFloat())
+        val fy = y.coerceIn(0f, (h - 1).toFloat())
+        val x0 = floor(fx).toInt()
+        val y0 = floor(fy).toInt()
+        val x1 = min(x0 + 1, w - 1)
+        val y1 = min(y0 + 1, h - 1)
+        val tx = fx - x0
+        val ty = fy - y0
+        val i00 = (y0 * w + x0) * 4
+        val i10 = (y0 * w + x1) * 4
+        val i01 = (y1 * w + x0) * 4
+        val i11 = (y1 * w + x1) * 4
+        for (c in 0..3) {
+            val top = buf[i00 + c] + (buf[i10 + c] - buf[i00 + c]) * tx
+            val bottom = buf[i01 + c] + (buf[i11 + c] - buf[i01 + c]) * tx
+            out[c] = top + (bottom - top) * ty
+        }
+    }
+
+    /** Deterministic noise in -1..1 from canvas pixel and seed. */
+    private fun hash(x: Int, y: Int, seed: Long): Float {
+        var z = seed * -0x61c8864680b583ebL + x * -0x7a1435883d4d519L + y * 0x2545f4914f6cdd1dL
+        z = (z xor (z ushr 33)) * -0xae502812aa7333L
+        z = (z xor (z ushr 29)) * -0x3b314601e57a13adL
+        z = z xor (z ushr 32)
+        return ((z ushr 40).toFloat() / 8388608f) - 1f
+    }
+
+    private fun runParallel(jobs: List<Callable<Unit>>, threads: Int) {
+        if (jobs.isEmpty()) return
+        val workers = min(threads.coerceAtLeast(1), jobs.size)
+        if (workers <= 1) {
+            jobs.forEach { it.call() }
+            return
+        }
+        val pool = Executors.newFixedThreadPool(workers) { r -> Thread(r, "painter-filter").apply { isDaemon = true } }
+        try {
+            pool.invokeAll(jobs).forEach { it.get() }
+        } finally {
+            pool.shutdown()
+        }
+    }
+
+    private fun Float.roundToInt(): Int = kotlin.math.round(this).toInt()
+}

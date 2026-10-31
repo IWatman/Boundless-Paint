@@ -8,6 +8,7 @@ import app.painter.core.color.Rgba
 import app.painter.core.doc.ColorTag
 import app.painter.core.doc.EditTarget
 import app.painter.core.fill.GradientType
+import app.painter.core.filter.FilterParams
 import app.painter.core.fill.Spread
 import app.painter.core.guide.OverlayRole
 import app.painter.core.history.MaskInit
@@ -168,6 +169,8 @@ data class StudioUiState(
     val lightBackground: Boolean = false,
     /** A finger double tap fits the canvas (spec/tools/m0-m1-tools.md T1). */
     val doubleTapFits: Boolean = true,
+    /** A destructive filter is being computed; strokes are ignored until it is applied. */
+    val filterBusy: Boolean = false,
     val viewZoom: Float = 1f,
     /** Active tool; [ToolUi.BRUSH] paints, the SELECT_* tools drag a selection. */
     val tool: ToolUi = ToolUi.BRUSH,
@@ -571,6 +574,8 @@ interface StudioActions {
     fun setDoubleTapFits(enabled: Boolean) {}
     /** Document toggle "gamma-correct": blend layers in linear light (saved with the project). */
     fun setGammaCorrect(on: Boolean) {}
+    /** Applies a destructive filter to the active layer; a selection clips it (spec/filters.md). */
+    fun applyFilter(params: FilterParams) {}
     fun openHome()
     fun save()
     fun exportImage()
@@ -660,6 +665,7 @@ open class NoOpStudioActions : StudioActions {
     override fun setLightBackground(light: Boolean) {}
     override fun setDoubleTapFits(enabled: Boolean) {}
     override fun setGammaCorrect(on: Boolean) {}
+    override fun applyFilter(params: FilterParams) {}
     override fun openEditingTools() {}
     override fun openOptions() {}
     override fun addColorToPalette(color: Rgba) {}

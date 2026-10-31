@@ -33,6 +33,7 @@ The app is completely free: no subscriptions, ads, watermarks or paid features.
 - Shapes: line, rectangle, ellipse, polygon, arc, drawn with the current brush; outline, fill, stamp
 - Color: HSB wheel, sliders, hex, palette, eyedropper (long press)
 - Undo and redo with buttons and gestures (two- and three-finger tap), two-finger navigation
+- Filters: blur, motion blur, pixelate, sharpen, glow, noise, find edges, chromatic aberration, fisheye (M3)
 - Autosave 2 seconds after a change, PNG/JPG export with quality and transparency options
 - In-app update from GitHub Releases
 
@@ -42,7 +43,8 @@ The app is completely free: no subscriptions, ads, watermarks or paid features.
 - Filters (M3)
 
 **In progress (M3)**
-- Filters and filter layers, liquify, text, PSD import/export, timelapse, canvas crop/resize/straighten
+- More filters (dilate/erode, zoom/spin blur, radial and speed lines, halftone, layer styles), filter layers, liquify, text
+- PSD import/export, timelapse, canvas crop/resize/straighten
 - The full catalog of about 236 presets and brush import/export ([spec/tools/brush-import.md](spec/tools/brush-import.md))
 
 Full plan: [spec/ROADMAP.md](spec/ROADMAP.md), the finished M2 plan: [spec/PLAN-M2.md](spec/PLAN-M2.md), known issues: [spec/STATUS.md](spec/STATUS.md).

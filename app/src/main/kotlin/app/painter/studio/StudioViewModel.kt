@@ -34,6 +34,8 @@ import app.painter.core.fill.RefSource
 import app.painter.core.fill.Region
 import app.painter.core.fill.RegionParams
 import app.painter.core.fill.Spread
+import app.painter.core.filter.FilterParams
+import app.painter.core.filter.Filters
 import app.painter.core.guide.DocRect
 import app.painter.core.guide.EllipseConfig
 import app.painter.core.guide.GuideJson
@@ -205,6 +207,8 @@ class StudioViewModel(
     private var stroke: StrokeEngine? = null
     private var dirtySinceSave = false
     private var autosaveJob: Job? = null
+    /** A filter is being computed on a worker: strokes are ignored until it lands. */
+    private var filterBusy = false
     /** Tile versions of the last successful save: only what changed since is copied (debt 10). */
     private val saveTracker = SaveTracker()
     /** True while [doc] has a project directory that an incremental save can update. */
@@ -393,6 +397,8 @@ class StudioViewModel(
     }
 
     override fun onStrokeBegin(p: InputPoint, deviceDescriptor: String, penEraser: Boolean) {
+        // A filter is computing on a copy of the layer; a stroke would land under it and be overwritten.
+        if (filterBusy) return
         // The back of the pen (TOOL_TYPE_ERASER) erases with the erase brush for this stroke only (§4.3);
         // the previous mode comes back in onStrokeEnd/onStrokeCancel, also when the stroke is dropped.
         if (penEraser) enterPenEraserMode()
@@ -2213,6 +2219,40 @@ class StudioViewModel(
         _state.update { it.copy(gammaCorrect = on) }
         // Every tile is composited differently now: the scene snapshot change makes the renderer redo them all.
         canvas?.invalidate(null, null)
+    }
+
+    /**
+     * Runs [params] over the active layer (spec/filters.md). The layer is filtered on a private copy on a worker
+     * thread; the result is committed with one [TilePatchCommand], so a large radius never blocks the UI and the
+     * whole filter is a single undo step.
+     */
+    override fun applyFilter(params: FilterParams) {
+        if (filterBusy) return
+        finishShape(commit = true)
+        finishTransform(apply = true)
+        finishGradient(apply = true)
+        commitPendingOpacity()
+        val layer = doc.activeRaster ?: return
+        if (!layer.visible || layer.effectivelyLocked) return
+        val id = layer.id
+        val copy = layer.pixels.copy()
+        val selection = doc.selection.coverageOrNull()?.copy()
+        val alphaLock = layer.alphaLock
+        val threads = STROKE_THREADS
+        filterBusy = true
+        _state.update { it.copy(filterBusy = true) }
+        viewModelScope.launch {
+            val patch = runCatching {
+                withContext(Dispatchers.Default) { Filters.apply(id, copy, params, selection, alphaLock, threads) }
+            }.getOrDefault(TilePatch(id, emptyMap(), emptyMap()))
+            filterBusy = false
+            _state.update { it.copy(filterBusy = false) }
+            if (patch.after.isEmpty()) return@launch
+            // The layer may have been deleted while the filter ran; then the result is dropped.
+            if (doc.findNode(id) !is RasterLayer) return@launch
+            history.execute(doc, TilePatchCommand(patch, "Filter: ${params.kind}"))
+            canvas?.invalidate(id, patch.after.keys)
+        }
     }
 
     // ---- guides ----

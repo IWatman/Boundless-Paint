@@ -4,6 +4,9 @@
 - `live` = available as a Filter layer (deterministic, no pixels outside a radius > 64 px).
 - Milestone: M3 = basic, M5 = the rest.
 - Parameters: `name range (default)`.
+- **Implemented in M3 (2026-10-31):** blur, motion blur, pixelate, unsharp mask (sharpen), glow, noise, find edges
+  (Sobel), chromatic aberration, fisheye/pinch — `core/filter/Filters.kt`, one undo step, selection and alpha lock
+  aware. The rest below is still planned.
 
 ## Color and tone (Adjust)
 | Filter | Parameters | live | Milestone |

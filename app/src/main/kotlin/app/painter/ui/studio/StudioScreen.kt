@@ -71,6 +71,16 @@ fun StudioScreen(
     canvas: @Composable () -> Unit,
 ) {
     var localHud by remember { mutableStateOf<HudUi?>(null) }
+    var filtersOpen by remember { mutableStateOf(false) }
+    if (filtersOpen) {
+        FilterDialog(
+            onDismiss = { filtersOpen = false },
+            onApply = { params ->
+                filtersOpen = false
+                actions.applyFilter(params)
+            },
+        )
+    }
     Box(
         Modifier
             .fillMaxSize()
@@ -93,6 +103,7 @@ fun StudioScreen(
             StudioTopBar(
                 state = state,
                 actions = actions,
+                onFilters = { filtersOpen = true },
                 modifier = Modifier
                     .align(Alignment.TopStart)
                     .fillMaxWidth()
@@ -592,7 +603,12 @@ private fun CreativeToolsButton(state: StudioUiState, actions: StudioActions) {
 }
 
 @Composable
-private fun StudioTopBar(state: StudioUiState, actions: StudioActions, modifier: Modifier = Modifier) {
+private fun StudioTopBar(
+    state: StudioUiState,
+    actions: StudioActions,
+    onFilters: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     Row(modifier, verticalAlignment = Alignment.CenterVertically) {
         PanelSurface {
             Row(Modifier.padding(2.dp)) {
@@ -661,6 +677,14 @@ private fun StudioTopBar(state: StudioUiState, actions: StudioActions, modifier:
                             onClick = {
                                 toolsMenu = false
                                 actions.selectTool(ToolUi.CLONE)
+                            },
+                        )
+                        HorizontalDivider()
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.filters)) },
+                            onClick = {
+                                toolsMenu = false
+                                onFilters()
                             },
                         )
                         if (state.hasSelection) {

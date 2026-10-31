@@ -72,4 +72,26 @@ class TileGrid(val width: Int, val height: Int, val precise: Boolean = false) {
         for (ty in ty0..ty1) for (tx in tx0..tx1) out.add(TileKey(tx, ty))
         return out
     }
+
+    /**
+     * Coarse bounding box of the painted area (tile granularity, clipped to the canvas), or null when the
+     * layer is empty. Used to limit filters and generates to the content instead of the whole canvas.
+     */
+    fun bounds(): IntRect? {
+        var x0 = Int.MAX_VALUE
+        var y0 = Int.MAX_VALUE
+        var x1 = Int.MIN_VALUE
+        var y1 = Int.MIN_VALUE
+        for ((key, tile) in tiles) {
+            if (tile.isEmpty()) continue
+            val bx = key.tx shl Tile.SHIFT
+            val by = key.ty shl Tile.SHIFT
+            if (bx < x0) x0 = bx
+            if (by < y0) y0 = by
+            if (bx + Tile.SIZE > x1) x1 = bx + Tile.SIZE
+            if (by + Tile.SIZE > y1) y1 = by + Tile.SIZE
+        }
+        if (x0 == Int.MAX_VALUE) return null
+        return IntRect(x0, y0, x1, y1).intersect(IntRect(0, 0, width, height))
+    }
 }

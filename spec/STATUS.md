@@ -1,5 +1,18 @@
 # Status
 
+## M3: in progress
+### Filters (2026-10-31)
+- Core: `core/filter` — `FilterParams` (sealed, 9 kinds) and `Filters.apply`, which runs tile by tile with a patch
+  padded by the filter's reach (no seams), respects the selection and alpha lock, and returns a `TilePatch` so a
+  filter is one undo step.
+- Implemented: blur, motion blur, pixelate, sharpen (unsharp mask), glow/bloom, noise (mono/colour, deterministic),
+  find edges (Sobel), chromatic aberration, fisheye/pinch.
+- UI: Editing Tools → Filters… with a chip per filter and only the sliders it needs; the filter runs on a worker
+  thread over a private copy of the layer and is committed in one history step. Strokes are ignored while it runs.
+- Tests: `FiltersTest` (15) — tiling and seams, determinism, selection/alpha lock, undo, parameter round trip.
+- Next in M3: the rest of the filter list (dilate/erode, zoom/spin blur, radial and speed lines, halftone, layer
+  styles, generators), filter layers (live), liquify, text, PSD, timelapse, canvas crop/resize/straighten.
+
 ## M2: done (2026-10-31)
 - Build: `. .\tools\env.ps1; .\gradlew.bat :core:test :app:testDebugUnitTest :app:assembleDebug`.
 - Tests: **524 JVM tests, all green** (451 in `:core`, 73 in `:app`); GPU↔CPU parity `BlendParityTest` (33 modes, 13 adjustments, in sRGB and in linear light) green on `painter_tab` (Android 14, GLES 3.1, RGBA16F).
