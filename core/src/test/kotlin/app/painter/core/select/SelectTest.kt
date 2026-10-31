@@ -215,6 +215,20 @@ class SelectTest {
     }
 
     @Test
+    fun surroundingFillAndEraseKeepTheSelectedIsland() {
+        val doc = Document.create(300, 300)
+        val l = doc.activeRaster!!
+        val h = History()
+        h.execute(doc, SelectionEdits.shape(doc, RectShape(150f, 150f, 30f, 30f), SelectMode.NEW, false)!!)
+        h.execute(doc, SelectionEdits.fillOutside(doc, Rgba(0f, 1f, 0f))!!)
+        assertEquals(0f, pixel(l.pixels, 150, 150)[3], "inside the lasso is untouched")
+        assertEquals(1f, pixel(l.pixels, 20, 20)[1], "outside is filled")
+        h.execute(doc, SelectionEdits.eraseOutside(doc)!!)
+        assertEquals(0f, pixel(l.pixels, 20, 20)[3], "surrounding erase clears outside")
+        assertEquals(0f, pixel(l.pixels, 150, 150)[3], "the selected island is still untouched")
+    }
+
+    @Test
     fun copyPaste_roundTrip_pixelsEqual() {
         val doc = Document.create(600, 400)
         val l = doc.activeRaster!!

@@ -410,6 +410,12 @@ interface StudioActions {
 
     /** Feathers the selection edges by [radius] pixels (undoable). */
     fun featherSelection(radius: Float)
+
+    /** Fills ([erase] false) or clears the selected pixels on the active layer (one undo step). */
+    fun fillSelection(erase: Boolean) {}
+
+    /** Fills everything outside the selection; without a selection this does nothing. */
+    fun fillOutsideSelection() {}
     fun setBrushSize(size: Float)
     fun setOpacity(opacity: Float)
     fun setFlow(flow: Float)

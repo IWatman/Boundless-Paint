@@ -77,8 +77,11 @@
 - New Shape tools: **Rounded rectangle**, **Arrow** and **Speech balloon** alongside line/rect/ellipse/polygon/arc.
   Outlines are closed polylines rendered through the current brush; move/rotate/resize handles work for the new
   shapes as well. `ShapeTest` covers creation, closure and the tail geometry.
-- Still planned in M4: vector layers, radial/array rulers, lasso fill/eraser, surrounding fill, animation/onion
-  skin, manuscript, screentone layer, colour mode/CMYK, Drive sync.
+- Selection content actions: **Fill selection**, **Erase selection** and **Fill outside selection** in Editing
+  Tools when a selection is active. The surrounding fill renders an inverted selection mask without intersecting
+  it with the active selection; `SelectTest` covers fill and erase keeping the selected island.
+- Still planned in M4: vector layers, radial/array rulers, a direct lasso-fill gesture, animation/onion skin,
+  manuscript, screentone layer, colour mode/CMYK, Drive sync.
 
 ## M2: done (2026-10-31)
 - Build: `. .\tools\env.ps1; .\gradlew.bat :core:test :app:testDebugUnitTest :app:assembleDebug`.

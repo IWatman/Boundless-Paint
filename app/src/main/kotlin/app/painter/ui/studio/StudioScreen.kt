@@ -878,6 +878,28 @@ private fun StudioTopBar(
                                     actions.featherSelection(4f)
                                 },
                             )
+                            HorizontalDivider()
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.fill_selection)) },
+                                onClick = {
+                                    toolsMenu = false
+                                    actions.fillSelection(erase = false)
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.erase_selection)) },
+                                onClick = {
+                                    toolsMenu = false
+                                    actions.fillSelection(erase = true)
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.fill_outside_selection)) },
+                                onClick = {
+                                    toolsMenu = false
+                                    actions.fillOutsideSelection()
+                                },
+                            )
                         }
                     }
                 }

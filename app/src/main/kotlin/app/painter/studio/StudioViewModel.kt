@@ -2052,6 +2052,15 @@ class StudioViewModel(
         SelectionEdits.feather(doc, radius.coerceIn(0f, 250f))?.let { exec(it) }
     }
 
+    override fun fillSelection(erase: Boolean) {
+        val cmd = if (erase) SelectionEdits.delete(doc) else SelectionEdits.fill(doc, _state.value.color)
+        cmd?.let { exec(it) }
+    }
+
+    override fun fillOutsideSelection() {
+        SelectionEdits.fillOutside(doc, _state.value.color)?.let { exec(it) }
+    }
+
     override fun deselect() {
         SelectionEdits.deselect(doc)?.let { exec(it) }
     }

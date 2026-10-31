@@ -574,4 +574,7 @@
     <string name="shape_rounded_rect">Скруглённый прямоугольник</string>
     <string name="shape_arrow">Стрелка</string>
     <string name="shape_balloon">Облачко</string>
+    <string name="fill_selection">Залить выделение</string>
+    <string name="erase_selection">Стереть выделение</string>
+    <string name="fill_outside_selection">Залить вне выделения</string>
 </resources>

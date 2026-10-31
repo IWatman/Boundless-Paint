@@ -39,11 +39,22 @@ object BucketFill {
         return FillCommand(layerId, p, name) { c -> patch(doc, layerId, cov, c, opacity, erase) }
     }
 
-    /** The patch [apply] would produce, without touching the document. */
-    fun patch(doc: Document, layerId: String, cov: MaskGrid, color: Rgba, opacity: Float, erase: Boolean): TilePatch? {
+    /**
+     * The patch [apply] would produce, without touching the document. [clipSelection] false fills [cov] as is;
+     * the surrounding fill uses that with an inverted selection mask.
+     */
+    fun patch(
+        doc: Document,
+        layerId: String,
+        cov: MaskGrid,
+        color: Rgba,
+        opacity: Float,
+        erase: Boolean,
+        clipSelection: Boolean = true,
+    ): TilePatch? {
         val layer = doc.findNode(layerId) as? RasterLayer ?: return null
         if (layer.locked || opacity <= 0f) return null
-        val mask = MaskMath.multiply(cov, doc.selection.coverageOrNull())
+        val mask = if (clipSelection) MaskMath.multiply(cov, doc.selection.coverageOrNull()) else cov
         val keys = mask.keys().filter { mask.isInBounds(it.tx, it.ty) && !mask.get(it)!!.isEmpty() }
         val o = opacity.coerceIn(0f, 1f)
         val result = HashMap<TileKey, Tile?>()

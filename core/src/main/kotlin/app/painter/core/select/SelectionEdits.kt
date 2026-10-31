@@ -149,6 +149,28 @@ object SelectionEdits {
         return p?.let { TilePatchCommand(it, "Fill") }
     }
 
+    /** Fills everything outside the current selection ("surrounding fill"); null without an active selection. */
+    fun fillOutside(doc: Document, color: Rgba): Command? {
+        val layer = doc.activeRaster ?: return null
+        val inside = doc.selection.coverageOrNull() ?: return null
+        val outside = inside.copy().also(MaskOps::invert)
+        val p = BucketFill.patch(
+            doc, layer.id, outside, color, 1f, erase = false, clipSelection = false,
+        ) ?: return null
+        return TilePatchCommand(p, "Surrounding fill")
+    }
+
+    /** Erases everything outside the current selection, keeping the selected island. */
+    fun eraseOutside(doc: Document): Command? {
+        val layer = doc.activeRaster ?: return null
+        val inside = doc.selection.coverageOrNull() ?: return null
+        val outside = inside.copy().also(MaskOps::invert)
+        val p = BucketFill.patch(
+            doc, layer.id, outside, Rgba.TRANSPARENT, 1f, erase = true, clipSelection = false,
+        ) ?: return null
+        return TilePatchCommand(p, "Surrounding erase")
+    }
+
     /**
      * New layer named [name] above the active one holding [f] moved so that its bounds start at [at]'s
      * origin (integer offset, clipped to the canvas).

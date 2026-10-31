@@ -575,4 +575,7 @@
     <string name="shape_rounded_rect">Rounded rectangle</string>
     <string name="shape_arrow">Arrow</string>
     <string name="shape_balloon">Speech balloon</string>
+    <string name="fill_selection">Fill selection</string>
+    <string name="erase_selection">Erase selection</string>
+    <string name="fill_outside_selection">Fill outside selection</string>
 </resources>
