@@ -56,6 +56,11 @@
   Shaded and Web have their own rules), and fill pattern/procedural (solid only).
 - Re-checked after the fix: 29 fast strokes on the emulator, Dalvik heap stabilises around 227 MB of the 450 MB
   cap, no new ANR or `OutOfMemoryError`.
+- Watercolour preview now writes only the pigment bounding rectangle of each tile (plus the bilinear border)
+  instead of walking all 256×256 pixels; the previous rectangle is included once so drying pixels are cleared.
+  The local cell-to-pixel conversion was also fixed so wet tiles after the first one write their pigment.
+  `StrokeBench` E: **3.6 ms mean** (was 10.0 at 0.3.6, 5.5 at 0.3.7), max ≈60 ms (the pen-up dry loop).
+  Wet wash checked on `painter_tab`: a 1000 px stroke renders with its dark core and wet halo.
 
 ## M2: done (2026-10-31)
 - Build: `. .\tools\env.ps1; .\gradlew.bat :core:test :app:testDebugUnitTest :app:assembleDebug`.

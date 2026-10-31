@@ -65,6 +65,9 @@ internal class WetSimulation(
     /** Pixel tiles to hand to [write]. */
     private val dirty = LinkedHashSet<TileKey>()
 
+    /** Cell bounds of the previous [write] per pixel tile, so drying pixels are cleared too. */
+    private val lastWrite = HashMap<Long, IntArray>()
+
     /** Clock remainder of [advance], ms. */
     private var acc = 0f
 
@@ -189,7 +192,12 @@ internal class WetSimulation(
         return n
     }
 
-    /** Overwrites the pixels of the dirty tiles with a bilinear sample of the pigment; the target is this stroke. */
+    /**
+     * Overwrites the pixels of the dirty tiles with a bilinear sample of the pigment; the target is this stroke.
+     * Only the pigment's bounding rectangle (plus the cells needed by the bilinear filter) is rewritten, and the
+     * previous rectangle is included once so pixels that just dried are cleared. A watercolor preview used to walk
+     * all 256x256 pixels of every touched tile on every input event, which is what made the brush feel low-FPS.
+     */
     fun write(target: TileAccess) {
         if (dirty.isEmpty()) return
         val quad = FloatArray(4 * CHANNELS)
@@ -199,21 +207,34 @@ internal class WetSimulation(
             val py0 = key.ty shl Tile.SHIFT
             if (px0 >= width || py0 >= height || px0 + Tile.SIZE <= 0 || py0 + Tile.SIZE <= 0) continue
             val own = tiles[key.packed]
-            val tile = target.prepare(key, create = own != null) ?: continue
-            val nx = min(Tile.SIZE, width - px0)
-            val ny = min(Tile.SIZE, height - py0)
-            for (py in 0 until ny) {
+            if (own == null) {
+                // A neighbour tile with no wet cells of its own: only its edge ring reads this tile's cells.
+                val tile = target.prepare(key, create = false) ?: continue
+                writeRing(tile, px0, py0, key)
+                continue
+            }
+            val current = pigmentBounds(own)
+            val previous = lastWrite[key.packed]
+            val area = unionBounds(current, previous)
+            if (area == null) {
+                lastWrite.remove(key.packed)
+                continue
+            }
+            val tile = target.prepare(key, create = true) ?: continue
+            // The cell bounds are local to this wet tile; its pixel tile has the same origin. Do not subtract the
+            // document-space px0 here: doing that made every wet tile except the first one write nothing.
+            val x0 = (area[0] * CELL_PX - CELL_PX).coerceIn(0, Tile.SIZE)
+            val y0 = (area[1] * CELL_PX - CELL_PX).coerceIn(0, Tile.SIZE)
+            val x1 = ((area[2] + 1) * CELL_PX + CELL_PX).coerceIn(0, Tile.SIZE)
+            val y1 = ((area[3] + 1) * CELL_PX + CELL_PX).coerceIn(0, Tile.SIZE)
+            for (py in y0 until y1) {
                 val v = (py0 + py + 0.5f) * INV_CELL_PX - 0.5f
                 val cy0 = floor(v).toInt()
                 val fy = v - cy0
-                // Without a wet tile of its own only the outer pixel ring samples cells of the neighbours.
-                val ring = own == null && py != 0 && py != ny - 1
-                for (px in 0 until nx) {
-                    if (ring && px != 0 && px != nx - 1) continue
+                for (px in x0 until x1) {
                     val u = (px0 + px + 0.5f) * INV_CELL_PX - 0.5f
                     val cx0 = floor(u).toInt()
                     val fx = u - cx0
-                    // Neighbour cells may live in another wet tile (or outside the document: then they read 0).
                     readCell(own, cx0, cy0, quad, 0)
                     readCell(own, cx0 + 1, cy0, quad, 4)
                     readCell(own, cx0, cy0 + 1, quad, 8)
@@ -224,7 +245,6 @@ internal class WetSimulation(
                         val s = top + (bottom - top) * fy
                         sample[ch] = if (s.isFinite()) s else 0f
                     }
-                    // Paper grain: the pigment settles thicker in the pits of the paper.
                     val g0 = grainAt(own, cx0, cy0)
                     val g1 = grainAt(own, cx0 + 1, cy0)
                     val g2 = grainAt(own, cx0, cy0 + 1)
@@ -242,9 +262,64 @@ internal class WetSimulation(
                     )
                 }
             }
+            if (current == null) lastWrite.remove(key.packed) else lastWrite[key.packed] = current
             tile.markDirty()
         }
         dirty.clear()
+    }
+
+    /** Boundary pixels of a neighbour tile; the interior does not sample the neighbouring wet tile. */
+    private fun writeRing(tile: Tile, px0: Int, py0: Int, key: TileKey) {
+        val nx = min(Tile.SIZE, width - px0)
+        val ny = min(Tile.SIZE, height - py0)
+        val quad = FloatArray(4 * CHANNELS)
+        val sample = FloatArray(CHANNELS)
+        for (py in 0 until ny) {
+            val topOrBottom = py == 0 || py == ny - 1
+            val v = (py0 + py + 0.5f) * INV_CELL_PX - 0.5f
+            val cy0 = floor(v).toInt()
+            val fy = v - cy0
+            for (px in 0 until nx) {
+                if (!topOrBottom && px != 0 && px != nx - 1) continue
+                val u = (px0 + px + 0.5f) * INV_CELL_PX - 0.5f
+                val cx0 = floor(u).toInt()
+                val fx = u - cx0
+                readCell(null, cx0, cy0, quad, 0)
+                readCell(null, cx0 + 1, cy0, quad, 4)
+                readCell(null, cx0, cy0 + 1, quad, 8)
+                readCell(null, cx0 + 1, cy0 + 1, quad, 12)
+                for (ch in 0 until CHANNELS) {
+                    val top = quad[ch] + (quad[4 + ch] - quad[ch]) * fx
+                    val bottom = quad[8 + ch] + (quad[12 + ch] - quad[8 + ch]) * fx
+                    sample[ch] = (top + (bottom - top) * fy).takeIf { it.isFinite() } ?: 0f
+                }
+                val alpha = sample[3].coerceIn(0f, 1f)
+                tile.write(tile.index(px, py), sample[0], sample[1], sample[2], alpha)
+            }
+        }
+        tile.markDirty()
+    }
+
+    /** Inclusive cell bounds of the pigment ([i0, j0, i1, j1]), or null when the tile has no pigment. */
+    private fun pigmentBounds(tile: WetTile): IntArray? {
+        var i0 = CELLS; var j0 = CELLS; var i1 = -1; var j1 = -1
+        val p = tile.p
+        for (j in 0 until CELLS) {
+            for (i in 0 until CELLS) {
+                if (p[((j shl CELL_SHIFT) + i) * CHANNELS + 3] <= 1e-5f) continue
+                if (i < i0) i0 = i
+                if (i > i1) i1 = i
+                if (j < j0) j0 = j
+                if (j > j1) j1 = j
+            }
+        }
+        return if (i1 < 0) null else intArrayOf(i0, j0, i1, j1)
+    }
+
+    private fun unionBounds(a: IntArray?, b: IntArray?): IntArray? = when {
+        a == null -> b
+        b == null -> a
+        else -> intArrayOf(min(a[0], b[0]), min(a[1], b[1]), max(a[2], b[2]), max(a[3], b[3]))
     }
 
     /** Copy of the pixel tiles [write] would fill, for the caller. */
@@ -254,6 +329,7 @@ internal class WetSimulation(
     fun reset() {
         tiles.clear()
         dirty.clear()
+        lastWrite.clear()
         acc = 0f
         born = 0L
     }
