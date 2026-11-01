@@ -407,6 +407,12 @@
     <string name="pattern_brick">Brick</string>
     <string name="pattern_herringbone">Herringbone</string>
     <string name="pattern_grain">Grain</string>
+    <string name="pattern_zigzag">Zigzag</string>
+    <string name="pattern_waves">Waves</string>
+    <string name="pattern_triangles">Triangles</string>
+    <string name="pattern_stars">Stars</string>
+    <string name="pattern_hexagons">Hexagons</string>
+    <string name="pattern_wood_grain">Wood grain</string>
     <string name="pattern_tile_size">Tile size</string>
     <string name="pattern_rotation">Rotation</string>
     <string name="pattern_background">Background</string>

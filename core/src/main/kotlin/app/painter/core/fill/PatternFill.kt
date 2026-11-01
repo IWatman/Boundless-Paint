@@ -13,6 +13,8 @@ import app.painter.core.raster.applyTiles
 import app.painter.core.raster.maskedPatch
 import app.painter.core.raster.parallelTiles
 import kotlin.math.PI
+import kotlin.math.abs
+import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.floor
 import kotlin.math.sin
@@ -37,6 +39,24 @@ enum class PatternKind {
 
     /** Canvas/paper grain: a woven value-noise texture. */
     CANVAS,
+
+    /** Bold chevron line folded at every half tile. */
+    ZIGZAG,
+
+    /** Two antiphase sinusoidal lines per tile. */
+    WAVES,
+
+    /** Checkerboard of inset up and down triangles. */
+    TRIANGLES,
+
+    /** One five-pointed star per tile. */
+    STARS,
+
+    /** Honeycomb of filled hexagonal cells. */
+    HEXAGONS,
+
+    /** Wavy fibre lines over a softly modulated board tone. */
+    WOOD_GRAIN,
 }
 
 /**
@@ -115,6 +135,12 @@ object PatternGenerator {
             PatternKind.BRICK -> brick(u, v, s)
             PatternKind.HERRINGBONE -> herringbone(u, v, s)
             PatternKind.CANVAS -> canvas(u, v)
+            PatternKind.ZIGZAG -> zigzag(u, v, s)
+            PatternKind.WAVES -> waves(u, v, s)
+            PatternKind.TRIANGLES -> triangles(u, v, s)
+            PatternKind.STARS -> stars(u, v, s)
+            PatternKind.HEXAGONS -> hexagons(u, v, s)
+            PatternKind.WOOD_GRAIN -> woodGrain(u, v, s)
         }
         return value.coerceIn(0f, 1f)
     }
@@ -209,8 +235,134 @@ object PatternGenerator {
         return 0.32f + 0.68f * (0.62f * noise + 0.38f * weave)
     }
 
+    /** Zigzag: one bold chevron line per tile, folded at every half tile. */
+    private fun zigzag(u: Float, v: Float, s: Float): Float {
+        val amplitude = 0.22f
+        val halfWidth = 0.07f
+        val t = fract(u)
+        val wave = 1f - 4f * abs(t - 0.5f)
+        val slope = if (t < 0.5f) amplitude * 4f else -amplitude * 4f
+        // Distance to the centre line, measured perpendicular to its local slope.
+        val distance = abs(wrapSigned(v - 0.5f - amplitude * wave)) / sqrt(1f + slope * slope)
+        return 1f - smooth(halfWidth - s, halfWidth + s, distance)
+    }
+
+    /** Waves: two sinusoidal lines per tile, half a tile apart and in antiphase. */
+    private fun waves(u: Float, v: Float, s: Float): Float {
+        val amplitude = 0.14f
+        val halfWidth = 0.055f
+        val phase = 2f * PI.toFloat() * u
+        val wave = sin(phase)
+        val slope = 2f * PI.toFloat() * amplitude * cos(phase)
+        val distance = sqrt(1f + slope * slope)
+        val first = abs(wrapSigned(v - 0.25f - amplitude * wave)) / distance
+        val second = abs(wrapSigned(v - 0.75f + amplitude * wave)) / distance
+        return 1f - smooth(halfWidth - s, halfWidth + s, minOf(first, second))
+    }
+
+    /** Triangles: an up/down checkerboard of inset triangles, two cells per tile row and column. */
+    private fun triangles(u: Float, v: Float, s: Float): Float {
+        val cells = 2f
+        val x = u * cells
+        val y = v * cells
+        val ix = floor(x).toInt()
+        val iy = floor(y).toInt()
+        val up = ((ix + iy) and 1) == 0
+        val sd = triangleSdf(x - ix, if (up) y - iy else 1f - (y - iy))
+        val aa = s * cells
+        return smooth(-aa, aa, -sd)
+    }
+
+    /** Signed distance to a triangle inset in the unit cell, with its apex at the top. */
+    private fun triangleSdf(x: Float, y: Float): Float {
+        val margin = 0.09f
+        val halfBase = 0.5f - margin
+        val height = 1f - 2f * margin
+        val length = sqrt(halfBase * halfBase + height * height)
+        val left = (-height * (x - 0.5f) - halfBase * (y - margin)) / length
+        val right = (height * (x - 0.5f) - halfBase * (y - margin)) / length
+        return maxOf(left, right, y - (1f - margin))
+    }
+
+    /** Stars: one five-pointed star per tile, with its upper tip at the top. */
+    private fun stars(u: Float, v: Float, s: Float): Float {
+        val outer = 0.42f
+        val inner = 0.18f
+        val du = fract(u) - 0.5f
+        val dv = fract(v) - 0.5f
+        val radius = sqrt(du * du + dv * dv)
+        if (radius < 1e-6f) return 1f
+        val twoPi = 2f * PI.toFloat()
+        val sectorWidth = twoPi / 10f
+        val angle = atan2(dv, du) + PI.toFloat() / 2f
+        val phi = angle - twoPi * floor(angle / twoPi)
+        val sector = floor(phi / sectorWidth).toInt()
+        val t = phi - sector * sectorWidth
+        val start = if ((sector and 1) == 0) outer else inner
+        val end = if ((sector and 1) == 0) inner else outer
+        // Straight edge between an outer tip and the neighbouring inner valley, in polar form.
+        val edge = start * end * sin(sectorWidth) /
+            (end * sin(sectorWidth - t) + start * sin(t))
+        return 1f - smooth(edge - s, edge + s, radius)
+    }
+
+    /** Hexagons: a honeycomb of pointy-top hexagons on a two-by-two offset lattice. */
+    private fun hexagons(u: Float, v: Float, s: Float): Float {
+        val rows = 2f
+        val columns = 2f
+        val dx = 1f / columns
+        val dy = 1f / rows
+        val rowBase = floor(v * rows).toInt()
+        var nearest = Float.MAX_VALUE
+        var nearestU = 0f
+        var nearestV = 0f
+        for (row in rowBase - 1..rowBase + 1) {
+            val shift = if ((row and 1) == 0) 0f else dx * 0.5f
+            val columnBase = floor((u - shift) * columns).toInt()
+            val cy = row * dy
+            for (column in columnBase - 1..columnBase + 1) {
+                val du = u - (column * dx + shift)
+                val dv = v - cy
+                val d2 = du * du + dv * dv
+                if (d2 < nearest) {
+                    nearest = d2
+                    nearestU = du
+                    nearestV = dv
+                }
+            }
+        }
+        val halfWidth = 0.23f
+        val halfHeight = 0.31f
+        val leg = sqrt(halfWidth * halfWidth + halfHeight * halfHeight * 0.25f)
+        val side = maxOf(
+            nearestU - halfWidth,
+            -nearestU - halfWidth,
+            (halfHeight * 0.5f * nearestU - halfWidth * (nearestV + halfHeight)) / leg,
+            (-halfHeight * 0.5f * nearestU - halfWidth * (nearestV + halfHeight)) / leg,
+            (halfHeight * 0.5f * nearestU + halfWidth * (nearestV - halfHeight)) / leg,
+            (-halfHeight * 0.5f * nearestU + halfWidth * (nearestV - halfHeight)) / leg,
+        )
+        return smooth(-s, s, -side)
+    }
+
+    /** Wood grain: long wavy fibre lines over a softly modulated board tone. */
+    private fun woodGrain(u: Float, v: Float, s: Float): Float {
+        val warp = 0.65f * valueNoise(u, v, 3, 71) +
+            0.35f * valueNoise(u, v, 6, 72) +
+            0.15f * valueNoise(u, v, 12, 73)
+        val grain = fract(u * 7f + warp)
+        val distance = minOf(grain, 1f - grain)
+        val line = 1f - smooth(0.11f - s, 0.11f + s, distance)
+        val tone = 0.14f + 0.18f * valueNoise(u, v, 2, 74)
+        val strength = 0.72f + 0.14f * valueNoise(u, v, 4, 75)
+        return tone + strength * line
+    }
+
     /** Coverage of one cell interior with an anti-aliased border of [soft] on both sides. */
     private fun band(x: Float, soft: Float): Float = smooth(0f, soft, x) * smooth(0f, soft, 1f - x)
+
+    /** [v] folded into [-0.5, 0.5]: the signed distance to the nearest repeat line. */
+    private fun wrapSigned(v: Float): Float = v - floor(v + 0.5f)
 
     /** Periodic value noise on a [period] × [period] lattice. */
     private fun valueNoise(u: Float, v: Float, period: Int, seed: Int): Float {

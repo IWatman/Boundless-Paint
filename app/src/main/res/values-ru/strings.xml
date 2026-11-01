@@ -408,6 +408,12 @@
     <string name="pattern_brick">Кирпич</string>
     <string name="pattern_herringbone">Ёлочка</string>
     <string name="pattern_grain">Зерно</string>
+    <string name="pattern_zigzag">Зигзаг</string>
+    <string name="pattern_waves">Волны</string>
+    <string name="pattern_triangles">Треугольники</string>
+    <string name="pattern_stars">Звёзды</string>
+    <string name="pattern_hexagons">Шестиугольники</string>
+    <string name="pattern_wood_grain">Текстура дерева</string>
     <string name="pattern_tile_size">Размер плитки</string>
     <string name="pattern_rotation">Поворот</string>
     <string name="pattern_background">Фон</string>

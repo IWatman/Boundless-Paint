@@ -60,13 +60,19 @@ private fun PatternKind.titleRes(): Int = when (this) {
     PatternKind.BRICK -> R.string.pattern_brick
     PatternKind.HERRINGBONE -> R.string.pattern_herringbone
     PatternKind.CANVAS -> R.string.pattern_grain
+    PatternKind.ZIGZAG -> R.string.pattern_zigzag
+    PatternKind.WAVES -> R.string.pattern_waves
+    PatternKind.TRIANGLES -> R.string.pattern_triangles
+    PatternKind.STARS -> R.string.pattern_stars
+    PatternKind.HEXAGONS -> R.string.pattern_hexagons
+    PatternKind.WOOD_GRAIN -> R.string.pattern_wood_grain
 }
 
 /**
- * Pattern fill dialog (spec §09): one of six built-in procedural patterns blended between a background and
- * an ink colour, with tile size, rotation, phase offset, contrast, invert and opacity. Both swatches start
- * at the current ink. Every control updates the six live previews; Apply fills the active layer or the
- * selection as one undo step.
+ * Pattern fill dialog (spec §09): one of twelve built-in procedural patterns blended between a background
+ * and an ink colour, with tile size, rotation, phase offset, contrast, invert and opacity. Both swatches
+ * start at the current ink. Every control updates the twelve live previews; Apply fills the active layer or
+ * the selection as one undo step.
  */
 @Composable
 fun PatternDialog(

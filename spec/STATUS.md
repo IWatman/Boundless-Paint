@@ -17,20 +17,23 @@
   plural.
 - `tools/check_localization.py` compares `values/strings.xml` with `values-ru/strings.xml`: missing and extra
   names, empty translations, format placeholders and Russian plural categories. It exits non-zero on a
-  mismatch. Current sets: **771 EN resources, 770 RU**; the only difference is the non-translatable `app_name`.
+  mismatch. Current sets: **797 EN resources, 796 RU**; the only difference is the non-translatable `app_name`.
 
 ### Pattern fill (2026-11-01)
-- Core: `core/fill/PatternFill.kt` generates six seamless procedural patterns (checks, dots, diagonal stripes,
-  brick, herringbone, canvas grain) and fills a layer through the selection with alpha lock, reusing
-  `maskedPatch`/`TilePatch`. The pattern cell rotates with its repeat lattice, so rotated fills stay seamless.
-  Coverage blends a background and an ink colour, with a phase offset in document pixels, a contrast curve
-  around 0.5 and an invert switch. Offsets are clamped to ±256 px; every parameter keeps the periodic lattice.
-- UI: Editing Tools → Pattern fill… opens a compact dialog with six live previews, two colour swatches backed by
-  HSB sliders, tile size, rotation, offset X/Y, contrast, invert and opacity; the fill runs on a worker and lands
-  as one undo step.
-- Tests: `PatternFillTest` (17) — wrap at tile edges for every pattern, determinism with every control, scale and
-  rotation, rotated lattice and phase-offset seams, phase shift, clamped range, contrast curve and rendered
-  direction, two-colour blend, invert, opacity, selection clipping, alpha lock, locked layers and undo/redo.
+- Core: `core/fill/PatternFill.kt` generates twelve seamless procedural patterns (checks, dots, diagonal
+  stripes, brick, herringbone, canvas grain, zigzag, waves, triangles, stars, hexagons, wood grain) and fills a
+  layer through the selection with alpha lock, reusing `maskedPatch`/`TilePatch`. The pattern cell rotates with
+  its repeat lattice, so rotated fills stay seamless. Coverage blends a background and an ink colour, with a
+  phase offset in document pixels, a contrast curve around 0.5 and an invert switch. Offsets are clamped to
+  ±256 px; every parameter keeps the periodic lattice.
+- UI: Editing Tools → Pattern fill… opens a compact dialog with twelve live previews, two colour swatches backed
+  by HSB sliders, tile size, rotation, offset X/Y, contrast, invert and opacity; the fill runs on a worker and
+  lands as one undo step.
+- Tests: `PatternFillTest` (22) — wrap at tile edges and along the rotated lattice for every pattern, determinism
+  with every control, scale and rotation, phase shift, clamped range, contrast curve and rendered direction,
+  two-colour blend and invert on every pattern, opacity, selection clipping, alpha lock, locked layers, undo/redo
+  and visible-shape checks for each new pattern (fold, antiphase waves, triangle orientation, five star tips,
+  hexagon lattice gaps and wood grain bands).
 
 ### First filter batch (2026-11-01)
 - Core: ten more destructive filters — smooth (edge-preserving), lens blur, high-pass, frosted glass/scatter,

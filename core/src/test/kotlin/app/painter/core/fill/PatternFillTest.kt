@@ -22,6 +22,14 @@ import kotlin.test.assertTrue
 
 class PatternFillTest {
     private val kinds = PatternKind.entries
+    private val newKinds = listOf(
+        PatternKind.ZIGZAG,
+        PatternKind.WAVES,
+        PatternKind.TRIANGLES,
+        PatternKind.STARS,
+        PatternKind.HEXAGONS,
+        PatternKind.WOOD_GRAIN,
+    )
     private val background = Rgba(1f, 0f, 0f)
     private val ink = Rgba(0f, 0f, 1f)
     private val clear = Rgba.TRANSPARENT
@@ -277,6 +285,189 @@ class PatternFillTest {
         assertTrue(history.redo(doc))
         assertTrue(same(after, pixel(layer.pixels, 20, 20)))
         assertEquals(1, history.undoSize)
+    }
+
+    @Test
+    fun newPatternsWrapAtEveryTileLatticePoint() {
+        val samples = floatArrayOf(
+            -2.75f, -1.4f, -0.5f, -0.001f, 0f, 0.001f, 0.25f, 0.5f, 0.75f, 0.999f, 1f, 1.5f, 2.25f,
+        )
+        val shifts = listOf(1 to 0, 0 to 1, -1 to -1, 2 to -3)
+        for (kind in newKinds) {
+            for (u in samples) for (v in samples) {
+                val base = PatternGenerator.coverage(kind, u, v, 0.01f)
+                for ((shiftU, shiftV) in shifts) {
+                    assertEquals(
+                        base,
+                        PatternGenerator.coverage(kind, u + shiftU, v + shiftV, 0.01f),
+                        2e-4f,
+                        "$kind does not wrap by $shiftU,$shiftV at $u,$v",
+                    )
+                }
+            }
+        }
+    }
+
+    @Test
+    fun newPatternsAreDeterministicWithEveryControl() {
+        for (kind in newKinds) {
+            val spec = PatternSpec(kind, 37f, 61f, 123.5f, -44.25f, 0.55f, invert = true)
+            assertContentEquals(mask(spec), mask(spec), "$kind is not deterministic")
+            assertEquals(gridHash(fill(spec, background, ink, 0.8f)), gridHash(fill(spec, background, ink, 0.8f)))
+        }
+    }
+
+    @Test
+    fun newPatternsWrapAlongTheRotatedAndShiftedTile() {
+        val tile = 40f
+        val points = listOf(3.2f to 1.7f, 17.5f to 9.25f, 30.1f to 33.3f, 41.3f to 8.9f)
+        val rotations = floatArrayOf(0f, 17f, 45f, 90f, 137f, 270f)
+        val phases = listOf(0f to 0f, 37.5f to -81.25f, -PatternSpec.MAX_OFFSET to PatternSpec.MAX_OFFSET)
+        for (kind in newKinds) {
+            for (rotation in rotations) {
+                val rad = rotation * PI.toFloat() / 180f
+                val dx = tile * cos(rad)
+                val dy = tile * sin(rad)
+                val ex = -tile * sin(rad)
+                val ey = tile * cos(rad)
+                for ((offsetX, offsetY) in phases) {
+                    val sampler = PatternSampler(PatternSpec(kind, tile, rotation, offsetX, offsetY, contrast = 0.35f))
+                    for ((x, y) in points) {
+                        val base = sampler.at(x, y)
+                        assertEquals(base, sampler.at(x + dx, y + dy), 1e-3f, "$kind does not wrap u at $rotation°")
+                        assertEquals(base, sampler.at(x + ex, y + ey), 1e-3f, "$kind does not wrap v at $rotation°")
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun newPatternsBlendBothColoursAndInvertExactly() {
+        for (kind in newKinds) {
+            val spec = PatternSpec(kind, 64f, 23f, 11f, -7f)
+            val natural = fill(spec, background, ink, 1f)
+            val inverted = fill(spec.copy(invert = true), background, ink, 1f)
+            var partial = 0
+            for (y in 0 until 64) for (x in 0 until 64) {
+                val a = pixel(natural, x, y)
+                val b = pixel(inverted, x, y)
+                assertEquals(background.r + ink.r, a[0] + b[0], 1e-3f, "$kind red is not complementary at $x,$y")
+                assertEquals(background.g + ink.g, a[1] + b[1], 1e-3f, "$kind green is not complementary at $x,$y")
+                assertEquals(background.b + ink.b, a[2] + b[2], 1e-3f, "$kind blue is not complementary at $x,$y")
+                assertEquals(background.a + ink.a, a[3] + b[3], 1e-3f, "$kind alpha is not complementary at $x,$y")
+                if (a[0] > 0.05f && a[0] < 0.95f) partial++
+            }
+            assertTrue(partial > 20, "$kind has no partially covered pixels")
+        }
+    }
+
+    @Test
+    fun newPatternsDrawDistinctVisibleShapes() {
+        val allMasks = kinds.associateWith { tileMask(it) }
+        for (kind in newKinds) {
+            val mask = allMasks.getValue(kind)
+            assertTrue(mask.count { it > 0.85f } > 100, "$kind has no ink")
+            assertTrue(mask.count { it < 0.4f } > 100, "$kind has no background")
+        }
+        for (first in kinds) for (second in kinds) if (first < second) {
+            assertTrue(
+                changed(allMasks.getValue(first), allMasks.getValue(second)) > 50,
+                "$first and $second look the same",
+            )
+        }
+
+        val zigzag = allMasks.getValue(PatternKind.ZIGZAG)
+        for (x in 0 until 64) {
+            assertTrue((0 until 64).any { y -> zigzag[y * 64 + x] > 0.85f }, "zigzag misses column $x")
+        }
+        assertTrue(abs(peakRow(zigzag, 2) - peakRow(zigzag, 32)) > 15, "zigzag does not fold")
+
+        val waves = allMasks.getValue(PatternKind.WAVES)
+        for (x in 0 until 64) {
+            assertTrue((0 until 64).any { y -> waves[y * 64 + x] > 0.85f }, "waves miss column $x")
+            assertEquals(2, bandCount(waves, x, column = true), "waves has the wrong bands in column $x")
+        }
+
+        val triangles = allMasks.getValue(PatternKind.TRIANGLES)
+        for (cellY in 0..1) for (cellX in 0..1) {
+            val x0 = cellX * 32
+            val y0 = cellY * 32
+            val top = regionCount(triangles, x0, y0, x0 + 31, y0 + 15)
+            val bottom = regionCount(triangles, x0, y0 + 16, x0 + 31, y0 + 31)
+            assertTrue(top > 0 && bottom > 0, "triangles leaves cell $cellX,$cellY empty")
+            if (((cellX + cellY) and 1) == 0) {
+                assertTrue(bottom > top + 20, "up triangle $cellX,$cellY has no wide base")
+            } else {
+                assertTrue(top > bottom + 20, "down triangle $cellX,$cellY has no wide base")
+            }
+        }
+
+        val starSampler = PatternSampler(PatternSpec(PatternKind.STARS, 64f))
+        assertTrue(starSampler.at(32f, 32f) > 0.95f, "star centre is empty")
+        for (tip in 0 until 5) {
+            val angle = -PI.toFloat() / 2f + tip * 2f * PI.toFloat() / 5f
+            val tipX = 32f + 0.36f * 64f * cos(angle)
+            val tipY = 32f + 0.36f * 64f * sin(angle)
+            assertTrue(starSampler.at(tipX, tipY) > 0.9f, "star tip $tip is missing")
+            val valley = angle + PI.toFloat() / 5f
+            val valleyX = 32f + 0.28f * 64f * cos(valley)
+            val valleyY = 32f + 0.28f * 64f * sin(valley)
+            assertTrue(starSampler.at(valleyX, valleyY) < 0.1f, "star valley $tip is filled")
+        }
+
+        val hexSampler = PatternSampler(PatternSpec(PatternKind.HEXAGONS, 64f))
+        for (row in -1..2) {
+            val shift = if ((row and 1) == 0) 0f else 0.25f
+            for (column in -1..2) {
+                val x = (column * 0.5f + shift) * 64f
+                val y = row * 0.5f * 64f
+                val nextX = ((column + 1) * 0.5f + shift) * 64f
+                assertTrue(hexSampler.at(x, y) > 0.9f, "hexagon centre $column,$row is empty")
+                assertTrue(hexSampler.at((x + nextX) / 2f, y) < 0.1f, "hexagon gap $column,$row is filled")
+            }
+        }
+
+        val wood = allMasks.getValue(PatternKind.WOOD_GRAIN)
+        for (y in 0 until 64) {
+            assertTrue((0 until 64).any { x -> wood[y * 64 + x] > 0.85f }, "wood has no grain line in row $y")
+            assertTrue(bandCount(wood, y, column = false) >= 4, "wood has too few grain lines in row $y")
+        }
+    }
+
+    private fun tileMask(kind: PatternKind): FloatArray {
+        val sampler = PatternSampler(PatternSpec(kind, 64f))
+        return FloatArray(64 * 64) { i -> sampler.at((i % 64) + 0.5f, (i / 64) + 0.5f) }
+    }
+
+    /** Row of the strongest coverage in one column of a 64 × 64 tile mask. */
+    private fun peakRow(mask: FloatArray, x: Int): Int {
+        var best = 0
+        for (y in 1 until 64) if (mask[y * 64 + x] > mask[best * 64 + x]) best = y
+        return best
+    }
+
+    /** Number of separate high-coverage runs along one column or row of a 64 × 64 tile mask. */
+    private fun bandCount(mask: FloatArray, index: Int, column: Boolean, threshold: Float = 0.6f): Int {
+        var count = 0
+        var inside = false
+        for (i in 0 until 64) {
+            val value = if (column) mask[i * 64 + index] else mask[index * 64 + i]
+            if (value > threshold) {
+                if (!inside) count++
+                inside = true
+            } else {
+                inside = false
+            }
+        }
+        return count
+    }
+
+    /** Pixels above [threshold] inside the inclusive tile rectangle. */
+    private fun regionCount(mask: FloatArray, x0: Int, y0: Int, x1: Int, y1: Int, threshold: Float = 0.8f): Int {
+        var count = 0
+        for (y in y0..y1) for (x in x0..x1) if (mask[y * 64 + x] > threshold) count++
+        return count
     }
 
     private fun mask(spec: PatternSpec): FloatArray {
