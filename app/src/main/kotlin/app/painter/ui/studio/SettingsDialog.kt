@@ -21,10 +21,16 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import app.painter.BuildConfig
 import app.painter.R
+import app.painter.ui.drive.DriveUiState
 
-/** Full settings sheet of M3: appearance, document colour pipeline, stylus and the version/about block. */
+/** Full settings sheet: appearance, colour pipeline, stylus, Google Drive and the version/about block. */
 @Composable
-fun SettingsDialog(state: StudioUiState, actions: StudioActions, onDismiss: () -> Unit) {
+fun SettingsDialog(
+    state: StudioUiState,
+    actions: StudioActions,
+    drive: DriveUiState = DriveUiState(),
+    onDismiss: () -> Unit,
+) {
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.settings)) },
@@ -69,6 +75,23 @@ fun SettingsDialog(state: StudioUiState, actions: StudioActions, onDismiss: () -
                     actions.closeSettings()
                     actions.toggleStylusPanel()
                 }) { Text(stringResource(R.string.stylus_settings)) }
+                HorizontalDivider(Modifier.padding(vertical = 6.dp))
+                Section(stringResource(R.string.drive_title))
+                Text(
+                    drive.account?.email ?: stringResource(R.string.drive_not_connected),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                TextButton(onClick = {
+                    actions.closeSettings()
+                    actions.openDrivePanel()
+                }) {
+                    Text(
+                        stringResource(
+                            if (drive.account == null) R.string.drive_connect else R.string.drive_manage,
+                        ),
+                    )
+                }
                 HorizontalDivider(Modifier.padding(vertical = 6.dp))
                 Section(stringResource(R.string.settings_about))
                 Text(

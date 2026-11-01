@@ -611,4 +611,41 @@
     <string name="animation_once">Play once</string>
     <string name="animation_frame_label">Frame %1$d</string>
     <string name="animation_frame_number">%1$d</string>
+    <string name="drive_title">Google Drive</string>
+    <string name="drive_intro">Back up projects and save finished drawings to the Boundless Paint folder in your Google Drive. The app can only access files it creates.</string>
+    <string name="drive_connect">Connect Google Drive</string>
+    <string name="drive_manage">Manage Google Drive</string>
+    <string name="drive_connected">Google Drive connected.</string>
+    <string name="drive_connected_as">Connected as %1$s</string>
+    <string name="drive_not_connected">Not connected</string>
+    <string name="drive_last_sync">Last sync: %1$s</string>
+    <string name="drive_backup_current">Back up current project</string>
+    <string name="drive_backup_all">Back up all projects</string>
+    <string name="drive_backups">Backups</string>
+    <string name="drive_refresh">Refresh</string>
+    <string name="drive_no_backups">No backups yet.</string>
+    <string name="drive_loading_backups">Loading backups…</string>
+    <string name="drive_restore">Restore</string>
+    <string name="drive_sign_out">Disconnect Google Drive</string>
+    <string name="drive_signed_out">Google Drive disconnected.</string>
+    <string name="drive_backed_up">Backed up “%1$s”.</string>
+    <string name="drive_backing_up">Backing up %1$d of %2$d…</string>
+    <string name="drive_restored">Project restored. It is now in your gallery.</string>
+    <string name="drive_restored_name">%1$s (Drive)</string>
+    <string name="drive_cancelled">Google sign-in was cancelled.</string>
+    <string name="drive_reauth">Google access expired. Connect Google Drive again.</string>
+    <string name="drive_failed">Google Drive error: %1$s</string>
+    <string name="drive_unavailable">Google Drive is not available in this build.</string>
+    <string name="drive_no_projects">There are no projects to back up.</string>
+    <string name="drive_save_drawing">Save drawing as PNG</string>
+    <string name="drive_drawing_saved">Drawing saved to Google Drive: %1$s</string>
+    <string name="drive_folders_hint">Projects go to Boundless Paint/Projects, drawings to Boundless Paint/Drawings.</string>
+    <plurals name="drive_backed_up_all">
+        <item quantity="one">Backed up %1$d project.</item>
+        <item quantity="other">Backed up %1$d projects.</item>
+    </plurals>
+    <plurals name="drive_backups_loaded">
+        <item quantity="one">%1$d backup found.</item>
+        <item quantity="other">%1$d backups found.</item>
+    </plurals>
 </resources>

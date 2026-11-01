@@ -7,7 +7,7 @@ plugins {
 }
 
 // Single version source; CI passes -PappVersion=<tag without v>.
-val appVersion = (findProperty("appVersion") as String?) ?: "0.4.8"
+val appVersion = (findProperty("appVersion") as String?) ?: "0.4.9"
 val appVersionCode = appVersion.split(".").map { it.toInt() }.let { (major, minor, patch) ->
     major * 10000 + minor * 100 + patch
 }
@@ -84,6 +84,7 @@ dependencies {
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.navigation.compose)
     implementation(libs.androidx.input.motionprediction)
+    implementation(libs.play.services.auth)
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.ui)
     implementation(libs.compose.ui.tooling.preview)

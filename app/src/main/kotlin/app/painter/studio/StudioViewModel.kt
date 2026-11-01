@@ -142,10 +142,17 @@ import app.painter.core.select.PolyShape
 import app.painter.core.select.RectShape
 import app.painter.core.select.SelectMode
 import app.painter.core.select.SelectionEdits
+import app.painter.drive.DriveAuthCancelledException
+import app.painter.drive.DriveException
+import app.painter.drive.DriveRepository
+import app.painter.drive.DriveSettings
+import app.painter.drive.DriveTokenRequester
 import app.painter.render.CanvasInputListener
 import app.painter.render.CanvasView
 import app.painter.timelapse.TimelapseEncoder
 import app.painter.timelapse.TimelapseStore
+import app.painter.ui.drive.DriveUiState
+import app.painter.ui.drive.toUi
 import app.painter.ui.home.ProjectCardUi
 import app.painter.ui.studio.AdjustEditorUi
 import app.painter.ui.studio.AnimationFrameUi
@@ -189,6 +196,8 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonObject
 import java.io.ByteArrayOutputStream
+import java.text.SimpleDateFormat
+import java.util.Date
 import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.roundToInt
@@ -203,23 +212,36 @@ class StudioViewModel(
     app: Application,
     private val prefs: ToolPrefs? = null,
     private val input: InputSettings? = null,
+    driveTokens: DriveTokenRequester? = null,
 ) :
     AndroidViewModel(app), StudioActions, CanvasInputListener {
 
     companion object {
         /**
          * Factory for `by viewModels()`: the default `AndroidViewModelFactory` looks for an
-         * `(Application)` constructor, which the defaulted [prefs] parameter takes away.
+         * `(Application)` constructor, which the defaulted [prefs] parameter takes away. [driveTokens] is the
+         * activity-bound Google authorization client; null keeps Drive disabled (tests and previews).
          */
-        fun factory(app: Application): ViewModelProvider.Factory = object : ViewModelProvider.Factory {
+        fun factory(
+            app: Application,
+            driveTokens: DriveTokenRequester? = null,
+        ): ViewModelProvider.Factory = object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>): T =
-                StudioViewModel(app, ToolPrefs(app), InputSettings(app)) as T
+                StudioViewModel(app, ToolPrefs(app), InputSettings(app), driveTokens) as T
         }
     }
 
     private val store = ProjectStore(app.filesDir.resolve("projects").apply { mkdirs() })
     private val ioLock = Mutex()
+
+    /** Local Drive link and the sync-account state; separate from [state] so syncs do not recompose the canvas. */
+    private val driveSettings = DriveSettings(app)
+    private val drive = driveTokens?.let { DriveRepository(it, driveSettings, app.cacheDir) }
+    private val _driveState = MutableStateFlow(
+        DriveUiState(account = driveSettings.account?.toUi(), lastSyncMs = driveSettings.lastSyncMs),
+    )
+    val driveState: StateFlow<DriveUiState> = _driveState
 
     /** Pressure calibration of every input device seen so far, keyed by `InputDevice.descriptor`. */
     private val calibrations = HashMap<String, InputCalibration>()
@@ -3474,6 +3496,175 @@ class StudioViewModel(
         _state.update { it.copy(timelapseEnabled = enabled) }
         if (enabled) scheduleTimelapse(force = true)
     }
+
+    // ---- Google Drive (M4) ----
+
+    override fun openDrivePanel() {
+        val hasProject = docOnDisk || doc.width > 1 || doc.height > 1
+        _driveState.update { it.copy(open = true, canSyncCurrent = hasProject) }
+        if (_driveState.value.account != null) refreshDriveBackups(showMessage = false)
+    }
+
+    override fun closeDrivePanel() = _driveState.update { it.copy(open = false) }
+
+    override fun driveConnect() = driveOperation {
+        val repo = drive ?: throw DriveException(0, uiString(R.string.drive_unavailable))
+        val account = repo.connect()
+        _driveState.update { it.copy(account = account.toUi(), lastSyncMs = repo.lastSyncMs) }
+        val backups = repo.listBackups()
+        _driveState.update {
+            it.copy(backups = backups.map { backup -> backup.toUi() }, loaded = true, lastSyncMs = repo.lastSyncMs)
+        }
+        uiString(R.string.drive_connected)
+    }
+
+    override fun driveDisconnect() = driveOperation {
+        val repo = drive ?: throw DriveException(0, uiString(R.string.drive_unavailable))
+        repo.disconnect()
+        _driveState.update {
+            it.copy(account = null, backups = emptyList(), loaded = false, lastSyncMs = 0L)
+        }
+        uiString(R.string.drive_signed_out)
+    }
+
+    override fun driveSyncCurrent() = driveOperation {
+        val repo = drive ?: throw DriveException(0, uiString(R.string.drive_unavailable))
+        save()
+        saveJob?.join()
+        val backup = repo.backup(doc.id, doc.name, store.dirFor(doc.id))
+        _driveState.update { it.copy(lastSyncMs = repo.lastSyncMs) }
+        upsertDriveBackup(backup.toUi())
+        uiString(R.string.drive_backed_up, backup.name)
+    }
+
+    override fun driveSyncAll() = driveOperation {
+        val repo = drive ?: throw DriveException(0, uiString(R.string.drive_unavailable))
+        save()
+        saveJob?.join()
+        val projects = withContext(Dispatchers.IO) { ioLock.withLock { store.list() } }
+        if (projects.isEmpty()) return@driveOperation uiString(R.string.drive_no_projects)
+        projects.forEachIndexed { index, project ->
+            _driveState.update {
+                it.copy(
+                    busy = true,
+                    message = uiString(R.string.drive_backing_up, index + 1, projects.size),
+                    error = false,
+                )
+            }
+            repo.backup(project.id, project.name, store.dirFor(project.id))
+        }
+        val backups = repo.listBackups()
+        _driveState.update {
+            it.copy(
+                backups = backups.map { backup -> backup.toUi() },
+                loaded = true,
+                lastSyncMs = repo.lastSyncMs,
+            )
+        }
+        uiQuantity(R.plurals.drive_backed_up_all, projects.size)
+    }
+
+    override fun driveSaveDrawing() = driveOperation {
+        val repo = drive ?: throw DriveException(0, uiString(R.string.drive_unavailable))
+        if (_driveState.value.account == null) throw DriveException(0, uiString(R.string.drive_not_connected))
+        val png = withContext(Dispatchers.Default) {
+            val grid = Compositor.flatten(doc, includePaper = true)
+            val bitmap = gridToBitmap(grid, doc.width, doc.height)
+            ByteArrayOutputStream().use { out ->
+                bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
+                out.toByteArray()
+            }
+        }
+        val stamp = SimpleDateFormat("yyyy-MM-dd HH-mm-ss", Locale.ROOT).format(Date())
+        val name = driveFileName(doc.name) + " " + stamp + ".png"
+        val file = repo.uploadDrawing(name, "image/png", png)
+        _driveState.update { it.copy(lastSyncMs = repo.lastSyncMs) }
+        uiString(R.string.drive_drawing_saved, file.name)
+    }
+
+    override fun driveRefreshBackups() = refreshDriveBackups(showMessage = true)
+
+    override fun driveRestore(id: String) = driveOperation {
+        val repo = drive ?: throw DriveException(0, uiString(R.string.drive_unavailable))
+        val archive = java.io.File.createTempFile(
+            "boundless-drive-",
+            ".pnt",
+            getApplication<Application>().cacheDir,
+        )
+        try {
+            repo.download(id, archive)
+            withContext(Dispatchers.IO) {
+                ioLock.withLock {
+                    archive.inputStream().use { input ->
+                        store.importArchive(input) { name -> uiString(R.string.drive_restored_name, name) }
+                    }
+                }
+            }
+            refreshProjects()
+            uiString(R.string.drive_restored)
+        } finally {
+            archive.delete()
+        }
+    }
+
+    private fun refreshDriveBackups(showMessage: Boolean) {
+        driveOperation(showSuccess = showMessage) {
+            val repo = drive ?: throw DriveException(0, uiString(R.string.drive_unavailable))
+            val backups = repo.listBackups()
+            _driveState.update {
+                it.copy(backups = backups.map { backup -> backup.toUi() }, loaded = true)
+            }
+            uiQuantity(R.plurals.drive_backups_loaded, backups.size)
+        }
+    }
+
+    private fun upsertDriveBackup(backup: app.painter.ui.drive.DriveBackupUi) {
+        _driveState.update {
+            it.copy(
+                backups = (it.backups.filterNot { row -> row.id == backup.id } + backup)
+                    .sortedByDescending { row -> row.modifiedMs },
+                loaded = true,
+            )
+        }
+    }
+
+    /** Runs a Drive operation with the busy flag; token prompts happen on the main thread before network I/O. */
+    private fun driveOperation(showSuccess: Boolean = true, block: suspend () -> String) {
+        viewModelScope.launch {
+            _driveState.update { it.copy(busy = true, message = null, error = false) }
+            runCatching { block() }
+                .onSuccess { message ->
+                    _driveState.update {
+                        it.copy(
+                            busy = false,
+                            message = if (showSuccess) message else null,
+                            error = false,
+                        )
+                    }
+                }
+                .onFailure { error ->
+                    _driveState.update {
+                        it.copy(busy = false, message = driveErrorText(error), error = true)
+                    }
+                }
+        }
+    }
+
+    private fun driveErrorText(error: Throwable): String = when {
+        error is DriveAuthCancelledException -> uiString(R.string.drive_cancelled)
+        error is DriveException && error.code == 401 -> uiString(R.string.drive_reauth)
+        else -> uiString(R.string.drive_failed, error.message ?: error.javaClass.simpleName)
+    }
+
+    private fun uiString(resId: Int, vararg args: Any): String =
+        getApplication<Application>().getString(resId, *args)
+
+    private fun uiQuantity(resId: Int, quantity: Int): String =
+        getApplication<Application>().resources.getQuantityString(resId, quantity, quantity)
+
+    /** Keeps a drawing name safe for a Drive file; the timestamp already makes it unique. */
+    private fun driveFileName(name: String): String =
+        name.replace(Regex("""[\\/:*?"<>|]"""), "-").trim().ifBlank { "Drawing" }
 
     /** Records a frame after a change, at most twice a second; a newer change replaces a pending capture. */
     private fun scheduleTimelapse(force: Boolean = false) {

@@ -36,6 +36,7 @@ import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -381,6 +382,38 @@ class ProjectIOTest {
         assertTrue(doc.selection.isEmpty)
         ProjectIO.save(doc, dir, null)
         assertTrue(File(dir, "manifest.json").readText().contains("\"schema\": 2"))
+    }
+
+    @Test
+    fun importedArchiveKeepsItsFreeIdAndKeepsItsName() {
+        val source = File(tmpRoot, "archive-source")
+        val doc = Document(64, 32, name = "Imported")
+        ProjectIO.save(doc, source, null)
+        val archive = ByteArrayOutputStream().also { ProjectIO.exportPnt(source, it) }.toByteArray()
+        val store = ProjectStore(File(tmpRoot, "archive-projects").apply { mkdirs() })
+
+        val newId = store.importArchive(ByteArrayInputStream(archive)) { "$it (Drive)" }
+
+        assertEquals(doc.id, newId)
+        val restored = ProjectIO.load(store.dirFor(newId))
+        assertEquals(newId, restored.id)
+        assertEquals("Imported (Drive)", restored.name)
+        assertEquals("Imported (Drive)", store.list().single().name)
+    }
+
+    @Test
+    fun importedArchiveGetsANewIdWhenTheProjectAlreadyExists() {
+        val source = File(tmpRoot, "archive-source")
+        val doc = Document(64, 32, name = "Imported")
+        ProjectIO.save(doc, source, null)
+        val archive = ByteArrayOutputStream().also { ProjectIO.exportPnt(source, it) }.toByteArray()
+        val store = ProjectStore(File(tmpRoot, "archive-projects").apply { mkdirs() })
+        val first = store.importArchive(ByteArrayInputStream(archive))
+        val second = store.importArchive(ByteArrayInputStream(archive))
+
+        assertNotEquals(first, second)
+        assertEquals(doc.id, first)
+        assertEquals(2, store.list().size)
     }
 
     @Test

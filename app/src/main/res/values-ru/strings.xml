@@ -610,4 +610,45 @@
     <string name="animation_once">Один раз</string>
     <string name="animation_frame_label">Кадр %1$d</string>
     <string name="animation_frame_number">%1$d</string>
+    <string name="drive_title">Google Drive</string>
+    <string name="drive_intro">Сохраняйте проекты и готовые рисунки в папку Boundless Paint на Google Drive. Приложение видит только созданные им файлы.</string>
+    <string name="drive_connect">Подключить Google Drive</string>
+    <string name="drive_manage">Управление Google Drive</string>
+    <string name="drive_connected">Google Drive подключён.</string>
+    <string name="drive_connected_as">Подключено: %1$s</string>
+    <string name="drive_not_connected">Не подключено</string>
+    <string name="drive_last_sync">Последняя синхронизация: %1$s</string>
+    <string name="drive_backup_current">Сохранить текущий проект</string>
+    <string name="drive_backup_all">Сохранить все проекты</string>
+    <string name="drive_backups">Резервные копии</string>
+    <string name="drive_refresh">Обновить</string>
+    <string name="drive_no_backups">Резервных копий пока нет.</string>
+    <string name="drive_loading_backups">Загрузка резервных копий…</string>
+    <string name="drive_restore">Восстановить</string>
+    <string name="drive_sign_out">Отключить Google Drive</string>
+    <string name="drive_signed_out">Google Drive отключён.</string>
+    <string name="drive_backed_up">Проект «%1$s» сохранён.</string>
+    <string name="drive_backing_up">Сохранение %1$d из %2$d…</string>
+    <string name="drive_restored">Проект восстановлен и добавлен в галерею.</string>
+    <string name="drive_restored_name">%1$s (Drive)</string>
+    <string name="drive_cancelled">Вход в Google отменён.</string>
+    <string name="drive_reauth">Доступ Google истёк. Подключите Google Drive снова.</string>
+    <string name="drive_failed">Ошибка Google Drive: %1$s</string>
+    <string name="drive_unavailable">Google Drive недоступен в этой сборке.</string>
+    <string name="drive_no_projects">Нет проектов для сохранения.</string>
+    <string name="drive_save_drawing">Сохранить рисунок в PNG</string>
+    <string name="drive_drawing_saved">Рисунок сохранён на Google Drive: %1$s</string>
+    <string name="drive_folders_hint">Проекты сохраняются в Boundless Paint/Projects, рисунки — в Boundless Paint/Drawings.</string>
+    <plurals name="drive_backed_up_all">
+        <item quantity="one">Сохранён %1$d проект.</item>
+        <item quantity="few">Сохранено %1$d проекта.</item>
+        <item quantity="many">Сохранено %1$d проектов.</item>
+        <item quantity="other">Сохранено %1$d проектов.</item>
+    </plurals>
+    <plurals name="drive_backups_loaded">
+        <item quantity="one">Найдена %1$d резервная копия.</item>
+        <item quantity="few">Найдены %1$d резервные копии.</item>
+        <item quantity="many">Найдено %1$d резервных копий.</item>
+        <item quantity="other">Найдено %1$d резервных копий.</item>
+    </plurals>
 </resources>

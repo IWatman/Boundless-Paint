@@ -20,5 +20,10 @@ liblz4-java-*.so
 *.keystore
 keystore.properties
 
+# OAuth client configuration (Google Cloud download) never goes into git
+secret/
+*client_secret*.json
+*client_secrets*.json
+
 # Kotlin daemon markers
 kotlin-compiler-in-*.alive

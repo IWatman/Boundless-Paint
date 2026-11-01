@@ -746,6 +746,34 @@ interface StudioActions {
     fun setArrayGuides(on: Boolean) {}
     /** Turns timelapse recording on/off (kept for the next session). */
     fun setTimelapseEnabled(enabled: Boolean) {}
+
+    /** Opens the Google Drive account, backup and restore sheet. */
+    fun openDrivePanel() {}
+
+    /** Closes the Google Drive sheet. */
+    fun closeDrivePanel() {}
+
+    /** Links Google Drive; Google Play services shows the account/consent sheet when needed. */
+    fun driveConnect() {}
+
+    /** Clears the local Drive link and best-effort revokes the Google grant. */
+    fun driveDisconnect() {}
+
+    /** Backs up the open project. */
+    fun driveSyncCurrent() {}
+
+    /** Backs up every project in the gallery. */
+    fun driveSyncAll() {}
+
+    /** Saves the flattened canvas as a PNG in `Boundless Paint/Drawings`. */
+    fun driveSaveDrawing() {}
+
+    /** Reloads the remote backup list. */
+    fun driveRefreshBackups() {}
+
+    /** Downloads backup [id] as a new project and refreshes the gallery. */
+    fun driveRestore(id: String) {}
+
     /** Encodes the recorded frames into an MP4; null when there is nothing to export. */
     suspend fun encodeTimelapse(durationSec: Int, maxSide: Int): ByteArray? = null
     fun addColorToPalette(color: Rgba)

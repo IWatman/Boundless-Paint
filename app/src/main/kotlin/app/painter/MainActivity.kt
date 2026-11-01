@@ -22,10 +22,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.viewinterop.AndroidView
+import app.painter.drive.DriveAuthController
 import app.painter.render.CanvasView
 import app.painter.studio.ExportFormat
 import app.painter.studio.ExportOptions
 import app.painter.studio.StudioViewModel
+import app.painter.ui.drive.DriveDialog
+import app.painter.ui.drive.DriveUiState
 import app.painter.ui.home.GalleryScreen
 import app.painter.ui.home.HomeScreen
 import app.painter.ui.home.NewCanvasScreen
@@ -41,7 +44,9 @@ import kotlinx.coroutines.withContext
 
 class MainActivity : ComponentActivity() {
 
-    private val vm: StudioViewModel by viewModels { StudioViewModel.factory(application) }
+    /** Registers its activity-result launcher in the constructor, before the activity is started. */
+    private val driveAuth = DriveAuthController(this)
+    private val vm: StudioViewModel by viewModels { StudioViewModel.factory(application, driveAuth) }
     private val updateVm: UpdateViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -115,6 +120,7 @@ private fun App(vm: StudioViewModel, updateVm: UpdateViewModel) {
     val projects by vm.projects.collectAsState()
     val homeRequest by vm.homeRequest.collectAsState()
     val updateState by updateVm.state.collectAsState()
+    val drive by vm.driveState.collectAsState()
     val context = androidx.compose.ui.platform.LocalContext.current
     val importPsd = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) scope.launch {
@@ -161,6 +167,7 @@ private fun App(vm: StudioViewModel, updateVm: UpdateViewModel) {
             onNewCanvas = { screen = Screen.NEW },
             onOpenGallery = { vm.refreshProjects(); screen = Screen.GALLERY },
             onOpenUpdates = { showUpdates = true },
+            onOpenDrive = vm::openDrivePanel,
             onImportPsd = { importPsd.launch(arrayOf("*/*")) },
             recent = projects.take(8),
             onOpenProject = open,
@@ -188,7 +195,7 @@ private fun App(vm: StudioViewModel, updateVm: UpdateViewModel) {
                 onBack = { screen = Screen.HOME },
             )
         }
-        Screen.STUDIO -> Studio(vm)
+        Screen.STUDIO -> Studio(vm, drive)
     }
 
     if (showUpdates) {
@@ -203,10 +210,14 @@ private fun App(vm: StudioViewModel, updateVm: UpdateViewModel) {
             },
         )
     }
+
+    if (drive.open) {
+        DriveDialog(state = drive, actions = vm, onDismiss = vm::closeDrivePanel)
+    }
 }
 
 @Composable
-private fun Studio(vm: StudioViewModel) {
+private fun Studio(vm: StudioViewModel, drive: DriveUiState) {
     val state by vm.state.collectAsState()
     val exportRequest by vm.exportRequest.collectAsState()
     val exportOptions by vm.exportOptions.collectAsState()
@@ -277,7 +288,7 @@ private fun Studio(vm: StudioViewModel) {
         }
     }
 
-    StudioScreen(state = state, actions = vm) {
+    StudioScreen(state = state, actions = vm, drive = drive) {
         AndroidView(
             factory = { ctx -> CanvasView(ctx).also(vm::attachCanvas) },
             onRelease = vm::detachCanvas,

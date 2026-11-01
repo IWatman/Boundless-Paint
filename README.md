@@ -44,9 +44,11 @@ The app is completely free: no subscriptions, ads, watermarks or paid features.
 - Rounded rectangle, arrow and speech-balloon shape tools (M4)
 - Fill/erase selection and fill outside selection, direct lasso fill/erase (M4)
 - Screentone, manuscript guides, radial/array rulers, CMYK TIFF, editable vector layers and frame animation with onion skin (M4)
+- Google Drive backup: in-app Google sign-in, one archive per project in `Boundless Paint/Projects`, PNG saves in `Boundless Paint/Drawings`, restore from Home or Settings (M4)
 - Unfinished brush-editor controls are disabled and marked with a small construction icon (M3.7)
 - Autosave 2 seconds after a change, PNG/JPG export with quality and transparency options
 - In-app update from GitHub Releases
+- Google Drive backup and restore using the `drive.file` scope; setup details in [docs/google-drive.md](docs/google-drive.md)
 
 **Ready in the core, UI in progress**
 - Transform modes beyond the basic one: distort, perspective, warp

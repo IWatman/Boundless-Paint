@@ -5,6 +5,7 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonObject
 import java.io.File
 import java.io.IOException
+import java.io.InputStream
 import java.util.UUID
 
 /** Lightweight description of a stored project, read from its manifest only. */
@@ -89,6 +90,47 @@ class ProjectStore(val rootDir: File) {
         }
         return newId
     }
+
+    /**
+     * Unpacks a `.pnt` archive as a new project. The archived id is kept when the gallery has no project with
+     * that id (so a restored Drive backup keeps updating the same remote file); otherwise a fresh id is
+     * generated, which turns a restore on the same device into a copy. [rename] receives the archived display
+     * name (for example to mark a restored copy).
+     */
+    fun importArchive(input: InputStream, rename: (String) -> String = { it }): String {
+        val staging = File(
+            rootDir.parentFile ?: rootDir,
+            ".restore-" + UUID.randomUUID().toString(),
+        )
+        try {
+            ProjectIO.importPnt(input, staging)
+            val manifest = readManifest(staging)
+            val archivedId = (manifest["id"] as? JsonPrimitive)?.content
+            val id = archivedId?.takeIf { isValidId(it) && !dirFor(it).exists() }
+                ?: UUID.randomUUID().toString()
+            val dst = dirFor(id)
+            val name = (manifest["name"] as? JsonPrimitive)?.content?.ifBlank { "Restored" } ?: "Restored"
+            val updated = JsonObject(
+                manifest + mapOf(
+                    "id" to JsonPrimitive(id),
+                    "name" to JsonPrimitive(rename(name)),
+                    "modified" to JsonPrimitive(System.currentTimeMillis()),
+                ),
+            )
+            FsUtil.writeFileAtomic(
+                File(staging, ProjectIO.MANIFEST),
+                manifestJson.encodeToString(JsonObject.serializer(), updated).toByteArray(Charsets.UTF_8),
+            )
+            FsUtil.move(staging, dst)
+            return id
+        } catch (error: Exception) {
+            FsUtil.deleteRecursively(staging)
+            throw error
+        }
+    }
+
+    private fun isValidId(id: String): Boolean =
+        id.isNotEmpty() && id.none { it == '/' || it == '\\' || it == ':' } && id != "." && id != ".."
 
     /** Renames project [id] by rewriting only the `name` field of its manifest. */
     fun rename(id: String, name: String) {

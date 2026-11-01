@@ -59,6 +59,7 @@ import app.painter.ui.components.Hud
 import app.painter.ui.components.IconToggle
 import app.painter.ui.components.PainterIconButton
 import app.painter.ui.components.PanelSurface
+import app.painter.ui.drive.DriveUiState
 import app.painter.ui.theme.PainterTheme
 
 /**
@@ -68,6 +69,7 @@ import app.painter.ui.theme.PainterTheme
 fun StudioScreen(
     state: StudioUiState,
     actions: StudioActions,
+    drive: DriveUiState = DriveUiState(),
     canvas: @Composable () -> Unit,
 ) {
     var localHud by remember { mutableStateOf<HudUi?>(null) }
@@ -146,7 +148,7 @@ fun StudioScreen(
         )
     }
     if (state.settingsOpen) {
-        SettingsDialog(state = state, actions = actions, onDismiss = actions::closeSettings)
+        SettingsDialog(state = state, actions = actions, drive = drive, onDismiss = actions::closeSettings)
     }
     if (timelapseOpen) {
         TimelapseDialog(state = state, actions = actions, onDismiss = { timelapseOpen = false })
