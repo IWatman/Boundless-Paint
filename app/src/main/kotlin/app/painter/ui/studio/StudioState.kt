@@ -21,6 +21,7 @@ import app.painter.core.symmetry.MirrorAxes
 import app.painter.core.symmetry.SymmetryType
 import app.painter.studio.ExportOptions
 import app.painter.studio.StylusSettings
+import app.painter.studio.VideoExportOptions
 
 /** Brush mode of the main toolbar. */
 /**
@@ -237,6 +238,37 @@ data class VideoUi(
     val snapEnabled: Boolean = true,
 )
 
+/** Phase of a running video export; the dialog reports it as text. */
+enum class VideoExportPhase {
+    PREPARING,
+    RENDERING,
+    WRITING,
+}
+
+/** Outcome of the export job. A finished result stays visible until the user closes the dialog. */
+enum class VideoExportOutcome {
+    RUNNING,
+    SUCCESS,
+    CANCELLED,
+    FAILED,
+}
+
+/**
+ * Progress of the MP4 export (spec/VIDEO-MODE.md §5.8). [completedFrames] counts output frames; at 60 fps one
+ * frame is one timeline tick. [elapsedMs] is the time since the job started. [message] carries a short failure
+ * reason for the result dialog.
+ */
+@Immutable
+data class VideoExportUi(
+    val phase: VideoExportPhase = VideoExportPhase.PREPARING,
+    val completedFrames: Long = 0,
+    val totalFrames: Long = 0,
+    val elapsedMs: Long = 0,
+    val cancelling: Boolean = false,
+    val outcome: VideoExportOutcome = VideoExportOutcome.RUNNING,
+    val message: String? = null,
+)
+
 /**
  * Complete state rendered by [StudioScreen]. [brushSize] is the diameter in document pixels,
  * opacity/flow/hardness are 0..1. [layers] are in display order (top first).
@@ -268,6 +300,8 @@ data class StudioUiState(
     val video: VideoUi? = null,
     /** The bottom video timeline is open; the animation panel is closed while it is. */
     val videoPanelOpen: Boolean = false,
+    /** Running or finished MP4 export; null when no export is in progress and no result is shown. */
+    val videoExport: VideoExportUi? = null,
     /** Stylus settings the [StylusSettingsPanel] shows (spec/tools/m2-brush.md §4.3). */
     val stylusSettings: StylusSettings = StylusSettings(),
     /** Pressure calibration of the pen the [StylusSettingsPanel] reports (spec/tools/m2-brush.md §4.3). */
@@ -669,6 +703,19 @@ interface StudioActions {
 
     /** Shows or hides one drawing track; a hidden track renders nothing. */
     fun setVideoTrackVisible(id: String, visible: Boolean) {}
+
+    /**
+     * Opens the system file picker for the MP4 export with [options]. The ViewModel keeps the options and starts
+     * the job once the activity reports the picked URI; capability failures are checked by the dialog before this
+     * is called. No audio is written in S3.
+     */
+    fun exportVideo(options: VideoExportOptions) {}
+
+    /** Requests cancellation of the running export; it stops at the next frame boundary or codec timeout. */
+    fun cancelVideoExport() {}
+
+    /** Closes a finished export result; no effect while the export is running. */
+    fun dismissVideoExport() {}
 
     fun addLayer()
 

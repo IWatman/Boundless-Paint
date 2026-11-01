@@ -1,6 +1,7 @@
 package app.painter.studio
 
 import android.app.ActivityManager
+import android.net.Uri
 import android.os.SystemClock
 import android.app.Application
 import android.graphics.Bitmap
@@ -142,6 +143,7 @@ import app.painter.core.transform.Snap
 import app.painter.core.transform.TransformSession
 import app.painter.core.vector.VectorPoint
 import app.painter.core.vector.VectorStroke
+import app.painter.core.video.VideoExportPlan
 import app.painter.core.select.EllipseShape
 import app.painter.core.select.MaskOps
 import app.painter.core.select.PolyShape
@@ -157,6 +159,10 @@ import app.painter.render.CanvasInputListener
 import app.painter.render.CanvasView
 import app.painter.timelapse.TimelapseEncoder
 import app.painter.timelapse.TimelapseStore
+import app.painter.video.VideoExportCancelled
+import app.painter.video.VideoExportException
+import app.painter.video.VideoExporter
+import app.painter.video.VideoEncoders
 import app.painter.ui.drive.DriveUiState
 import app.painter.ui.drive.toUi
 import app.painter.ui.home.ProjectCardUi
@@ -192,8 +198,12 @@ import app.painter.ui.studio.SymmetryUi
 import app.painter.ui.studio.TransformUi
 import app.painter.ui.studio.VideoAudioUi
 import app.painter.ui.studio.VideoClipUi
+import app.painter.ui.studio.VideoExportOutcome
+import app.painter.ui.studio.VideoExportPhase
+import app.painter.ui.studio.VideoExportUi
 import app.painter.ui.studio.VideoTrackUi
 import app.painter.ui.studio.VideoUi
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -207,6 +217,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonObject
 import java.io.ByteArrayOutputStream
+import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -345,6 +356,13 @@ class StudioViewModel(
     private var videoPreviewActive = false
     /** Node active before the video preview started, restored when the panel closes. */
     private var videoEditingActiveId: String? = null
+    /** Running MP4 export; null while idle. */
+    private var videoExportJob: Job? = null
+    /** Cross-thread cancel flag of the exporter; it stops at the next frame boundary or codec timeout. */
+    @Volatile
+    private var videoExportCancelRequested = false
+    /** Strokes, undo/redo and leaving the studio are blocked while this is true. */
+    private var videoExportBusy = false
     /** Descriptor of the device of the running stylus stroke; saved when the stroke ends, null otherwise. */
     private var strokeDevice: String? = null
     /** In-flight marching-ants contour computation of the selection mask. */
@@ -411,6 +429,13 @@ class StudioViewModel(
     /** Export options while the dialog is open; null when it is closed. */
     val exportOptions = MutableStateFlow<ExportOptions?>(null)
 
+    /** Set by the export dialog; the activity launches `CreateDocument("video/mp4")`. */
+    val videoExportRequest = MutableStateFlow(false)
+
+    /** Options of the confirmed video export, waiting for the SAF URI from the activity. */
+    var pendingVideoExport: VideoExportOptions? = null
+        private set
+
     /** Options the last confirmed export used; read by the activity when the file picker returns. */
     var pendingExport: ExportOptions? = null
         private set
@@ -430,6 +455,7 @@ class StudioViewModel(
         restoreInputSettings()
         syncBrushState()
         viewModelScope.launch(Dispatchers.IO) { ioLock.withLock { store.recoverInterrupted() } }
+        viewModelScope.launch(Dispatchers.IO) { deleteStaleVideoExports() }
         refreshProjects()
         loadBrushes()
     }
@@ -564,6 +590,7 @@ class StudioViewModel(
     }
 
     override fun onStrokeBegin(p: InputPoint, deviceDescriptor: String, penEraser: Boolean) {
+        if (videoExportBusy) return
         pendingVectorStroke = null
         // Painting while frames cycle would change target mid-stroke: stop on the frame that is on screen.
         if (_state.value.animation?.playing == true) setAnimationPlaying(false)
@@ -2352,6 +2379,7 @@ class StudioViewModel(
     // ---- history ----
 
     override fun undo() {
+        if (videoExportBusy) return
         // Undo is a document edit: leave the preview on the frame the user was editing.
         stopVideoPlayback(restoreEditingFrame = true)
         // An open shape draft has pixels only in its preview: undo drops it instead of a history step.
@@ -2368,6 +2396,7 @@ class StudioViewModel(
     }
 
     override fun redo() {
+        if (videoExportBusy) return
         stopVideoPlayback(restoreEditingFrame = true)
         if (shapeDraft != null) return
         if (transformSession != null || gradientLayerId != null) return
@@ -2805,6 +2834,208 @@ class StudioViewModel(
         markDirty()
         refreshVideo()
         if (videoPreviewActive) showVideoFrame(_state.value.video?.playheadTick ?: 0L)
+    }
+
+    // ---- video export (S3) ----
+
+    override fun exportVideo(options: VideoExportOptions) {
+        val meta = doc.video ?: return
+        if (videoExportBusy || Video.durationTicks(meta) <= 0L) return
+        pendingVideoExport = options
+        videoExportRequest.value = true
+    }
+
+    /** Clears the confirmed options when the system file picker returned without a URI. */
+    fun cancelVideoExportPick() {
+        pendingVideoExport = null
+    }
+
+    /**
+     * Encodes the timeline to a cache temp file and copies it to [uri]. The job owns the progress state and
+     * checks [videoExportCancelRequested] between frames and in the SAF copy. It never writes to the document:
+     * the compositor gets a visibility map instead of changing node flags.
+     */
+    fun startVideoExport(uri: Uri) {
+        val options = pendingVideoExport ?: return
+        pendingVideoExport = null
+        val meta = doc.video ?: return
+        if (videoExportBusy) return
+        val encoder = VideoEncoders.best()
+        if (encoder == null) {
+            publishVideoExportFailure(uiString(R.string.video_export_no_encoder))
+            return
+        }
+        val choice = VideoExportPlan.choice(doc.width, doc.height, options.longSide, options.outputFps, encoder)
+        val plan = choice.plan
+        if (plan == null) {
+            publishVideoExportFailure(
+                uiString(
+                    R.string.video_export_encoder_reason,
+                    videoExportPresetLabel(options.longSide),
+                    options.outputFps,
+                ),
+            )
+            return
+        }
+        val durationTicks = Video.durationTicks(meta)
+        val totalFrames = VideoExportPlan.frameCount(durationTicks, plan.fps)
+        if (durationTicks <= 0L || totalFrames <= 0L) {
+            publishVideoExportFailure(uiString(R.string.video_export_no_frames))
+            return
+        }
+        if (_state.value.video?.playing == true) stopVideoPlayback(restoreEditingFrame = false)
+        if (_state.value.animation?.playing == true) stopAnimationPlayback()
+        videoExportCancelRequested = false
+        videoExportBusy = true
+        val startedAt = SystemClock.elapsedRealtime()
+        val docRef = doc
+        _state.update {
+            it.copy(
+                videoExport = VideoExportUi(
+                    phase = VideoExportPhase.PREPARING,
+                    totalFrames = totalFrames,
+                ),
+            )
+        }
+        videoExportJob = viewModelScope.launch {
+            val exportJob = coroutineContext[Job]
+            val temp = File(getApplication<Application>().cacheDir, "video-export-${docRef.id}-${System.nanoTime()}.mp4")
+            try {
+                withContext(Dispatchers.IO) { deleteStaleVideoExports() }
+                withContext(Dispatchers.Default) {
+                    VideoExporter.encode(
+                        doc = docRef,
+                        meta = meta,
+                        plan = plan,
+                        encoder = encoder,
+                        output = temp,
+                        onProgress = { done, total ->
+                            val elapsed = SystemClock.elapsedRealtime() - startedAt
+                            _state.update { s ->
+                                val current = s.videoExport ?: return@update s
+                                s.copy(
+                                    videoExport = current.copy(
+                                        phase = VideoExportPhase.RENDERING,
+                                        completedFrames = done,
+                                        totalFrames = total,
+                                        elapsedMs = elapsed,
+                                    ),
+                                )
+                            }
+                        },
+                        isCancelled = { videoExportCancelRequested || exportJob?.isActive == false },
+                    )
+                }
+                if (videoExportCancelRequested || exportJob?.isActive == false) throw VideoExportCancelled()
+                _state.update { s ->
+                    s.copy(
+                        videoExport = s.videoExport?.copy(
+                            phase = VideoExportPhase.WRITING,
+                            completedFrames = totalFrames,
+                            totalFrames = totalFrames,
+                            elapsedMs = SystemClock.elapsedRealtime() - startedAt,
+                        ),
+                    )
+                }
+                withContext(Dispatchers.IO) {
+                    copyVideoToUri(temp, uri) { videoExportCancelRequested || exportJob?.isActive == false }
+                }
+                _state.update { s ->
+                    s.copy(
+                        videoExport = s.videoExport?.copy(
+                            phase = VideoExportPhase.WRITING,
+                            completedFrames = totalFrames,
+                            totalFrames = totalFrames,
+                            elapsedMs = SystemClock.elapsedRealtime() - startedAt,
+                            outcome = VideoExportOutcome.SUCCESS,
+                        ),
+                    )
+                }
+            } catch (cancelled: VideoExportCancelled) {
+                runCatching { getApplication<Application>().contentResolver.delete(uri, null, null) }
+                _state.update { s ->
+                    s.copy(
+                        videoExport = s.videoExport?.copy(
+                            outcome = VideoExportOutcome.CANCELLED,
+                            cancelling = false,
+                        ),
+                    )
+                }
+            } catch (cancelled: CancellationException) {
+                runCatching { getApplication<Application>().contentResolver.delete(uri, null, null) }
+                throw cancelled
+            } catch (t: Throwable) {
+                runCatching { getApplication<Application>().contentResolver.delete(uri, null, null) }
+                val reason = t.message?.takeIf { it.isNotBlank() } ?: uiString(R.string.unknown_error)
+                _state.update { s ->
+                    s.copy(
+                        videoExport = s.videoExport?.copy(
+                            outcome = VideoExportOutcome.FAILED,
+                            cancelling = false,
+                            message = reason,
+                        ),
+                    )
+                }
+            } finally {
+                temp.delete()
+                videoExportBusy = false
+                videoExportCancelRequested = false
+                videoExportJob = null
+            }
+        }
+    }
+
+    override fun cancelVideoExport() {
+        val ui = _state.value.videoExport ?: return
+        if (ui.outcome != VideoExportOutcome.RUNNING) return
+        videoExportCancelRequested = true
+        _state.update { it.copy(videoExport = it.videoExport?.copy(cancelling = true)) }
+    }
+
+    override fun dismissVideoExport() {
+        if (videoExportBusy) return
+        _state.update { it.copy(videoExport = null) }
+    }
+
+    /** Shows a failure that happened before the job could start (encoder gone, no frames). */
+    private fun publishVideoExportFailure(message: String) {
+        _state.update {
+            it.copy(
+                videoExport = VideoExportUi(
+                    outcome = VideoExportOutcome.FAILED,
+                    message = message,
+                ),
+            )
+        }
+    }
+
+    /** Streams the finished temp file to the SAF document in 1 MiB chunks; cancellation is checked per chunk. */
+    private fun copyVideoToUri(source: File, uri: Uri, isCancelled: () -> Boolean) {
+        val resolver = getApplication<Application>().contentResolver
+        val output = resolver.openOutputStream(uri)
+            ?: throw VideoExportException("The selected file cannot be opened")
+        output.use { out ->
+            source.inputStream().use { input ->
+                val buffer = ByteArray(1 shl 20)
+                while (true) {
+                    if (isCancelled()) throw VideoExportCancelled()
+                    val read = input.read(buffer)
+                    if (read < 0) break
+                    out.write(buffer, 0, read)
+                }
+                out.flush()
+            }
+        }
+    }
+
+    /** Removes temp files of a previous process death; called on start and before each export. */
+    private fun deleteStaleVideoExports() {
+        val dir = getApplication<Application>().cacheDir
+        dir.listFiles()?.forEach { file ->
+            if (file.isFile && file.name.startsWith("video-export-") && file.name.endsWith(".mp4")) {
+                file.delete()
+            }
+        }
     }
 
     /**
@@ -3638,6 +3869,7 @@ class StudioViewModel(
     // ---- options ----
 
     override fun openHome() {
+        if (videoExportBusy) return
         // Leaving the studio restores the editing frame before the project is written.
         leaveVideoPreview()
         _state.update { it.copy(videoPanelOpen = false) }

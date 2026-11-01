@@ -722,6 +722,37 @@
     <string name="video_delete_clip">Delete clip</string>
     <string name="video_snap">Snap</string>
     <string name="video_trim_clip">Trim clip</string>
+    <!-- Video export (S3): MP4 without audio -->
+    <string name="video_export_action">Export MP4…</string>
+    <string name="video_export_title">Export video</string>
+    <string name="video_export_duration">Duration: %1$s</string>
+    <string name="video_export_frames">%1$d frames at %2$d fps</string>
+    <string name="video_export_format">Format: MP4 · H.264</string>
+    <string name="video_export_no_audio_note">Video only: this version exports no audio.</string>
+    <string name="video_export_quality">Resolution</string>
+    <string name="video_export_estimate">Estimated size: %1$s (estimate, not a promise)</string>
+    <string name="video_export_unsupported_item">%1$s: %2$s</string>
+    <string name="video_export_encoder_reason">the encoder does not support %1$s at %2$d fps</string>
+    <string name="video_export_size_reason">the canvas size cannot be scaled to this resolution</string>
+    <string name="video_export_no_encoder">No H.264 encoder on this device can export video.</string>
+    <string name="video_export_no_frames">Add at least one clip before exporting.</string>
+    <string name="video_export_start">Export</string>
+    <string name="video_export_phase_preparing">Preparing export</string>
+    <string name="video_export_phase_rendering">Rendering frames</string>
+    <string name="video_export_phase_writing">Writing file</string>
+    <string name="video_export_progress">%1$d / %2$d frames (%3$d%%)</string>
+    <string name="video_export_elapsed">Elapsed: %1$s</string>
+    <string name="video_export_cancelling">Cancelling…</string>
+    <string name="video_export_cancelled">Export cancelled</string>
+    <string name="video_export_done">Video exported</string>
+    <string name="video_export_failed">Export failed</string>
+    <string name="video_export_failed_reason">Reason: %1$s</string>
+    <string name="video_export_cancel_note">Cancelling stops at the next frame; the document is not changed.</string>
+    <string name="video_export_partial_note">Cancelling while writing can leave a partial file.</string>
+    <plurals name="video_export_missing_frames">
+        <item quantity="one">%1$d clip has a missing frame and renders blank.</item>
+        <item quantity="other">%1$d clips have a missing frame and render blank.</item>
+    </plurals>
     <string name="drive_title">Google Drive</string>
     <string name="drive_intro">Back up projects and save finished drawings to the Boundless Paint folder in your Google Drive. The app can only access files it creates.</string>
     <string name="drive_connect">Connect Google Drive</string>
