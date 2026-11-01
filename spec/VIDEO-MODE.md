@@ -26,8 +26,8 @@ where the reference is silent or where Android cannot follow it.
 
 | Topic | Decision |
 |---|---|
-| Timebase | **60 ticks per second**. In a 60 fps export one tick = one output frame; the explicit 4K/30 fallback emits every second tick. Video mode has no user-facing fps control. |
-| Tracks in M5 | **One drawing track + one audio track** are shipped. The manifest and core model support N drawing tracks; the UI to add a second drawing track is slice S5 and can be cut without breaking the format. |
+| Timebase | **60 ticks per second**. In a 60 fps export one tick = one output frame; the explicit 4K/30 fallback emits every second tick. The timeline has no user-facing fps control; only the export dialog offers the labelled 4K/30 fallback. |
+| Tracks in M5 | **One drawing track + one audio track** are shipped in the UI. The manifest, core model, compositor and exporter support N drawing tracks (S5 tests multi-track visibility), but S5 did not add add/delete-track UI; that remains a later slice and the format is already ready for it. |
 | Source frames | The existing animation frames stay the source of truth. A video clip is a **timed reference** to a frame layer, not a copy of its pixels. |
 | Conversion | Additive and one-way in the UI: `Document.video` is added, `Document.animation` is kept. Frames are not destroyed. No "leave video mode" command in M5. |
 | Project type | **No new `ProjectType` and no change to `Document.type`.** `video` presence defines video mode. |
@@ -36,7 +36,7 @@ where the reference is silent or where Android cannot follow it.
 | Resolution | Output keeps the canvas aspect, long side 720/1080/1440/3840, and is capped at **8,294,400 pixels** (3840×2160 UHD). No silent fps or size change. |
 | Audio | Project-owned copies under `audio/`; import or record; per-clip volume, track mute/volume, master volume; offline mix encoded to AAC. Preview uses the same mixed file, so preview and export agree. |
 | Rendering | CPU `Compositor.flatten` with a **visibility override** map, so export never mutates the editing document. A `videoBusy` lock blocks pixel edits during export. |
-| Memory | No whole-video buffering. One rendered frame and one YUV buffer are cached at a time (plus a small budgeted cache). The MP4 is encoded to a cache file and streamed to SAF. |
+| Memory | No whole-video buffering. The exporter holds one rendered I420 frame (the rasterizer buffer) and one encoder input; at 4K no second frame is allocated. The MP4 is encoded to a cache file and streamed to SAF. |
 | Undo | Video metadata is **not undoable** (same as `AnimationMeta`). Frame edits remain undoable. Deleting a frame keeps clips (they render blank) so undo can restore the frame. |
 
 ## 2. Current state (what the code does today)
@@ -545,7 +545,13 @@ Title “Export video”. Content:
 - Duration (read-only, from the timeline) and frame count (`durationTicks`).
 - Resolution chips: 720p, 1080p (default), 1440p, 4K. A chip is disabled with a reason when the device encoder
   cannot do that size at 60 fps; 4K also gets an explicit **“4K · 30 fps”** chip when 60 fps is unsupported but
-  30 fps is. There is no silent fps change.
+  30 fps is. When neither 4K rate works, one disabled **“4K · 60 fps”** chip names the reason. There is no silent
+  fps change.
+- A 4K chip is also disabled when the memory guard refuses it (see 6.7); the reason shows the estimated working
+  set and the device's large heap.
+- When the selected plan is 4K and the timeline references more frame layers than `LayerLimit` allows at that
+  export size, the dialog explains the derived limit and the frame count. Frames are layers, so a 4K canvas
+  cannot hold that many frames; the current canvas can still be exported.
 - The timeline is 60 fps; the only alternate output rate is the explicit **4K · 30 fps** fallback. There is no
   generic fps selector and no silent change.
 - “Include audio” (disabled when there are no clips, muted, or a file is missing) and a note that the master
@@ -735,8 +741,8 @@ Video:
 - Alignment: output width/height are rounded down to the encoder's `getWidthAlignment()`/`getHeightAlignment()`
   (at least 2). This may lose at most a few pixels of aspect; no letterboxing.
 - Frames: exactly `durationTicks` output frames at 60 fps (every second tick at 30 fps). Repeated ticks reuse the
-  cached YUV; a changed frame triggers a re-render. A small byte-budgeted cache (one frame at 4K, up to two at
-  1080p) avoids re-rendering a hold that is revisited.
+  cached YUV; a changed frame triggers a re-render. The single reusable frame is the whole cache (one frame at
+  4K), so a hold is encoded without allocating a second buffer; re-rendering a revisited hold is accepted.
 
 Muxer: `MediaMuxer(tempFile.absolutePath, MUXER_OUTPUT_MPEG_4)`. `MediaMuxer` offers MP4, WebM, 3GPP and Ogg
 output on modern Android; **there is no QuickTime/MOV output**, so “MOV” in the reference is not implemented.
@@ -798,12 +804,18 @@ Guards:
 
 - `VideoExportPlan` computes the output size from the canvas aspect and the resolution preset, caps total pixels
   at 8,294,400, rounds to encoder alignment, and rejects any result below 64 px or above 4096 on either side.
-- A memory guard estimates `2 × YUV + painted grid estimate + 48 MiB` and refuses 4K when it exceeds half of
-  `ActivityManager.largeMemoryClass`. The exact headroom is device-specific; the message says so.
-- The frame cache is budgeted, not fixed: one YUV frame at 4K, up to two at 1080p.
+- A memory guard estimates `2 × YUV + full-canvas RGBA16F grid + 48 MiB` and refuses 4K when it exceeds half
+  of `ActivityManager.largeMemoryClass`. At 3840 × 2160 the estimate is 141,570,048 bytes (135 MiB), so a 256 MB
+  large heap is refused and a 512 MB heap is accepted. The exact headroom is device-specific; the dialog shows
+  the estimate and the device heap. The guard is applied to the 4K preset only; 720p–1440p are left to the
+  encoder and the OS.
+- The exporter holds exactly one reusable I420 frame. At 4K that is 11.9 MiB, not a multi-frame cache; the
+  memory estimate budgets it together with the encoder input buffer.
 - Layer limit: frames are layers, so the existing `LayerLimit` caps the number of frames (6 at 4K with a 512 MB
   large heap, 24 at 1080p). Video mode does not raise it. A 4K project therefore cannot have a long
-  frame-by-frame animation today; this is an existing product limit, not a video regression.
+  frame-by-frame animation today; this is an existing product limit, not a video regression. The export dialog
+  derives the same limit from the selected output size and shows it when the timeline references more frame
+  layers than fit; it also warns when the current canvas itself is over the limit.
 - No `readBytes()` of the MP4 anywhere; the timelapse path's ByteArray pattern is not reused.
 
 ### 6.8 Output presets
@@ -823,8 +835,9 @@ pixel cap.
 not treat them as benchmarks.
 
 The explicit 4K/30 fallback samples the timeline every second tick: output frame `i` shows timeline tick `2i`
-and is timestamped at `i * 1_000_000 / 30` µs. Audio is unaffected. There is no 30 fps chip at 1080p unless a
-device cannot do 60 fps there; the fallback is always visible as a different fps, never silent.
+and is timestamped at `i * 1_000_000 / 30` µs. Audio is unaffected, and the bitrate stays at 40 Mbps. There is
+no 30 fps chip at 720p/1080p/1440p: if 60 fps is unsupported there, that chip is disabled. The 4K fallback is
+always labelled as 30 fps, never silent.
 
 ### 6.9 Container/codec decision
 
@@ -842,6 +855,7 @@ device cannot do 60 fps there; the fallback is always visible as a different fps
 |---|---|
 | No frames / no clips | Export disabled with “Add at least one clip”. |
 | 60 fps unsupported at the chosen size | Chip disabled with the reason; 1080p/720p or explicit 4K·30 remains. |
+| 4K refused by the memory guard | 4K chip disabled with the estimated working set and the device large heap; a forced export is refused before the file picker. |
 | Encoder configure/start fails | No file is created; “The video encoder could not start (codec/size)”. |
 | Codec does not accept buffer input | “This device's encoder needs a surface; 1080p/720p may work.” (S5 may add the surface path.) |
 | Muxer write fails / storage full | Cancel, delete temp, “Not enough storage or the file is not writable”. |
@@ -934,6 +948,13 @@ the M4A) and `VideoExporterAudioTest` (muxed tracks, PTS).
 Deliverable: 4K/30 and 4K/60 where supported, a memory guard, the row/YUV optimizations measured on device, and
 (if time) the second drawing track UI.
 
+Status (2026-11-02): the 4K/60 and explicit 4K/30 chips, the 4K memory guard and the derived layer-limit warning
+shipped. The second drawing track UI was evaluated and **cut**: the model, `Video.visibleFrames`, the compositor
+and the exporter already composite every visible track (covered by a `VideoTest` case), but creating a second
+frame group, wiring it into the animation panel and layer rows is a larger change than S5 could ship safely. The
+UI therefore stays one-track and the format is ready for a later slice. No 4K throughput number is claimed; the
+instrumented 4K smoke skips an unsupported device.
+
 Acceptance:
 
 - The resolution chips reflect `VideoCapabilities` exactly; 4K60 is offered only when supported; 4K30 is
@@ -941,14 +962,13 @@ Acceptance:
 - The memory guard refuses 4K on low-heap devices with a clear message; 4K export stays within the cache budget;
   a 1080p60 export of a representative document completes on the reference tablet and the timing is recorded in
   STATUS (no number is claimed here).
-- Derived 4K layer limits are shown in the export dialog when they make the timeline impossible.
-- If multi-track ships: add/delete a drawing track, each owns a group, preview/export composite all visible
-  tracks, and the animation panel can select a track's frame; otherwise the model stays one-track-only in the
-  UI and is documented as such.
+- Derived 4K layer limits are shown in the export dialog when the timeline references more frame layers than
+  the export size can hold; the current-canvas limit is also shown when it is exceeded.
+- The model/compositor stay multi-track-ready; the shipped UI is one drawing track and is documented as such.
 
-Tests: `VideoExportPlanTest` extended for the capability matrix and pixel cap; instrumented 4K smoke only on a
-supporting device (skipped otherwise, never failed on an unsupported device); manual performance notes in
-STATUS.
+Tests: `VideoExportPlanTest` extended for the capability matrix, 4K/30 fallback, pixel cap and memory guard;
+`LayerLimitTest` covers the derived 4K/1080p limits; instrumented 4K smoke only on a supporting device (skipped
+otherwise, never failed on an unsupported device); manual performance notes in STATUS.
 
 ## 8. First slice: file-level plan
 
@@ -1061,7 +1081,7 @@ Instrumented tests must be skippable on unsupported hardware (assume/`Assume` on
 |---|---|---|
 | CPU compositing/YUV is too slow for 4K60 on device | Medium / High | Cache per unique frame; 1080p default; 4K only with capability and memory checks; GPU-surface path in S5 if measurements demand it. PERFORMANCE-M5 measured 2.5–3.8 s for a 10-layer 4K CPU flatten **on a desktop JVM**; device timing is unknown, so no throughput promise is made. |
 | Encoder variability (size/rate/color format/alignment) | High / High | Select via `MediaCodecList` + `VideoCapabilities`; align sizes; flexible/I420 support with a clear failure; instrumented matrix; explicit 4K30 fallback. |
-| Memory at 4K (grid + YUV + encoder) | Medium / High | No bitmap, no full-video buffer, no-paper flatten, budgeted frame cache, memory guard, derived 4K layer limit (≤6 with a 512 MB heap). |
+| Memory at 4K (grid + YUV + encoder) | Medium / High | No bitmap, no full-video buffer, no-paper flatten, one reusable frame, 4K memory guard, derived 4K layer limit (≤6 with a 512 MB heap). |
 | Audio/video sync and AAC priming | Medium / Medium | Offline mix to AAC, trim to the exact duration, interleave by PTS, instrumented PTS assertions, manual clap test. |
 | Audio codec/file support varies | Medium / Medium | Validate on import; project-owned copies; precise error naming the clip/codec; optional export without audio. |
 | Data loss: autosave drops `video`; old build re-saves without it | Medium / High | S1 explicitly updates `Snapshot`; `saveDelta` tests; old build degrades to the animation block, frames intact; documented. |

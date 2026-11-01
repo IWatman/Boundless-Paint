@@ -23,12 +23,17 @@ interface VideoEncoderCaps {
 
 /**
  * Pure decisions of the video export: output size from the canvas aspect and the preset, the 8,294,400-pixel
- * cap, encoder alignment, bitrates and capability outcomes. Sizes never depend on device state, so the export
+ * cap, encoder alignment, bitrates, capability outcomes and the 4K memory guard. Sizes never depend on device
+ * state; capability and memory decisions use the caller's encoder probe and large-heap figure, so the export
  * dialog can decide what to offer before the file picker opens (spec/VIDEO-MODE.md §6.7–6.8).
  */
 object VideoExportPlan {
 
+    /** The timeline and the normal output rate. */
     const val FPS = 60
+
+    /** The only alternate output rate: the explicit 4K/30 fallback (spec §6.8). */
+    const val FALLBACK_FPS = 30
 
     /** Maximum output area, 3840 × 2160. */
     const val MAX_PIXELS = 8_294_400
@@ -40,8 +45,23 @@ object VideoExportPlan {
 
     const val DEFAULT_LONG_SIDE = 1920
 
-    /** Presets of S3; 4K arrives with S5. Values are the long side, as in spec §6.8. */
-    val LONG_SIDES = intArrayOf(1280, 1920, 2560)
+    const val FOUR_K_LONG_SIDE = 3840
+
+    /** Presets in display order. 4K is resolved to 60 or 30 fps by [choices]. */
+    val LONG_SIDES = intArrayOf(1280, 1920, 2560, FOUR_K_LONG_SIDE)
+
+    /**
+     * Worst-case RGBA16F flattened grid at 8 bytes per output pixel. The export flattens without paper and
+     * stores only painted tiles, so a real document usually stays below this bound.
+     */
+    const val GRID_BYTES_PER_PIXEL = 8L
+
+    /** One I420 frame is 1.5 bytes per pixel; the exporter holds two at peak (rasterizer and encoder input). */
+    const val YUV_BYTES_PER_PIXEL_NUMERATOR = 3L
+    const val YUV_BYTES_PER_PIXEL_DENOMINATOR = 2L
+
+    /** Codec buffers, VM overhead and the SAF copy buffer (spec §6.7). */
+    const val MEMORY_HEADROOM_BYTES = 48L * 1024 * 1024
 
     /** One encoder-aligned output size. Both sides are at least [MIN_SIDE] and at most [MAX_SIDE]. */
     data class Size(val width: Int, val height: Int) {
@@ -64,13 +84,22 @@ object VideoExportPlan {
 
         /** This encoder does not support the exact size at the requested rate. */
         ENCODER,
+
+        /** The 4K working set would exceed half of the device's large heap (spec §6.7). */
+        MEMORY,
     }
 
-    /** One resolution chip: [plan] when the encoder accepts it, otherwise the reason it is disabled. */
+    /**
+     * One resolution/rate chip: [plan] when the encoder accepts it, otherwise the reason it is disabled.
+     * [size] is the encoder-aligned output size even when a later step refused the choice, so the dialog can
+     * explain a memory refusal with the exact dimensions it tried.
+     */
     data class Choice(
         val longSide: Int,
+        val fps: Int,
         val plan: Plan?,
         val refusal: Refusal?,
+        val size: Size? = null,
     ) {
         val supported: Boolean get() = plan != null
     }
@@ -120,38 +149,96 @@ object VideoExportPlan {
         return Size(width, height)
     }
 
-    /** Decides one preset for [caps]. */
+    /**
+     * Worst-case working set of one export frame: two I420 buffers (rasterizer and encoder input), an RGBA16F
+     * grid at [width] × [height] and fixed headroom. This is an arithmetic bound, not a device measurement.
+     */
+    fun estimatedPeakBytes(width: Int, height: Int): Long {
+        if (width <= 0 || height <= 0) return 0L
+        val pixels = width.toLong() * height
+        val yuv = pixels * YUV_BYTES_PER_PIXEL_NUMERATOR / YUV_BYTES_PER_PIXEL_DENOMINATOR
+        return 2L * yuv + pixels * GRID_BYTES_PER_PIXEL + MEMORY_HEADROOM_BYTES
+    }
+
+    /**
+     * True when [estimatedPeakBytes] fits half of the device's large heap. A non-positive heap value means the
+     * caller has no figure and is treated as "unknown, do not block". The guard is deliberately conservative:
+     * the flattened grid usually covers painted tiles only, but 4K worst case can approach the full canvas.
+     */
+    fun memoryGuardAllows(width: Int, height: Int, largeHeapBytes: Long): Boolean {
+        if (largeHeapBytes <= 0L) return true
+        return estimatedPeakBytes(width, height) <= largeHeapBytes / 2L
+    }
+
+    /**
+     * Decides one preset for [caps]. The memory guard applies to the 4K preset only; 720p through 1440p are
+     * left to the encoder and the OS, matching spec §6.7.
+     */
     fun choice(
         canvasWidth: Int,
         canvasHeight: Int,
         longSide: Int,
         fps: Int = FPS,
         caps: VideoEncoderCaps,
+        largeHeapBytes: Long? = null,
     ): Choice {
         val size = sizeFor(canvasWidth, canvasHeight, longSide, caps.widthAlignment, caps.heightAlignment)
-            ?: return Choice(longSide, null, Refusal.SIZE)
+            ?: return Choice(longSide, fps, null, Refusal.SIZE)
         if (fps <= 0 || !caps.supports(size.width, size.height, fps)) {
-            return Choice(longSide, null, Refusal.ENCODER)
+            return Choice(longSide, fps, null, Refusal.ENCODER, size)
+        }
+        if (longSide >= FOUR_K_LONG_SIDE && largeHeapBytes != null &&
+            !memoryGuardAllows(size.width, size.height, largeHeapBytes)
+        ) {
+            return Choice(longSide, fps, null, Refusal.MEMORY, size)
         }
         return Choice(
             longSide = longSide,
+            fps = fps,
             plan = Plan(longSide, size.width, size.height, fps, bitRate(longSide)),
             refusal = null,
+            size = size,
         )
     }
 
-    /** Every S3 preset in display order; unsupported ones stay in the list so the dialog can explain them. */
+    /**
+     * Every preset in display order; unsupported ones stay in the list so the dialog can explain them. 720p,
+     * 1080p and 1440p are offered at 60 fps. 4K is offered at 60 fps when the encoder accepts it, otherwise the
+     * explicit 4K/30 fallback; when neither rate is supported the 4K/60 chip stays disabled with its reason.
+     * There is never a silent rate change.
+     */
     fun choices(
         canvasWidth: Int,
         canvasHeight: Int,
-        fps: Int = FPS,
         caps: VideoEncoderCaps,
-    ): List<Choice> = LONG_SIDES.map { choice(canvasWidth, canvasHeight, it, fps, caps) }
+        largeHeapBytes: Long? = null,
+    ): List<Choice> {
+        val out = ArrayList<Choice>(LONG_SIDES.size)
+        for (longSide in LONG_SIDES) {
+            if (longSide == FOUR_K_LONG_SIDE) continue
+            out += choice(canvasWidth, canvasHeight, longSide, FPS, caps, largeHeapBytes)
+        }
+        val fourK60 = choice(canvasWidth, canvasHeight, FOUR_K_LONG_SIDE, FPS, caps, largeHeapBytes)
+        out += if (fourK60.supported) {
+            fourK60
+        } else {
+            val fourK30 = choice(canvasWidth, canvasHeight, FOUR_K_LONG_SIDE, FALLBACK_FPS, caps, largeHeapBytes)
+            when {
+                fourK30.supported -> fourK30
+                fourK60.refusal == Refusal.ENCODER && fourK30.refusal == Refusal.MEMORY -> fourK30
+                else -> fourK60
+            }
+        }
+        return out
+    }
 
     /** 1080p when supported, otherwise the largest supported preset; null when nothing is supported. */
-    fun defaultLongSide(choices: List<Choice>): Int? =
-        choices.firstOrNull { it.longSide == DEFAULT_LONG_SIDE && it.supported }?.longSide
-            ?: choices.lastOrNull { it.supported }?.longSide
+    fun defaultChoice(choices: List<Choice>): Choice? =
+        choices.firstOrNull { it.longSide == DEFAULT_LONG_SIDE && it.supported }
+            ?: choices.lastOrNull { it.supported }
+
+    /** Long side of [defaultChoice], for callers that only need the preset. */
+    fun defaultLongSide(choices: List<Choice>): Int? = defaultChoice(choices)?.longSide
 
     /**
      * Number of output frames of a timeline. At 60 fps one tick is one frame; at 30 fps every second tick is

@@ -745,9 +745,15 @@
     <string name="video_export_format">Формат: MP4 · H.264 + AAC</string>
     <string name="video_export_audio_note">Звук сводится в стерео 48 кГц; общая громкость учитывается. Звук после конца видео обрезается.</string>
     <string name="video_export_quality">Разрешение</string>
+    <string name="video_export_4k60">4K · 60 кадров/с</string>
+    <string name="video_export_4k30">4K · 30 кадров/с</string>
     <string name="video_export_estimate">Примерный размер: %1$s (оценка, не гарантия)</string>
     <string name="video_export_unsupported_item">%1$s: %2$s</string>
     <string name="video_export_encoder_reason">кодек не поддерживает %1$s при %2$d кадрах/с</string>
+    <string name="video_export_encoder_reason_4k">кодек не поддерживает 4K при 60 или 30 кадрах/с</string>
+    <string name="video_export_memory_reason">недостаточно памяти: для 4K нужно около %1$s, а большой куче устройства доступно %2$s</string>
+    <string name="video_export_layer_limit">При %1$s устройство вмещает слоёв: %2$d (бюджет %3$s, 40%% большой кучи); таймлайн ссылается на кадры: %4$d. Кадры — это слои, поэтому холст 4K не вместит такой таймлайн. Текущий холст всё ещё можно экспортировать.</string>
+    <string name="video_export_layer_limit_canvas">Предел слоёв этого холста: %1$d; таймлайн ссылается на кадры: %2$d. Кадры — это слои, поэтому уменьшите число кадров или холст.</string>
     <string name="video_export_size_reason">размер холста нельзя масштабировать до этого разрешения</string>
     <string name="video_export_no_encoder">На этом устройстве нет кодировщика H.264 для экспорта видео.</string>
     <string name="video_export_no_frames">Добавьте хотя бы один клип перед экспортом.</string>

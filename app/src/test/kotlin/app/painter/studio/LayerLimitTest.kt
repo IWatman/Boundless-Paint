@@ -41,4 +41,13 @@ class LayerLimitTest {
         // 8 MB heap fits two layers of 4 MB at 50% fill, fewer than the GPU allowance would allow.
         assertEquals(2, LayerLimit.maxLayers(1024, 1024, heapBudget = 8L * 1024 * 1024))
     }
+
+    @Test
+    fun videoPresetSizesDeriveTheExpectedLayerLimits() {
+        // The export dialog shows these numbers for a 512 MB large heap: 6 layers at 4K, 24 at 1080p.
+        assertEquals(6, LayerLimit.maxLayers(3840, 2160, heap512))
+        assertEquals(24, LayerLimit.maxLayers(1920, 1080, heap512))
+        val heap256 = 256L * 1024 * 1024 * 4 / 10
+        assertEquals(3, LayerLimit.maxLayers(3840, 2160, heap256))
+    }
 }

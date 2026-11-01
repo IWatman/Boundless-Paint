@@ -30,6 +30,10 @@ class VideoExportException(message: String, cause: Throwable? = null) : Exceptio
  *
  * The encoder loop checks cancellation between frames and inside every 10 ms codec timeout, so Cancel takes
  * effect at the next frame boundary. On failure or cancellation [output] is deleted.
+ *
+ * The frame cache is exactly one reusable I420 buffer: a tick whose visibility map matches the previous one is
+ * encoded from the same rasterizer output, and no second frame is allocated at 4K. `VideoExportPlan` budgets
+ * that buffer, the encoder input buffer and the flattened grid in its memory guard.
  */
 object VideoExporter {
 

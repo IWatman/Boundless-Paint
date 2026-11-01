@@ -241,6 +241,38 @@ class VideoTest {
     }
 
     @Test
+    fun visibleFramesCompositeEveryVisibleDrawingTrack() {
+        val doc = Document(16, 16, name = "Two tracks")
+        val firstGroup = GroupNode("frames-a", "Frames A")
+        val secondGroup = GroupNode("frames-b", "Frames B")
+        doc.root.add(firstGroup)
+        doc.root.add(secondGroup)
+        val first = doc.newRasterLayer("A1").also { firstGroup.add(it) }
+        val second = doc.newRasterLayer("B1").also { secondGroup.add(it) }
+        val meta = VideoMeta(
+            tracks = listOf(
+                VideoTrack("track-a", "Drawing 1", firstGroup.id, clips = listOf(VideoClip("a", first.id, 0, 10))),
+                VideoTrack("track-b", "Drawing 2", secondGroup.id, clips = listOf(VideoClip("b", second.id, 0, 10))),
+            ),
+        )
+
+        val visible = Video.visibleFrames(doc, meta, 5)
+        assertEquals(true, visible[first.id])
+        assertEquals(true, visible[second.id])
+        assertEquals(true, visible[firstGroup.id])
+        assertEquals(true, visible[secondGroup.id])
+
+        val hiddenSecond = Video.visibleFrames(
+            doc,
+            meta.copy(tracks = listOf(meta.tracks[0], meta.tracks[1].copy(visible = false))),
+            5,
+        )
+        assertEquals(true, hiddenSecond[first.id])
+        assertEquals(false, hiddenSecond[second.id])
+        assertEquals(false, hiddenSecond[secondGroup.id])
+    }
+
+    @Test
     fun visibleFramesFollowClipBoundariesAndBlankClips() {
         val doc = animationDoc(2)
         val frames = framesOf(doc)
