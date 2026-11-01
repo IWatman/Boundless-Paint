@@ -8,6 +8,8 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -20,11 +22,17 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Loop
 import androidx.compose.material.icons.outlined.Movie
+import androidx.compose.material.icons.outlined.Pause
 import androidx.compose.material.icons.outlined.PlayArrow
+import androidx.compose.material.icons.outlined.Stop
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material3.Icon
@@ -32,13 +40,18 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
@@ -53,6 +66,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.painter.R
 import app.painter.core.doc.VIDEO_TICKS_PER_SECOND
+import app.painter.ui.components.IconToggle
 import app.painter.ui.components.PainterIconButton
 import app.painter.ui.components.PanelSurface
 import java.util.Locale
@@ -62,11 +76,13 @@ import kotlin.math.roundToLong
 private val VIDEO_RULER_HEIGHT = 28.dp
 private val VIDEO_LANE_HEIGHT = 52.dp
 private val VIDEO_TRACK_HEADER_WIDTH = 96.dp
+private val VIDEO_TRIM_HANDLE_WIDTH = 10.dp
+private val VIDEO_SNAP_TOUCH_DP = 12.dp
 
 /**
- * Read-only video timeline (slice S1): header, duration, transport placeholder, ruler, drawing tracks and
- * playhead. Scrubbing and clip selection only change UI state; playback, editing, audio and export are not
- * part of this slice and their controls are omitted or disabled.
+ * Bottom video timeline (slice S2): transport, ruler, drawing tracks, clip editing and the playhead.
+ * Playback and scrubbing preview the clip's frame on the canvas; the panel owns its pointers so timeline
+ * drags never reach the drawing canvas.
  */
 @Composable
 internal fun VideoPanel(
@@ -78,13 +94,15 @@ internal fun VideoPanel(
     PanelSurface(modifier) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp)) {
             VideoHeader(video, actions)
-            VideoTransport(video)
-            Row(Modifier.fillMaxWidth().padding(top = 4.dp)) {
+            VideoTransport(video, actions)
+            VideoEditBar(video, actions)
+            Row(Modifier.fillMaxWidth().padding(top = 2.dp)) {
                 Column(Modifier.width(VIDEO_TRACK_HEADER_WIDTH)) {
                     Spacer(Modifier.height(VIDEO_RULER_HEIGHT))
                     for (track in video.tracks) {
                         VideoTrackHeader(
                             track = track,
+                            actions = actions,
                             modifier = Modifier.fillMaxWidth().height(VIDEO_LANE_HEIGHT),
                         )
                     }
@@ -111,12 +129,6 @@ internal fun VideoPanel(
                     PlayheadOverlay(video, Modifier.matchParentSize())
                 }
             }
-            Text(
-                stringResource(R.string.video_readonly_note),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 4.dp),
-            )
         }
     }
 }
@@ -155,16 +167,25 @@ private fun VideoHeader(video: VideoUi, actions: StudioActions) {
     }
 }
 
-/** Transport placeholder: playback is not implemented in S1, so the button stays disabled. */
+/** Transport: stop/rewind, play/pause, current time and the preview-only loop switch. */
 @Composable
-private fun VideoTransport(video: VideoUi) {
+private fun VideoTransport(video: VideoUi, actions: StudioActions) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        val enabled = video.durationTicks > 0L
         PainterIconButton(
-            Icons.Outlined.PlayArrow,
-            stringResource(R.string.video_play_unavailable),
-            onClick = {},
+            Icons.Outlined.Stop,
+            stringResource(R.string.video_stop),
+            onClick = actions::stopVideo,
             modifier = Modifier.size(36.dp),
-            enabled = false,
+            enabled = enabled,
+        )
+        PainterIconButton(
+            if (video.playing) Icons.Outlined.Pause else Icons.Outlined.PlayArrow,
+            stringResource(if (video.playing) R.string.video_pause else R.string.video_play),
+            onClick = { actions.setVideoPlaying(!video.playing) },
+            modifier = Modifier.size(36.dp),
+            enabled = enabled,
+            tint = if (video.playing) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
         )
         Text(
             stringResource(
@@ -174,6 +195,60 @@ private fun VideoTransport(video: VideoUi) {
             ),
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(start = 4.dp),
+        )
+        Spacer(Modifier.weight(1f))
+        IconToggle(
+            Icons.Outlined.Loop,
+            stringResource(R.string.video_loop_preview),
+            checked = video.loopPreview,
+            onCheckedChange = actions::setVideoLoopsPreview,
+            modifier = Modifier.size(36.dp),
+        )
+        Text(
+            stringResource(R.string.video_loop_label),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+/** Add, blank, delete and snap controls above the tracks. */
+@Composable
+private fun VideoEditBar(video: VideoUi, actions: StudioActions) {
+    val selected = video.tracks.firstNotNullOfOrNull { track ->
+        track.clips.firstOrNull { it.id == video.selectedClipId }
+    }
+    val firstFrameId = video.tracks.firstNotNullOfOrNull { track ->
+        track.clips.firstNotNullOfOrNull { if (it.missing) null else it.frameId }
+    }
+    val addFrameId = selected?.takeUnless { it.missing }?.frameId ?: firstFrameId
+    Row(
+        Modifier.fillMaxWidth().padding(top = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        PainterIconButton(
+            Icons.Outlined.Add,
+            stringResource(R.string.video_add_clip),
+            onClick = { actions.addVideoClip(addFrameId) },
+            modifier = Modifier.size(36.dp),
+            enabled = addFrameId != null,
+        )
+        TextButton(onClick = { actions.addVideoClip(null) }) {
+            Text(stringResource(R.string.video_add_blank))
+        }
+        PainterIconButton(
+            Icons.Outlined.Delete,
+            stringResource(R.string.video_delete_clip),
+            onClick = { selected?.let { actions.deleteVideoClip(it.id) } },
+            modifier = Modifier.size(36.dp),
+            enabled = selected != null,
+        )
+        Spacer(Modifier.weight(1f))
+        ToggleChip(
+            label = stringResource(R.string.video_snap),
+            checked = video.snapEnabled,
+            onToggle = { actions.setVideoSnap(!video.snapEnabled) },
         )
     }
 }
@@ -265,25 +340,37 @@ private fun VideoRuler(
     }
 }
 
-/** Eye, name and duration of one track. The eye mirrors the persisted state; it is not editable in S1. */
+/** Eye, name and duration of one track; the eye is a real visibility toggle. */
 @Composable
-private fun VideoTrackHeader(track: VideoTrackUi, modifier: Modifier = Modifier) {
+private fun VideoTrackHeader(
+    track: VideoTrackUi,
+    actions: StudioActions,
+    modifier: Modifier = Modifier,
+) {
     Row(
         modifier.padding(horizontal = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(
-            if (track.visible) Icons.Outlined.Visibility else Icons.Outlined.VisibilityOff,
-            contentDescription = stringResource(
-                if (track.visible) R.string.video_track_visible else R.string.video_track_hidden,
-            ),
-            modifier = Modifier.size(18.dp),
-            tint = if (track.visible) {
-                MaterialTheme.colorScheme.onSurface
-            } else {
-                MaterialTheme.colorScheme.onSurfaceVariant
-            },
-        )
+        Box(
+            Modifier
+                .size(28.dp)
+                .clip(CircleShape)
+                .clickable { actions.setVideoTrackVisible(track.id, !track.visible) },
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                if (track.visible) Icons.Outlined.Visibility else Icons.Outlined.VisibilityOff,
+                contentDescription = stringResource(
+                    if (track.visible) R.string.video_track_visible else R.string.video_track_hidden,
+                ),
+                modifier = Modifier.size(18.dp),
+                tint = if (track.visible) {
+                    MaterialTheme.colorScheme.onSurface
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                },
+            )
+        }
         Column(Modifier.padding(start = 4.dp)) {
             Text(
                 track.name,
@@ -309,6 +396,7 @@ private fun VideoTrackLane(
     modifier: Modifier = Modifier,
 ) {
     val shape = RoundedCornerShape(4.dp)
+    val density = LocalDensity.current
     BoxWithConstraints(
         modifier
             .padding(vertical = 2.dp)
@@ -318,16 +406,35 @@ private fun VideoTrackLane(
     ) {
         val total = maxOf(1L, video.durationTicks)
         val totalFloat = total.toFloat()
+        val laneWidthPx = with(density) { maxWidth.toPx() }.coerceAtLeast(1f)
+        val snapThreshold = VideoTimeline.deltaTicks(
+            with(density) { VIDEO_SNAP_TOUCH_DP.toPx() },
+            laneWidthPx,
+            total,
+        )
         for (clip in track.clips) {
             val start = maxWidth * (clip.startTick.coerceIn(0L, total) / totalFloat)
             val clipWidth = maxOf(
                 2.dp,
                 maxWidth * (clip.durationTicks.coerceIn(0L, total) / totalFloat),
             )
+            // Snap to the playhead and to the other clips, never to the clip being dragged.
+            val targets = ArrayList<Long>(track.clips.size * 2 + 1)
+            targets += video.playheadTick
+            for (other in track.clips) {
+                if (other.id == clip.id) continue
+                targets += other.startTick
+                targets += other.startTick + other.durationTicks
+            }
             VideoClipBox(
                 clip = clip,
                 selected = clip.id == video.selectedClipId,
                 dimmed = !track.visible,
+                snapEnabled = video.snapEnabled,
+                snapTargets = targets,
+                snapThresholdTicks = snapThreshold,
+                totalTicks = total,
+                laneWidthPx = laneWidthPx,
                 actions = actions,
                 modifier = Modifier
                     .offset(x = start)
@@ -339,15 +446,29 @@ private fun VideoTrackLane(
     }
 }
 
-/** One clip rectangle with a thumbnail where it fits and the frame name. */
+/** One clip rectangle: tap selects, long-press drags, the right edge trims. */
 @Composable
 private fun VideoClipBox(
     clip: VideoClipUi,
     selected: Boolean,
     dimmed: Boolean,
+    snapEnabled: Boolean,
+    snapTargets: List<Long>,
+    snapThresholdTicks: Long,
+    totalTicks: Long,
+    laneWidthPx: Float,
     actions: StudioActions,
     modifier: Modifier = Modifier,
 ) {
+    var dragOffsetPx by remember(clip.id) { mutableStateOf(0f) }
+    var trimStartDuration by remember(clip.id) { mutableStateOf(clip.durationTicks) }
+    var trimDragPx by remember(clip.id) { mutableStateOf(0f) }
+    val currentClip by rememberUpdatedState(clip)
+    val currentSnapEnabled by rememberUpdatedState(snapEnabled)
+    val currentSnapTargets by rememberUpdatedState(snapTargets)
+    val currentSnapThreshold by rememberUpdatedState(snapThresholdTicks)
+    val currentTotalTicks by rememberUpdatedState(totalTicks)
+    val currentLaneWidth by rememberUpdatedState(laneWidthPx)
     val shape = RoundedCornerShape(4.dp)
     val background = when {
         clip.missing -> MaterialTheme.colorScheme.errorContainer
@@ -364,8 +485,10 @@ private fun VideoClipBox(
         clip.label,
         formatVideoTime(clip.durationTicks),
     )
+    val trimDescription = stringResource(R.string.video_trim_clip)
     Row(
         modifier
+            .graphicsLayer { translationX = dragOffsetPx }
             .alpha(if (dimmed) 0.5f else 1f)
             .clip(shape)
             .background(background)
@@ -374,9 +497,36 @@ private fun VideoClipBox(
                 if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,
                 shape,
             )
+            .pointerInput(clip.id) {
+                detectDragGesturesAfterLongPress(
+                    onDragStart = {
+                        actions.setVideoPlaying(false)
+                        actions.selectVideoClip(clip.id)
+                        dragOffsetPx = 0f
+                    },
+                    onDrag = { change, amount ->
+                        change.consume()
+                        dragOffsetPx += amount.x
+                    },
+                    onDragEnd = {
+                        val target = VideoTimeline.movedStart(
+                            startTick = currentClip.startTick,
+                            deltaPx = dragOffsetPx,
+                            widthPx = currentLaneWidth,
+                            durationTicks = currentTotalTicks,
+                            snap = currentSnapEnabled,
+                            targets = currentSnapTargets,
+                            thresholdTicks = currentSnapThreshold,
+                        )
+                        dragOffsetPx = 0f
+                        actions.moveVideoClip(currentClip.id, target)
+                    },
+                    onDragCancel = { dragOffsetPx = 0f },
+                )
+            }
             .clickable { actions.selectVideoClip(clip.id) }
             .semantics { contentDescription = description }
-            .padding(horizontal = 4.dp),
+            .padding(start = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         val thumbnail = clip.thumbnail
@@ -395,6 +545,43 @@ private fun VideoClipBox(
             color = content,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
+        )
+        Box(
+            Modifier
+                .width(VIDEO_TRIM_HANDLE_WIDTH)
+                .fillMaxHeight()
+                .background(MaterialTheme.colorScheme.primary.copy(alpha = if (selected) 0.45f else 0.18f))
+                .pointerInput(clip.id) {
+                    detectHorizontalDragGestures(
+                        onDragStart = {
+                            actions.setVideoPlaying(false)
+                            actions.selectVideoClip(clip.id)
+                            trimStartDuration = currentClip.durationTicks
+                            trimDragPx = 0f
+                        },
+                        onHorizontalDrag = { change, dragAmount ->
+                            change.consume()
+                            trimDragPx += dragAmount
+                        },
+                        onDragEnd = {
+                            val ticks = VideoTimeline.trimDuration(
+                                startTick = currentClip.startTick,
+                                currentDurationTicks = trimStartDuration,
+                                deltaPx = trimDragPx,
+                                widthPx = currentLaneWidth,
+                                durationTicks = currentTotalTicks,
+                                snap = currentSnapEnabled,
+                                targets = currentSnapTargets,
+                                thresholdTicks = currentSnapThreshold,
+                            )
+                            trimDragPx = 0f
+                            actions.setVideoClipDuration(currentClip.id, ticks)
+                        },
+                        onDragCancel = { trimDragPx = 0f },
+                    )
+                }
+                .semantics { contentDescription = trimDescription },
         )
     }
 }

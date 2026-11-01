@@ -32,6 +32,9 @@ import app.painter.core.doc.Node
 import app.painter.core.doc.RasterLayer
 import app.painter.core.doc.VectorLayer
 import app.painter.core.doc.Video
+import app.painter.core.doc.VideoEdit
+import app.painter.core.doc.VideoMeta
+import app.painter.core.doc.VideoPlaybackCursor
 import app.painter.core.doc.effectivelyLocked
 import app.painter.core.doc.newNodeId
 import app.painter.core.fill.BucketFill
@@ -331,6 +334,17 @@ class StudioViewModel(
     /** Fingerprint of the frames an onion overlay was built from. */
     private var onionSignature: Long? = null
     private var onionCache: List<OnionFrameUi> = emptyList()
+
+    // ---- video preview ----
+
+    /** 60 Hz preview loop; null while paused. */
+    private var videoPlayJob: Job? = null
+    /** Bumped on every stop, so a cancelled loop cannot publish a stale state. */
+    private var videoPlayToken = 0
+    /** The video panel is previewing a frame on the canvas; closing it restores the editing frame. */
+    private var videoPreviewActive = false
+    /** Node active before the video preview started, restored when the panel closes. */
+    private var videoEditingActiveId: String? = null
     /** Descriptor of the device of the running stylus stroke; saved when the stroke ends, null otherwise. */
     private var strokeDevice: String? = null
     /** In-flight marching-ants contour computation of the selection mask. */
@@ -453,6 +467,8 @@ class StudioViewModel(
         finishTransform(apply = false)
         finishGradient(apply = false)
         finishLiquify(commit = false)
+        // Leaving the studio is a preview exit: restore the frame the user was editing before saving.
+        stopVideoPlayback(restoreEditingFrame = true)
         save(refreshList = false) // flush pending changes of the previous document
         doc = d
         timelapseJob?.cancel()
@@ -462,6 +478,11 @@ class StudioViewModel(
         animPlayJob?.cancel()
         animPlayJob = null
         animFrameId = null
+        videoPlayToken++
+        videoPlayJob?.cancel()
+        videoPlayJob = null
+        videoPreviewActive = false
+        videoEditingActiveId = null
         onionSignature = null
         onionCache = emptyList()
         // The saved state belongs to the document that was just flushed, not to the new one.
@@ -546,6 +567,8 @@ class StudioViewModel(
         pendingVectorStroke = null
         // Painting while frames cycle would change target mid-stroke: stop on the frame that is on screen.
         if (_state.value.animation?.playing == true) setAnimationPlaying(false)
+        // Video preview stops on the frame on screen too; that frame becomes the editing frame.
+        if (videoPreviewActive || _state.value.video?.playing == true) commitVideoPreviewFrame()
         // A filter is computing on a copy of the layer; a stroke would land under it and be overwritten.
         if (filterBusy) return
         // The back of the pen (TOOL_TYPE_ERASER) erases with the erase brush for this stroke only (§4.3);
@@ -2329,6 +2352,8 @@ class StudioViewModel(
     // ---- history ----
 
     override fun undo() {
+        // Undo is a document edit: leave the preview on the frame the user was editing.
+        stopVideoPlayback(restoreEditingFrame = true)
         // An open shape draft has pixels only in its preview: undo drops it instead of a history step.
         if (shapeDraft != null) {
             finishShape(commit = false)
@@ -2343,6 +2368,7 @@ class StudioViewModel(
     }
 
     override fun redo() {
+        stopVideoPlayback(restoreEditingFrame = true)
         if (shapeDraft != null) return
         if (transformSession != null || gradientLayerId != null) return
         commitPendingOpacity()
@@ -2611,7 +2637,8 @@ class StudioViewModel(
 
     override fun toggleAnimationPanel() {
         val open = !_state.value.animationPanelOpen
-        // One bottom timeline at a time: opening the animation closes the video panel.
+        // One bottom timeline at a time: opening the animation leaves the video preview first.
+        if (open) leaveVideoPreview()
         _state.update {
             it.copy(
                 animationPanelOpen = open,
@@ -2621,8 +2648,8 @@ class StudioViewModel(
     }
 
     /**
-     * Converts the animation into a video timeline the first time and opens the read-only panel afterwards.
-     * The animation metadata and frames are kept; only the video block is added.
+     * Converts the animation into a video timeline the first time and opens the panel afterwards. The animation
+     * metadata and frames are kept; only the video block is added.
      */
     override fun startVideoMode() {
         if (doc.video == null) {
@@ -2632,8 +2659,10 @@ class StudioViewModel(
             doc.video = meta
             markDirty()
         }
+        if (_state.value.animation?.playing == true) stopAnimationPlayback()
         _state.update { it.copy(animationPanelOpen = false, videoPanelOpen = true) }
         refreshVideo()
+        enterVideoPreview()
     }
 
     override fun toggleVideoPanel() {
@@ -2642,26 +2671,284 @@ class StudioViewModel(
             return
         }
         val open = !_state.value.videoPanelOpen
-        // One bottom timeline at a time: opening the video closes the animation panel.
-        _state.update {
-            it.copy(
-                videoPanelOpen = open,
-                animationPanelOpen = if (open) false else it.animationPanelOpen,
-            )
+        if (open) {
+            if (_state.value.animation?.playing == true) stopAnimationPlayback()
+            // One bottom timeline at a time: opening the video closes the animation panel.
+            _state.update { it.copy(videoPanelOpen = true, animationPanelOpen = false) }
+            refreshVideo()
+            enterVideoPreview()
+        } else {
+            leaveVideoPreview()
+            _state.update { it.copy(videoPanelOpen = false) }
         }
-        if (open) refreshVideo()
     }
 
     override fun seekVideo(tick: Long) {
         val video = _state.value.video ?: return
-        val clamped = tick.coerceIn(0L, video.durationTicks)
-        if (video.playheadTick == clamped) return
-        // Scrubbing is UI state only: no history entry, no timelapse frame and no canvas change.
-        _state.update { it.copy(video = it.video?.copy(playheadTick = clamped)) }
+        if (video.playing || videoPlayJob != null) stopVideoPlayback(restoreEditingFrame = false)
+        val duration = _state.value.video?.durationTicks ?: video.durationTicks
+        val clamped = VideoPlaybackCursor.clampTick(tick, duration)
+        if (_state.value.video?.playheadTick != clamped) {
+            _state.update { it.copy(video = it.video?.copy(playheadTick = clamped)) }
+        }
+        // Scrubbing is preview-only: no history entry, no timelapse frame and no dirty flag.
+        if (videoPreviewActive) showVideoFrame(clamped)
     }
 
     override fun selectVideoClip(id: String?) {
         _state.update { it.copy(video = it.video?.copy(selectedClipId = id)) }
+    }
+
+    override fun setVideoPlaying(playing: Boolean) {
+        if (playing) startVideoPlayback() else stopVideoPlayback(restoreEditingFrame = false)
+    }
+
+    override fun stopVideo() {
+        if (_state.value.video == null) return
+        stopVideoPlayback(restoreEditingFrame = false)
+        _state.update { it.copy(video = it.video?.copy(playheadTick = 0L)) }
+        if (videoPreviewActive) showVideoFrame(0L)
+    }
+
+    override fun setVideoLoopsPreview(on: Boolean) {
+        _state.update { it.copy(video = it.video?.copy(loopPreview = on)) }
+    }
+
+    override fun setVideoSnap(on: Boolean) {
+        _state.update { it.copy(video = it.video?.copy(snapEnabled = on)) }
+    }
+
+    override fun addVideoClip(frameId: String?) {
+        if (doc.video == null) return
+        stopVideoPlayback(restoreEditingFrame = false)
+        val meta = doc.video ?: return
+        val selectedId = _state.value.video?.selectedClipId
+        val selectedTrack = selectedId?.let { id -> meta.tracks.firstOrNull { t -> t.clips.any { it.id == id } } }
+        val track = selectedTrack ?: meta.tracks.firstOrNull() ?: return
+        val selected = selectedId?.let { id -> track.clips.firstOrNull { it.id == id } }
+        val frames = Video.frames(doc, track)
+        val chosen = if (frameId == null) {
+            null
+        } else {
+            frameId.takeIf { id -> frames.any { it.id == id } }
+                ?: selected?.frameId?.takeIf { id -> frames.any { it.id == id } }
+                ?: frames.firstOrNull()?.id
+        }
+        if (frameId != null && chosen == null) return
+        val duration = selected?.durationTicks ?: VideoEdit.DEFAULT_CLIP_TICKS
+        val id = newNodeId()
+        val updated = VideoEdit.add(
+            meta = meta,
+            trackId = track.id,
+            afterClipId = selected?.id,
+            clipId = id,
+            frameId = chosen,
+            durationTicks = duration,
+            playheadTick = _state.value.video?.playheadTick ?: 0L,
+        )
+        if (updated == meta) return
+        doc.video = updated
+        markDirty()
+        refreshVideo()
+        val start = updated.tracks.firstOrNull { it.id == track.id }
+            ?.clips?.firstOrNull { it.id == id }?.startTick ?: 0L
+        _state.update { it.copy(video = it.video?.copy(selectedClipId = id, playheadTick = start)) }
+        if (videoPreviewActive) showVideoFrame(start)
+    }
+
+    override fun deleteVideoClip(id: String) {
+        if (doc.video == null) return
+        stopVideoPlayback(restoreEditingFrame = false)
+        val meta = doc.video ?: return
+        val track = meta.tracks.firstOrNull { t -> t.clips.any { it.id == id } } ?: return
+        val updated = VideoEdit.delete(meta, track.id, id)
+        if (updated == meta) return
+        doc.video = updated
+        markDirty()
+        refreshVideo()
+        if (videoPreviewActive) showVideoFrame(_state.value.video?.playheadTick ?: 0L)
+    }
+
+    override fun setVideoClipDuration(id: String, ticks: Long) {
+        if (doc.video == null) return
+        stopVideoPlayback(restoreEditingFrame = false)
+        val meta = doc.video ?: return
+        val track = meta.tracks.firstOrNull { t -> t.clips.any { it.id == id } } ?: return
+        val updated = VideoEdit.trim(meta, track.id, id, ticks)
+        if (updated == meta) return
+        doc.video = updated
+        markDirty()
+        refreshVideo()
+        if (videoPreviewActive) showVideoFrame(_state.value.video?.playheadTick ?: 0L)
+    }
+
+    override fun moveVideoClip(id: String, startTick: Long) {
+        if (doc.video == null) return
+        stopVideoPlayback(restoreEditingFrame = false)
+        val meta = doc.video ?: return
+        val track = meta.tracks.firstOrNull { t -> t.clips.any { it.id == id } } ?: return
+        val updated = VideoEdit.move(meta, track.id, id, startTick)
+        if (updated == meta) return
+        doc.video = updated
+        markDirty()
+        refreshVideo()
+        if (videoPreviewActive) showVideoFrame(_state.value.video?.playheadTick ?: 0L)
+    }
+
+    override fun setVideoTrackVisible(id: String, visible: Boolean) {
+        if (doc.video == null) return
+        stopVideoPlayback(restoreEditingFrame = false)
+        val meta = doc.video ?: return
+        val updated = VideoEdit.setTrackVisible(meta, id, visible)
+        if (updated == meta) return
+        doc.video = updated
+        markDirty()
+        refreshVideo()
+        if (videoPreviewActive) showVideoFrame(_state.value.video?.playheadTick ?: 0L)
+    }
+
+    /**
+     * Starts the 60 Hz preview clock. The tick is computed from the elapsed time on every pass, so a late UI
+     * frame drops ticks instead of queueing them. Only visibility and the active id change here: no history
+     * entry, no timelapse frame and no dirty flag.
+     */
+    private fun startVideoPlayback() {
+        val meta = doc.video ?: return
+        val duration = Video.durationTicks(meta)
+        if (duration <= 0L) return
+        if (_state.value.animation?.playing == true) stopAnimationPlayback()
+        stopVideoPlayback(restoreEditingFrame = false)
+        if (!videoPreviewActive) {
+            videoEditingActiveId = doc.activeId
+            videoPreviewActive = true
+        }
+        val video = _state.value.video ?: return
+        val start = VideoPlaybackCursor.startTick(video.playheadTick, duration)
+        val startElapsed = SystemClock.elapsedRealtime()
+        _state.update { it.copy(video = it.video?.copy(playing = true, playheadTick = start)) }
+        showVideoFrame(start)
+        val token = ++videoPlayToken
+        videoPlayJob = viewModelScope.launch {
+            try {
+                var lastTick = -1L
+                while (isActive) {
+                    delay(8L)
+                    val elapsed = SystemClock.elapsedRealtime() - startElapsed
+                    val loop = _state.value.video?.loopPreview == true
+                    val next = VideoPlaybackCursor.advance(start, elapsed, duration, loop)
+                    if (next.tick != lastTick) {
+                        lastTick = next.tick
+                        showVideoFrame(next.tick)
+                    }
+                    if (next.finished) break
+                }
+            } finally {
+                if (token == videoPlayToken) {
+                    videoPlayJob = null
+                    _state.update { s -> s.copy(video = s.video?.copy(playing = false)) }
+                    refreshLayerRowsAfterPreview()
+                    canvas?.invalidate(null, null)
+                }
+            }
+        }
+    }
+
+    /**
+     * Stops the clock. [restoreEditingFrame] true is the panel-exit path: the frame visible before the preview
+     * comes back through [Animation.normalize]. Painting and timeline edits use false, so the preview frame on
+     * screen stays the editing frame.
+     */
+    private fun stopVideoPlayback(restoreEditingFrame: Boolean) {
+        val wasPlaying = videoPlayJob != null || _state.value.video?.playing == true
+        videoPlayToken++
+        videoPlayJob?.cancel()
+        videoPlayJob = null
+        if (_state.value.video?.playing == true) {
+            _state.update { it.copy(video = it.video?.copy(playing = false)) }
+        }
+        if (restoreEditingFrame && (videoPreviewActive || wasPlaying)) {
+            restoreVideoEditingFrame()
+        } else if (wasPlaying) {
+            // Rows are rebuilt once on stop, never per tick; the preview visibility is kept.
+            refreshLayerRowsAfterPreview()
+            canvas?.invalidate(null, null)
+        }
+    }
+
+    /** Shows [tick] on the canvas through frame visibility, without rebuilding layer rows. */
+    private fun showVideoFrame(tick: Long) {
+        val meta = doc.video ?: return
+        val duration = Video.durationTicks(meta)
+        val clamped = VideoPlaybackCursor.clampTick(tick, duration)
+        // The exclusive end of the timeline keeps its last frame visible while the playhead shows the end.
+        val frameTick = if (duration <= 0L) 0L else clamped.coerceAtMost(duration - 1L)
+        val visibility = Video.visibleFrames(doc, meta, frameTick)
+        // One tree walk per tick instead of a lookup per frame: long timelines can have hundreds of frames.
+        val nodes = HashMap<String, Node>()
+        doc.root.walk { nodes[it.id] = it }
+        for ((id, visible) in visibility) nodes[id]?.visible = visible
+        visibleVideoFrameId(meta, frameTick, nodes)?.let { doc.activeId = it }
+        _state.update { s ->
+            s.copy(
+                activeLayerId = doc.activeId,
+                video = s.video?.copy(playheadTick = clamped),
+            )
+        }
+        canvas?.invalidate(null, null)
+    }
+
+    /** Topmost frame that the visible tracks show at [tick], or null for a gap/blank. */
+    private fun visibleVideoFrameId(meta: VideoMeta, tick: Long, nodes: Map<String, Node>): String? {
+        for (track in meta.tracks.asReversed()) {
+            if (!track.visible) continue
+            val frameId = Video.clipAt(track, tick)?.frameId ?: continue
+            if (nodes[frameId] is RasterLayer) return frameId
+        }
+        return null
+    }
+
+    /** Remembers the editing frame and previews the current playhead. */
+    private fun enterVideoPreview() {
+        val video = _state.value.video ?: return
+        if (!videoPreviewActive) {
+            videoEditingActiveId = doc.activeId
+            videoPreviewActive = true
+        }
+        showVideoFrame(video.playheadTick)
+    }
+
+    /** Stops the preview and restores the frame that was active before the panel opened. */
+    private fun leaveVideoPreview() {
+        if (!videoPreviewActive && videoPlayJob == null && _state.value.video?.playing != true) return
+        stopVideoPlayback(restoreEditingFrame = true)
+        videoPreviewActive = false
+        videoEditingActiveId = null
+    }
+
+    /**
+     * Painting stops the preview on the frame on screen and makes it the editing frame, so the stroke lands on
+     * the frame the user sees and closing the panel does not jump back to an older frame.
+     */
+    private fun commitVideoPreviewFrame() {
+        val frame = doc.activeNode as? RasterLayer
+        if (frame != null && frame.visible) {
+            videoEditingActiveId = frame.id
+            if (Animation.frames(doc).any { it.id == frame.id }) animFrameId = frame.id
+        }
+        if (videoPlayJob != null || _state.value.video?.playing == true) {
+            stopVideoPlayback(restoreEditingFrame = false)
+        }
+    }
+
+    /** Restores the animation invariant of the frame active before the preview. */
+    private fun restoreVideoEditingFrame() {
+        val restore = videoEditingActiveId
+        if (restore != null && doc.findNode(restore) != null) doc.activeId = restore
+        Animation.normalize(doc, clearOrphaned = false)
+        val frames = Animation.frames(doc)
+        animFrameId = doc.activeId?.takeIf { id -> frames.any { it.id == id } } ?: frames.firstOrNull()?.id
+        refreshLayers()
+        canvas?.invalidate(null, null)
     }
 
     /**
@@ -2748,6 +3035,10 @@ class StudioViewModel(
 
     override fun selectAnimationFrame(id: String) {
         val frame = Animation.frames(doc).firstOrNull { it.id == id } ?: return
+        if (_state.value.videoPanelOpen || videoPreviewActive) {
+            leaveVideoPreview()
+            _state.update { it.copy(videoPanelOpen = false) }
+        }
         if (doc.activeId == id && _state.value.animation?.playing != true &&
             _state.value.animation?.activeIndex == Animation.activeIndex(doc, animFrameId)
         ) {
@@ -2939,19 +3230,21 @@ class StudioViewModel(
     }
 
     /**
-     * Publishes the read-only video timeline. The block is normalized with `clearOrphaned = false`, so a
-     * frame deleted by an undo that can still restore it keeps its clip ("Frame missing") instead of
-     * silently dropping it. No history entry, dirty flag or canvas change is made here.
+     * Publishes the video timeline. The block is normalized with `clearOrphaned = false`, so a frame deleted
+     * by an undo that can still restore it keeps its clip ("Frame missing") instead of silently dropping it.
+     * No history entry, dirty flag or canvas change is made here.
      */
     private fun refreshVideo() {
         val current = doc.video
         if (current == null) {
+            cancelVideoPlayback()
             _state.update { it.copy(video = null, videoPanelOpen = false) }
             return
         }
         val meta = Video.normalize(current, doc, clearOrphaned = false)
         if (meta == null) {
             doc.video = null
+            cancelVideoPlayback()
             _state.update { it.copy(video = null, videoPanelOpen = false) }
             return
         }
@@ -3012,9 +3305,21 @@ class StudioViewModel(
                     tracks = tracks,
                     audio = audio,
                     selectedClipId = selected,
+                    playing = previous?.playing == true && videoPlayJob != null,
+                    loopPreview = previous?.loopPreview ?: false,
+                    snapEnabled = previous?.snapEnabled ?: true,
                 ),
             )
         }
+    }
+
+    /** Cancels the preview without touching the document; used when the video block or the document goes. */
+    private fun cancelVideoPlayback() {
+        videoPlayToken++
+        videoPlayJob?.cancel()
+        videoPlayJob = null
+        videoPreviewActive = false
+        videoEditingActiveId = null
     }
 
     /** Previous and next onion frames with their bitmaps; returns the cache when the pixels did not change. */
@@ -3099,6 +3404,8 @@ class StudioViewModel(
      */
     override fun applyFilter(params: FilterParams) {
         if (filterBusy) return
+        // A filter edits the frame on screen: stop the preview without jumping to another frame.
+        if (videoPreviewActive || _state.value.video?.playing == true) commitVideoPreviewFrame()
         finishShape(commit = true)
         finishTransform(apply = true)
         finishGradient(apply = true)
@@ -3331,6 +3638,9 @@ class StudioViewModel(
     // ---- options ----
 
     override fun openHome() {
+        // Leaving the studio restores the editing frame before the project is written.
+        leaveVideoPreview()
+        _state.update { it.copy(videoPanelOpen = false) }
         save()
         homeRequest.value = true
     }
@@ -3343,6 +3653,8 @@ class StudioViewModel(
     /** Commits the interactive tools so their pixels are part of the document before it is written. */
     private fun commitDocumentEdits() {
         if (_state.value.animation?.playing == true) stopAnimationPlayback()
+        // Saving keeps the preview frame the user is looking at as the editing frame.
+        if (videoPreviewActive || _state.value.video?.playing == true) commitVideoPreviewFrame()
         finishShape(commit = true)
         finishTransform(apply = true)
         finishGradient(apply = true)
@@ -4278,6 +4590,19 @@ class StudioViewModel(
         // Frames of an animation are ordinary layers: restoring their visibility first keeps the rows in sync.
         refreshAnimation()
         refreshVideo()
+        publishLayerRows()
+    }
+
+    /**
+     * Rebuilds the layer rows without restoring the animation invariant. Video playback and a paused video
+     * preview may deliberately hide every frame (a blank clip), so normalizing here would show an unwanted
+     * frame. Used once when the preview stops; playback never rebuilds rows per tick.
+     */
+    private fun refreshLayerRowsAfterPreview() {
+        publishLayerRows()
+    }
+
+    private fun publishLayerRows() {
         val rows = ArrayList<LayerUi>()
         fun visit(group: GroupNode, depth: Int) {
             for (n in group.children.asReversed()) {

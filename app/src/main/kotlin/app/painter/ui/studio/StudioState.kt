@@ -221,8 +221,9 @@ data class VideoAudioUi(
 )
 
 /**
- * Read-only video timeline state of the open document. [durationTicks] is the last tick covered by a drawing
- * clip and [playheadTick] is clamped to it. Selection only highlights a clip; there is no editor yet.
+ * Video timeline state of the open document. [durationTicks] is the last tick covered by a drawing clip and
+ * [playheadTick] is clamped to it. [playing], [loopPreview] and [snapEnabled] are preview-only switches: they
+ * are not persisted in the manifest.
  */
 @Immutable
 data class VideoUi(
@@ -231,6 +232,9 @@ data class VideoUi(
     val tracks: List<VideoTrackUi> = emptyList(),
     val audio: VideoAudioUi? = null,
     val selectedClipId: String? = null,
+    val playing: Boolean = false,
+    val loopPreview: Boolean = false,
+    val snapEnabled: Boolean = true,
 )
 
 /**
@@ -624,14 +628,47 @@ interface StudioActions {
      */
     fun startVideoMode() {}
 
-    /** Opens or closes the read-only video timeline; opening it closes the animation panel. */
+    /** Opens or closes the video timeline; opening it closes the animation panel and previews the playhead. */
     fun toggleVideoPanel() {}
 
-    /** Moves the video playhead to [tick], clamped to the timeline. UI state only: no history entry. */
+    /**
+     * Moves the video playhead to [tick], clamped to the timeline. Scrubbing stops playback, previews the
+     * clip's frame, and creates no history entry, timelapse frame or dirty flag.
+     */
     fun seekVideo(tick: Long) {}
 
-    /** Selects a clip of the video timeline for highlighting; S1 has no clip editor yet. */
+    /** Selects a clip of the video timeline; the selection is highlighted and edit actions apply to it. */
     fun selectVideoClip(id: String?) {}
+
+    /** Starts or pauses the 60 Hz preview. Playback adds no history entry and no timelapse frame. */
+    fun setVideoPlaying(playing: Boolean) {}
+
+    /** Stops the preview and rewinds the playhead to the beginning; the panel stays open. */
+    fun stopVideo() {}
+
+    /** Loops the preview at the end of the timeline instead of stopping on the last frame. Not persisted. */
+    fun setVideoLoopsPreview(on: Boolean) {}
+
+    /** Enables or disables snapping of clip move and trim drags. Not persisted. */
+    fun setVideoSnap(on: Boolean) {}
+
+    /**
+     * Inserts a clip after the selected one (same frame and duration) or at the playhead when nothing is
+     * selected. [frameId] null inserts a deliberate blank clip.
+     */
+    fun addVideoClip(frameId: String?) {}
+
+    /** Deletes [id] and ripples the following clips left. No history entry: the timeline is metadata. */
+    fun deleteVideoClip(id: String) {}
+
+    /** Sets the right-edge duration of [id]; a value of 0 deletes the clip. */
+    fun setVideoClipDuration(id: String, ticks: Long) {}
+
+    /** Moves [id] to the slot nearest [startTick], rippling the other clips. */
+    fun moveVideoClip(id: String, startTick: Long) {}
+
+    /** Shows or hides one drawing track; a hidden track renders nothing. */
+    fun setVideoTrackVisible(id: String, visible: Boolean) {}
 
     fun addLayer()
 
