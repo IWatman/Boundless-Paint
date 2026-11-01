@@ -16,7 +16,7 @@ The app is completely free: no subscriptions, ads, watermarks or paid features.
   <img src="docs/screenshots/update.png" width="49%" alt="In-app update">
 </p>
 
-> **Status:** M4 is complete (November 2026), M5 (polish) is next. The app has the full brush engine (texture, paint mixing, watercolor, particles, harmony, 3D, filter and clone brushes), a catalog of 91 presets in 17 categories, the brush editor, stylus settings with calibration, layers with masks and adjustment layers, selections, transform, fills, gradients, symmetry, guides, perspective grids, shapes, filters, PSD in/out, timelapse, vector layers, frame animation and Google Drive backup.
+> **Status:** M5 (polish) is in progress (November 2026); M4 is complete. The app has the full brush engine (texture, paint mixing, watercolor, particles, harmony, 3D, filter and clone brushes), a catalog of 91 presets in 17 categories, the brush editor, stylus settings with calibration, layers with masks and adjustment layers, selections, transform, fills, gradients, symmetry, guides, perspective grids, shapes, filters, PSD in/out, timelapse, vector layers, frame animation and Google Drive backup.
 
 ## Features
 
@@ -36,6 +36,8 @@ The app is completely free: no subscriptions, ads, watermarks or paid features.
 - Color: HSB wheel, sliders, hex, palette, eyedropper (long press)
 - Undo and redo with buttons and gestures (two- and three-finger tap), two-finger navigation
 - Filters: blur, motion blur, pixelate, sharpen, glow, noise, find edges, chromatic aberration, fisheye, dilate, erode, zoom and spin blur, radial lines, speed lines, halftone, outline, drop shadow, outer glow and panel grid (M3)
+- More filters: smooth, lens blur, high-pass, frosted glass, grain, local contrast, bokeh, lens flare, god rays and cross filter (M5)
+- Pattern fill with six seamless procedural patterns, tile size, rotation and opacity (M5)
 - Liquify and text stamp tools, hardware-keyboard shortcuts (M3)
 - Canvas crop, canvas size with anchors, straighten; curvilinear 5-point perspective (M3)
 - Brush import/export (`.pbrush`, `.pbrushes`, MyPaint, GIMP, Krita, Procreate, PNG/JPG) (M3)
@@ -51,7 +53,7 @@ The app is completely free: no subscriptions, ads, watermarks or paid features.
 - In-app update from GitHub Releases
 
 **Next (M5)**
-- Remaining filters, pattern tools and materials
+- Remaining filters, more pattern tools and materials
 - Video mode, localization and performance work
 
 Full plan: [spec/ROADMAP.md](spec/ROADMAP.md), the finished M2 plan: [spec/PLAN-M2.md](spec/PLAN-M2.md), known issues: [spec/STATUS.md](spec/STATUS.md).
