@@ -96,7 +96,18 @@
 - Tests: `FiltersM5FinalTest` (16) — determinism, visible change, history and live thread independence, selection,
   alpha lock, premultiplied output, seams on both tile axes, greyscale ink/paper, posterize and oil level limits,
   frame behaviour, sparse rain, every control and codec round trips.
-- M5 now: **693 JVM tests** (593 core, 100 app). All filters in [filters.md](filters.md) are implemented.
+
+### Video mode S1 (2026-11-01)
+- Core: `VideoMeta`/`VideoTrack`/`VideoClip`/`VideoAudio`/`AudioClip` with a 60 Hz integer tick model, conversion
+  from `AnimationMeta` (loop/once/ping-pong expansion and fps rounding) and manifest DTOs at schema 2. Existing
+  projects without `video` load unchanged.
+- Persistence: `ProjectIO` reads/writes the video block and normalizes it against the document frames; `Snapshot`
+  copies `video`, so incremental autosave and undo snapshots keep it.
+- UI: Options → Video mode… converts an animation (or explains why it cannot) and opens a read-only timeline with
+  duration, ruler, tracks/clips, playhead, seeking and clip highlight; the Animation panel has a Video action.
+  Playback, clip editing, export and audio are later slices and stay absent rather than faked.
+- Tests: `VideoTest` (13), `VideoProjectIOTest` (7), `SnapshotTest` (4, two new for video and autosave delta).
+- M5 now: **715 JVM tests** (613 core, 102 app). All filters in [filters.md](filters.md) are implemented.
 
 ## M3: done (2026-10-31)
 ### Filters (2026-10-31)

@@ -41,6 +41,7 @@ The app is completely free: no subscriptions, ads, watermarks or paid features.
 - Stylization and material filters: gloom, sketch edges, trace, bevel, emboss, relief, satin, wet edge, waterdrop, extrude and clouds (M5)
 - Artistic and generative filters: palette posterize, QR code, stained glass, dots, 1-bit stamp, glitch, retro game, chrome, sheer, impressionist, swirl painting and pop art (M5)
 - Final M5 filters: manga and manga background tones, anime background, pencil sketch, oil paint, blur frame, table frame and rain (M5)
+- Video timeline: converts frame animation to a 60 fps video project and shows a read-only track timeline (M5, slice 1)
 - Pattern fill with six seamless procedural patterns, two colours, tile size, rotation, phase offset, contrast, invert and opacity (M5)
 - Liquify and text stamp tools, hardware-keyboard shortcuts (M3)
 - Canvas crop, canvas size with anchors, straighten; curvilinear 5-point perspective (M3)
@@ -58,7 +59,8 @@ The app is completely free: no subscriptions, ads, watermarks or paid features.
 
 **Next (M5)**
 - More pattern tools and materials
-- Video mode, localization and performance work
+- Video mode slices 2–5: playback, clip editing, export and audio
+- Device performance and the real-tablet QA pass
 
 Full plan: [spec/ROADMAP.md](spec/ROADMAP.md), the finished M2 plan: [spec/PLAN-M2.md](spec/PLAN-M2.md), known issues: [spec/STATUS.md](spec/STATUS.md).
 

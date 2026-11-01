@@ -698,7 +698,7 @@
     <string name="video_track_hidden">Дорожка скрыта</string>
     <string name="video_not_available_hint">Сначала начните анимацию (Опции → Анимация).</string>
     <string name="video_convert_title">Режим видео</string>
-    <string name="video_convert_message">Из %1$d кадров получится таймлайн 60 кадр/с. Каждый кадр сохранит свою длительность из анимации. Режим видео необратим в интерфейсе; слои кадров сохраняются.</string>
+    <string name="video_convert_message">Кадров: %1$d. Анимация становится таймлайном 60 кадр/с; каждый кадр сохранит длительность. Режим видео необратим в интерфейсе; слои кадров сохраняются.</string>
     <string name="video_convert_pingpong">Пинг-понг разворачивается в линейную последовательность.</string>
     <string name="video_convert_confirm">Преобразовать</string>
     <string name="video_play_unavailable">Воспроизведение пока недоступно</string>

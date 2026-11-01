@@ -698,7 +698,7 @@
     <string name="video_track_hidden">Track hidden</string>
     <string name="video_not_available_hint">Start an animation first (Options → Animation).</string>
     <string name="video_convert_title">Video mode</string>
-    <string name="video_convert_message">%1$d frames become a 60 fps timeline. Each frame keeps its duration from the animation. Video mode is one-way in the UI; the frame layers are kept.</string>
+    <string name="video_convert_message">Frame count: %1$d. The animation becomes a 60 fps timeline; each frame keeps its duration. Video mode is one-way in the UI; the frame layers are kept.</string>
     <string name="video_convert_pingpong">Ping-pong is expanded into a linear sequence.</string>
     <string name="video_convert_confirm">Convert</string>
     <string name="video_play_unavailable">Playback is not available yet</string>
