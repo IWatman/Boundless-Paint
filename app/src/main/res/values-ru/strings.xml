@@ -706,6 +706,16 @@
     <string name="video_time">%1$s / %2$s</string>
     <string name="video_scrub">Бегунок таймлайна</string>
     <string name="video_clip_accessible">%1$s, %2$s</string>
+    <string name="video_play">Воспроизвести</string>
+    <string name="video_pause">Пауза</string>
+    <string name="video_stop">Остановить и перемотать в начало</string>
+    <string name="video_loop_preview">Повтор предпросмотра</string>
+    <string name="video_loop_label">Повтор</string>
+    <string name="video_add_clip">Добавить клип</string>
+    <string name="video_add_blank">Пустой клип</string>
+    <string name="video_delete_clip">Удалить клип</string>
+    <string name="video_snap">Привязка</string>
+    <string name="video_trim_clip">Изменить длительность клипа</string>
     <string name="drive_title">Google Drive</string>
     <string name="drive_intro">Сохраняйте проекты и готовые рисунки в папку Boundless Paint на Google Drive. Приложение видит только созданные им файлы.</string>
     <string name="drive_connect">Подключить Google Drive</string>

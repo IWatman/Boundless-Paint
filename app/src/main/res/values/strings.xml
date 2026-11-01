@@ -706,6 +706,16 @@
     <string name="video_time">%1$s / %2$s</string>
     <string name="video_scrub">Timeline playhead</string>
     <string name="video_clip_accessible">%1$s, %2$s</string>
+    <string name="video_play">Play</string>
+    <string name="video_pause">Pause</string>
+    <string name="video_stop">Stop and rewind to the start</string>
+    <string name="video_loop_preview">Loop preview</string>
+    <string name="video_loop_label">Loop</string>
+    <string name="video_add_clip">Add clip</string>
+    <string name="video_add_blank">Blank clip</string>
+    <string name="video_delete_clip">Delete clip</string>
+    <string name="video_snap">Snap</string>
+    <string name="video_trim_clip">Trim clip</string>
     <string name="drive_title">Google Drive</string>
     <string name="drive_intro">Back up projects and save finished drawings to the Boundless Paint folder in your Google Drive. The app can only access files it creates.</string>
     <string name="drive_connect">Connect Google Drive</string>
