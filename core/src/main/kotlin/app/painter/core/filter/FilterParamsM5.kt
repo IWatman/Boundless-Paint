@@ -3,10 +3,11 @@ package app.painter.core.filter
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlin.math.ceil
+import kotlin.math.roundToInt
 
 /*
- * Parameters of the M5 blur, light, texture, geometric and stylization filters (spec/filters.md). They belong
- * to the sealed [FilterParams] family and are written by [FilterCodec] exactly like the M3 ones.
+ * Parameters of the M5 blur, light, texture, geometric, stylization and material filters (spec/filters.md).
+ * They belong to the sealed [FilterParams] family and are written by [FilterCodec] exactly like the M3 ones.
  */
 
 /** Edge-preserving smoothing: a blur that keeps strong outlines. */
@@ -328,4 +329,220 @@ data class PointillizeParams(
     override val reach: Int get() = size.coerceIn(2, 64) + 2
     override val writeReach: Int get() = 0
     override val needsStableSource: Boolean get() = true
+}
+
+/*
+ * Parameters of the M5 stylization and material filters: gloom, sketch, trace, bevel, emboss, relief, satin,
+ * wet edge, waterdrop, extrude and clouds.
+ */
+
+/** Shadows below [threshold] deepen and the darkening spreads by [radius] px. */
+@Serializable
+@SerialName("gloom")
+data class GloomParams(
+    /** 0..1 luminance threshold. */
+    val threshold: Float = 0.5f,
+    /** 1..32 px. */
+    val radius: Float = 12f,
+    val strength: Float = 1f,
+) : FilterParams() {
+    override val kind: String get() = "gloom"
+    override val reach: Int get() = 2 * ceil(radius.coerceIn(1f, 32f)).toInt()
+    override val needsStableSource: Boolean get() = true
+}
+
+/** Pencil drawing: thresholded edges of [thickness] px on paper, keeping only [amount] of them. */
+@Serializable
+@SerialName("sketch")
+data class SketchParams(
+    /** 1..8 px. */
+    val thickness: Int = 2,
+    /** 0..1, how strongly the faint edges survive. */
+    val amount: Float = 0.6f,
+    /** 0..1, how weak a gradient still counts as an edge. */
+    val sensitivity: Float = 0.5f,
+    val strength: Float = 1f,
+) : FilterParams() {
+    override val kind: String get() = "sketch"
+    override val reach: Int get() = thickness.coerceIn(1, 8)
+    override val needsStableSource: Boolean get() = true
+}
+
+/** Dark outline traced along the edges of the source, over the source itself. */
+@Serializable
+@SerialName("trace")
+data class TraceParams(
+    /** 0..1 edge darkening. */
+    val strength: Float = 0.7f,
+) : FilterParams() {
+    override val kind: String get() = "trace"
+    override val reach: Int get() = 1
+    override val needsStableSource: Boolean get() = true
+}
+
+/** Bevelled edge of the painted shape: [variant] is inner, outer or both. */
+@Serializable
+@SerialName("bevel")
+data class BevelParams(
+    /** inner, outer or both. */
+    val variant: String = "inner",
+    /** 0..100, contrast of the light and shade. */
+    val depth: Float = 60f,
+    /** 1..64 px, width of the slope. */
+    val size: Int = 6,
+    /** 0..360 degrees of the light. */
+    val angleDeg: Float = 225f,
+    /** "#RRGGBB" of the lit side. */
+    val highlight: String = "#FFFFFF",
+    /** "#RRGGBB" of the shaded side. */
+    val shadow: String = "#000000",
+    val strength: Float = 1f,
+) : FilterParams() {
+    override val kind: String get() = "bevel"
+    private val width: Int get() = size.coerceIn(1, 64)
+    private val outer: Boolean get() = variant.lowercase().let { it == "outer" || it == "both" }
+
+    override val reach: Int get() = width + width / 2 + 2
+    override val writeReach: Int get() = if (outer) width + 2 else 0
+    override val needsStableSource: Boolean get() = true
+}
+
+/** Greyscale relief from the directional difference of the luminance. */
+@Serializable
+@SerialName("emboss")
+data class EmbossParams(
+    /** 0..100, relief depth. */
+    val height: Float = 50f,
+    /** 0..360 degrees of the light. */
+    val angleDeg: Float = 225f,
+    val strength: Float = 1f,
+) : FilterParams() {
+    override val kind: String get() = "emboss"
+    private val distance: Int get() = 1 + (height.coerceIn(0f, 100f) / 25f).roundToInt()
+
+    override val reach: Int get() = distance + 1
+    override val needsStableSource: Boolean get() = true
+}
+
+/** Lit relief of the source colours: the directional luminance slope shades the pixels. */
+@Serializable
+@SerialName("relief")
+data class ReliefParams(
+    /** 0..100, relief height. */
+    val height: Float = 60f,
+    /** 0..360 degrees of the light. */
+    val angleDeg: Float = 225f,
+    /** 0..16 px blur of the height map. */
+    val soften: Float = 2f,
+    val strength: Float = 1f,
+) : FilterParams() {
+    override val kind: String get() = "relief"
+    override val reach: Int get() = ceil(soften.coerceIn(0f, 16f)).toInt() + 2
+    override val needsStableSource: Boolean get() = true
+}
+
+/** Silky sheen inside the painted shape, [distance] px from its edge. */
+@Serializable
+@SerialName("satin")
+data class SatinParams(
+    /** "#RRGGBB" of the sheen. */
+    val color: String = "#FFFFFF",
+    /** 0..360 degrees of the fold direction. */
+    val angleDeg: Float = 30f,
+    /** 1..100 px, how far the sheen reaches into the shape. */
+    val distance: Int = 24,
+    /** 1..32 px softness of the sheen. */
+    val size: Int = 8,
+    val strength: Float = 1f,
+) : FilterParams() {
+    override val kind: String get() = "satin"
+    private val extent: Int get() = distance.coerceIn(1, 100)
+    private val softness: Int get() = size.coerceIn(1, 32)
+
+    override val reach: Int get() = extent + softness + 2
+    override val writeReach: Int get() = 0
+    override val needsStableSource: Boolean get() = true
+}
+
+/** Watercolour wet edge: pigment darkens in the last [width] px of the painted area. */
+@Serializable
+@SerialName("wet-edge")
+data class WetEdgeParams(
+    /** 1..64 px. */
+    val width: Int = 8,
+    val strength: Float = 1f,
+) : FilterParams() {
+    override val kind: String get() = "wet-edge"
+    private val band: Int get() = width.coerceIn(1, 64)
+
+    override val reach: Int get() = band + band / 3 + 2
+    override val writeReach: Int get() = 0
+    override val needsStableSource: Boolean get() = true
+}
+
+/**
+ * A single water drop over the centre of the painted area: a lens bulge with a refractive rim and a
+ * specular highlight. It samples one snapshot of the whole content, because the lens radius follows the
+ * content size and its refraction reaches well past any fixed tile padding.
+ */
+@Serializable
+@SerialName("waterdrop")
+data class WaterdropParams(
+    /** 0..100, how strongly the drop magnifies. */
+    val height: Float = 60f,
+    /** 0..1, brightness of the specular highlight. */
+    val gloss: Float = 0.6f,
+    val strength: Float = 1f,
+) : FilterParams() {
+    override val kind: String get() = "waterdrop"
+    override val reach: Int get() = 0
+    override val needsFullSource: Boolean get() = true
+}
+
+/**
+ * Solid extrusion of the painted shape along [angleDeg] by [length] px, drawn behind it in [color] with
+ * [shading] toward the far end. Every output pixel only reads the source up to [length] px behind it, so a
+ * padded tile is enough; the write itself grows the shape by the same distance.
+ */
+@Serializable
+@SerialName("extrude")
+data class ExtrudeParams(
+    /** 0..360 degrees. */
+    val angleDeg: Float = 45f,
+    /** 1..100 px. */
+    val length: Int = 24,
+    /** "#RRGGBB" of the side face. */
+    val color: String = "#808080",
+    /** 0..1 darkening toward the far end. */
+    val shading: Float = 0.5f,
+    val strength: Float = 1f,
+) : FilterParams() {
+    override val kind: String get() = "extrude"
+    override val reach: Int get() = length.coerceIn(1, 100) + 1
+    override val writeReach: Int get() = length.coerceIn(1, 100) + 1
+    override val needsStableSource: Boolean get() = true
+}
+
+/**
+ * Fractal cloud generator between two colours. It is a Draw generator: it covers the canvas (or the
+ * selection) and does not read the layer, so it stays tile-safe by evaluating the noise at canvas
+ * coordinates instead of a padded patch.
+ */
+@Serializable
+@SerialName("clouds")
+data class CloudsParams(
+    /** 1..256 px, the largest cloud feature. */
+    val scale: Float = 64f,
+    /** 1..8 octaves. */
+    val detail: Int = 4,
+    val seed: Long = 1L,
+    /** "#RRGGBB" of the denser clouds. */
+    val colorA: String = "#FFFFFF",
+    /** "#RRGGBB" of the gaps. */
+    val colorB: String = "#000000",
+    val strength: Float = 1f,
+) : FilterParams() {
+    override val kind: String get() = "clouds"
+    override val reach: Int get() = 0
+    override val coversCanvas: Boolean get() = true
 }

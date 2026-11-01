@@ -391,8 +391,18 @@ object Filters {
         is HexPixelateParams -> mix(src, hexPixelate(src, w, h, ox, oy, params), params.strength)
         is TrianglePixelateParams -> mix(src, trianglePixelate(src, w, h, ox, oy, params), params.strength)
         is PointillizeParams -> mix(src, pointillize(src, w, h, ox, oy, params), params.strength)
+        is GloomParams -> mix(src, gloom(src, w, h, params), params.strength)
+        is SketchParams -> mix(src, sketch(src, w, h, params), params.strength)
+        is TraceParams -> mix(src, traceEdges(src, w, h), params.strength)
+        is BevelParams -> mix(src, bevel(src, w, h, params), params.strength)
+        is EmbossParams -> mix(src, emboss(src, w, h, params), params.strength)
+        is ReliefParams -> mix(src, relief(src, w, h, params), params.strength)
+        is SatinParams -> mix(src, satin(src, w, h, ox, oy, params), params.strength)
+        is WetEdgeParams -> mix(src, wetEdge(src, w, h, params), params.strength)
+        is ExtrudeParams -> mix(src, extrude(src, w, h, params), params.strength)
+        is CloudsParams -> mix(src, clouds(src, w, h, ox, oy, params), params.strength)
         is SphereLensParams, is WaveParams, is RippleParams, is TwirlParams, is PolarCoordinatesParams,
-        is ExpansionParams, is KaleidoscopeParams ->
+        is ExpansionParams, is KaleidoscopeParams, is WaterdropParams ->
             throw IllegalArgumentException("${params.kind} is processed from the full content snapshot")
     }
 
@@ -405,6 +415,7 @@ object Filters {
         is PolarCoordinatesParams -> params.strength
         is ExpansionParams -> params.strength
         is KaleidoscopeParams -> params.strength
+        is WaterdropParams -> params.strength
         else -> 1f
     }
 
@@ -517,7 +528,61 @@ object Filters {
                     sample(src, w, h, cx + cos(folded) * r - ox, cy + sin(folded) * r - oy, out)
                 }
             }
+            is WaterdropParams -> waterdropPixel(params, src, w, h, ox, oy, geometry, gx, gy, out)
             else -> sample(src, w, h, gx - ox, gy - oy, out)
+        }
+    }
+
+    /**
+     * One pixel of the water drop: the disc magnifies its middle and pinches its rim like a plano-convex
+     * lens, a dark ring at the rim sells the refraction and a small specular spot sells the water.
+     */
+    private fun waterdropPixel(
+        params: WaterdropParams,
+        src: FloatArray,
+        w: Int,
+        h: Int,
+        ox: Int,
+        oy: Int,
+        geometry: Geometry,
+        gx: Float,
+        gy: Float,
+        out: FloatArray,
+    ) {
+        val cx = geometry.cx
+        val cy = geometry.cy
+        val radius = (min(geometry.content.width, geometry.content.height) * 0.38f).coerceAtLeast(8f)
+        val height = params.height.coerceIn(0f, 100f) / 100f
+        val gloss = params.gloss.coerceIn(0f, 1f)
+        val dx = gx - cx
+        val dy = gy - cy
+        val r = hypot(dx, dy)
+        if (r >= radius) {
+            sample(src, w, h, gx - ox, gy - oy, out)
+            return
+        }
+        val t = r / radius
+        // A plano-convex drop is thickest in the middle and flat at the rim.
+        val lens = (0.12f + 0.48f * height) * (1f - t * t)
+        sample(src, w, h, cx + dx * (1f - lens) - ox, cy + dy * (1f - lens) - oy, out)
+        val rim = (1f - abs(t - 0.9f) / 0.1f).coerceIn(0f, 1f)
+        if (rim > 0f) {
+            val shade = 1f - rim * (0.2f + 0.25f * height)
+            out[0] *= shade
+            out[1] *= shade
+            out[2] *= shade
+        }
+        val spotX = cx - radius * 0.34f
+        val spotY = cy - radius * 0.4f
+        val spotRadius = radius * 0.14f
+        val spot = hypot(gx - spotX, gy - spotY)
+        if (gloss > 0f && spot < spotRadius) {
+            val k = (1f - spot / spotRadius).let { it * it } * gloss
+            out[0] = (out[0] + k).coerceAtMost(1f)
+            out[1] = (out[1] + k).coerceAtMost(1f)
+            out[2] = (out[2] + k).coerceAtMost(1f)
+            // The highlight is additive white light, so it lifts the alpha with the colour.
+            out[3] = max(out[3], max(out[0], max(out[1], out[2])))
         }
     }
 
@@ -1582,6 +1647,358 @@ object Filters {
                     out[i + 3] = s[3] * cov + out[i + 3] * (1f - cov)
                 }
             }
+        }
+        return out
+    }
+
+    // ---------------------------------------------------------------- M5 stylization and material
+
+    /** Premultiplied luminance of a patch; transparent pixels read as zero. */
+    private fun luminance(src: FloatArray): FloatArray {
+        val lum = FloatArray(src.size / 4)
+        for (i in lum.indices) {
+            val j = i * 4
+            lum[i] = 0.3f * src[j] + 0.59f * src[j + 1] + 0.11f * src[j + 2]
+        }
+        return lum
+    }
+
+    /** Sobel magnitude of the luminance, normalised to roughly 0..1.4 (4 is the kernel weight sum). */
+    private fun sobel(lum: FloatArray, w: Int, h: Int, x: Int, y: Int): Float {
+        val xm = (x - 1).coerceIn(0, w - 1)
+        val xp = (x + 1).coerceIn(0, w - 1)
+        val ym = (y - 1).coerceIn(0, h - 1)
+        val yp = (y + 1).coerceIn(0, h - 1)
+        val gx = lum[ym * w + xm] + 2f * lum[y * w + xm] + lum[yp * w + xm] -
+            lum[ym * w + xp] - 2f * lum[y * w + xp] - lum[yp * w + xp]
+        val gy = lum[ym * w + xm] + 2f * lum[ym * w + x] + lum[ym * w + xp] -
+            lum[yp * w + xm] - 2f * lum[yp * w + x] - lum[yp * w + xp]
+        return sqrt(gx * gx + gy * gy) * 0.25f
+    }
+
+    /** Bilinear sample of a single-channel buffer, clamped to its edges. */
+    private fun sampleGray(buf: FloatArray, w: Int, h: Int, x: Float, y: Float): Float {
+        if (w <= 0 || h <= 0) return 0f
+        val fx = x.coerceIn(0f, (w - 1).toFloat())
+        val fy = y.coerceIn(0f, (h - 1).toFloat())
+        val x0 = floor(fx).toInt()
+        val y0 = floor(fy).toInt()
+        val x1 = min(x0 + 1, w - 1)
+        val y1 = min(y0 + 1, h - 1)
+        val tx = fx - x0
+        val ty = fy - y0
+        val top = buf[y0 * w + x0] + (buf[y0 * w + x1] - buf[y0 * w + x0]) * tx
+        val bottom = buf[y1 * w + x0] + (buf[y1 * w + x1] - buf[y1 * w + x0]) * tx
+        return top + (bottom - top) * ty
+    }
+
+    /**
+     * Gloom: the shadows deeper than [GloomParams.threshold] are darkened and the darkening spreads by
+     * [GloomParams.radius] px, so shaded areas gain weight while the highlights stay untouched.
+     */
+    private fun gloom(src: FloatArray, w: Int, h: Int, p: GloomParams): FloatArray {
+        val threshold = p.threshold.coerceIn(0.02f, 1f)
+        val radius = ceil(p.radius.coerceIn(1f, 32f)).toInt()
+        val dark = FloatArray(src.size)
+        for (i in src.indices step 4) {
+            val a = src[i + 3]
+            if (a <= 0f) continue
+            val lum = (0.3f * src[i] + 0.59f * src[i + 1] + 0.11f * src[i + 2]) / a
+            val shade = ((threshold - lum) / threshold).coerceIn(0f, 1f)
+            dark[i + 3] = shade * a
+        }
+        val spread = localBlur(dark, w, h, radius)
+        val out = src.copyOf()
+        for (i in src.indices step 4) {
+            val a = src[i + 3]
+            if (a <= 0f) continue
+            val k = (spread[i + 3] / a).coerceIn(0f, 1f)
+            val f = 1f - 0.75f * k
+            out[i] = src[i] * f
+            out[i + 1] = src[i + 1] * f
+            out[i + 2] = src[i + 2] * f
+            // Gloom is a tone change: the layer alpha stays as it is.
+        }
+        return out
+    }
+
+    /** Pencil sketch: thresholded Sobel edges of [SketchParams.thickness] px drawn on paper. */
+    private fun sketch(src: FloatArray, w: Int, h: Int, p: SketchParams): FloatArray {
+        val thickness = p.thickness.coerceIn(1, 8)
+        val amount = p.amount.coerceIn(0f, 1f)
+        val sensitivity = p.sensitivity.coerceIn(0f, 1f)
+        val lum = luminance(src)
+        val line = FloatArray(w * h)
+        // A sensitive setting keeps weak gradients; the amount decides how much of them stay visible.
+        val threshold = 0.32f - 0.24f * sensitivity
+        for (y in 0 until h) for (x in 0 until w) {
+            val e = sobel(lum, w, h, x, y)
+            line[y * w + x] = ((e - threshold) / 0.3f).coerceIn(0f, 1f)
+        }
+        val ink = if (thickness > 1) maxFilter(line, w, h, thickness - 1) else line
+        val gain = 0.25f + 0.75f * amount
+        val out = FloatArray(src.size)
+        for (i in 0 until w * h) {
+            val j = i * 4
+            val a = src[j + 3]
+            if (a <= 0f) continue
+            val paper = 1f - (ink[i] * gain).coerceIn(0f, 1f)
+            out[j] = paper * a
+            out[j + 1] = paper * a
+            out[j + 2] = paper * a
+            out[j + 3] = a
+        }
+        return out
+    }
+
+    /** Trace: the edges of the source are darkened in place, negative-style, over the source colours. */
+    private fun traceEdges(src: FloatArray, w: Int, h: Int): FloatArray {
+        val lum = luminance(src)
+        val out = src.copyOf()
+        for (y in 0 until h) for (x in 0 until w) {
+            val e = sobel(lum, w, h, x, y)
+            val ink = ((e - 0.05f) / 0.45f).coerceIn(0f, 1f) * 0.9f
+            if (ink <= 0f) continue
+            val j = (y * w + x) * 4
+            val f = 1f - ink
+            out[j] = src[j] * f
+            out[j + 1] = src[j + 1] * f
+            out[j + 2] = src[j + 2] * f
+            // Edges darken the colour only; the shape and its alpha stay the same.
+        }
+        return out
+    }
+
+    /**
+     * Bevel: a blurred alpha height map lit from [BevelParams.angleDeg] gives a highlight on the lit slope
+     * and a shade on the opposite one, inside, outside or on both sides of the painted shape.
+     */
+    private fun bevel(src: FloatArray, w: Int, h: Int, p: BevelParams): FloatArray {
+        val width = p.size.coerceIn(1, 64)
+        val variant = p.variant.lowercase()
+        val inner = variant != "outer"
+        val outer = variant == "outer" || variant == "both"
+        val alpha = FloatArray(w * h) { src[it * 4 + 3] }
+        val grown = if (outer) maxFilter(alpha, w, h, width) else null
+        val eroded = if (inner) minFilter(alpha, w, h, width) else null
+        val soft = max(1, width / 2)
+        val heightIn = if (inner) boxBlurAlpha(alpha, w, h, soft) else null
+        val heightOut = if (outer) boxBlurAlpha(grown!!, w, h, soft) else null
+        val hi = ink(p.highlight)
+        val sh = ink(p.shadow)
+        val depth = p.depth.coerceIn(0f, 100f) / 100f
+        val rad = Math.toRadians(p.angleDeg.toDouble()).toFloat()
+        val lx = cos(rad)
+        val ly = sin(rad)
+        val out = src.copyOf()
+        for (y in 0 until h) for (x in 0 until w) {
+            val i = y * w + x
+            val a = alpha[i]
+            val covOut = if (grown != null) (grown[i] - a).coerceAtLeast(0f) else 0f
+            val covIn = if (eroded != null) (a - eroded[i]).coerceAtLeast(0f) else 0f
+            val cov = max(covIn, covOut)
+            if (cov <= 0.002f) continue
+            val height = if (a > 0.002f) heightIn else heightOut
+            if (height == null) continue
+            val xm = (x - 1).coerceAtLeast(0)
+            val xp = (x + 1).coerceAtMost(w - 1)
+            val ym = (y - 1).coerceAtLeast(0)
+            val yp = (y + 1).coerceAtMost(h - 1)
+            val gx = (height[y * w + xp] - height[y * w + xm]) * 0.5f
+            val gy = (height[yp * w + x] - height[ym * w + x]) * 0.5f
+            // The surface normal is (-gx, -gy, 1), so its dot with the light direction picks the side.
+            val lit = (-(gx * lx + gy * ly) * width * 2f).coerceIn(-1f, 1f) * depth
+            val k = (cov * abs(lit)).coerceIn(0f, 1f)
+            if (k <= 0.002f) continue
+            val colour = if (lit >= 0f) hi else sh
+            val j = i * 4
+            if (a <= cov) {
+                // Outside the shape: the bevel itself supplies the coverage.
+                out[j] = colour[0] * k
+                out[j + 1] = colour[1] * k
+                out[j + 2] = colour[2] * k
+                out[j + 3] = max(a, k)
+            } else {
+                out[j] = (src[j] * (1f - k) + colour[0] * k).coerceAtMost(a)
+                out[j + 1] = (src[j + 1] * (1f - k) + colour[1] * k).coerceAtMost(a)
+                out[j + 2] = (src[j + 2] * (1f - k) + colour[2] * k).coerceAtMost(a)
+            }
+        }
+        return out
+    }
+
+    /** Emboss: a grey relief of the directional luminance difference, keeping the source alpha. */
+    private fun emboss(src: FloatArray, w: Int, h: Int, p: EmbossParams): FloatArray {
+        val height = p.height.coerceIn(0f, 100f) / 100f
+        val d = 1 + (height * 4f).roundToInt()
+        val rad = Math.toRadians(p.angleDeg.toDouble()).toFloat()
+        val dx = cos(rad) * d
+        val dy = sin(rad) * d
+        val gain = 1.2f + 1.8f * height
+        val out = FloatArray(src.size)
+        val hi = FloatArray(4)
+        val lo = FloatArray(4)
+        for (y in 0 until h) for (x in 0 until w) {
+            val j = (y * w + x) * 4
+            val a = src[j + 3]
+            if (a <= 0f) continue
+            sample(src, w, h, x + dx, y + dy, hi)
+            sample(src, w, h, x - dx, y - dy, lo)
+            val diff = (0.3f * hi[0] + 0.59f * hi[1] + 0.11f * hi[2]) -
+                (0.3f * lo[0] + 0.59f * lo[1] + 0.11f * lo[2])
+            val v = (0.5f + diff * gain).coerceIn(0f, 1f)
+            out[j] = v * a
+            out[j + 1] = v * a
+            out[j + 2] = v * a
+            out[j + 3] = a
+        }
+        return out
+    }
+
+    /** Relief: the softened luminance slope along the light direction shades the source colours in place. */
+    private fun relief(src: FloatArray, w: Int, h: Int, p: ReliefParams): FloatArray {
+        val height = p.height.coerceIn(0f, 100f) / 100f
+        val soften = ceil(p.soften.coerceIn(0f, 16f)).toInt()
+        val lum = luminance(src)
+        val smoothed = if (soften > 0) boxBlurAlpha(lum, w, h, soften) else lum
+        val rad = Math.toRadians(p.angleDeg.toDouble()).toFloat()
+        val dx = cos(rad)
+        val dy = sin(rad)
+        val gain = 0.6f + 2.4f * height
+        val out = src.copyOf()
+        for (y in 0 until h) for (x in 0 until w) {
+            val j = (y * w + x) * 4
+            val a = src[j + 3]
+            if (a <= 0f) continue
+            val hi = sampleGray(smoothed, w, h, x + dx, y + dy)
+            val lo = sampleGray(smoothed, w, h, x - dx, y - dy)
+            val shade = (hi - lo) * gain
+            val f = (1f + shade).coerceAtLeast(0f)
+            out[j] = (src[j] * f).coerceAtMost(a)
+            out[j + 1] = (src[j + 1] * f).coerceAtMost(a)
+            out[j + 2] = (src[j + 2] * f).coerceAtMost(a)
+            // The relief lights the pigments, it does not change the painted shape.
+        }
+        return out
+    }
+
+    /** Satin: a soft sheen in the last [SatinParams.distance] px of the shape, folded across the angle. */
+    private fun satin(src: FloatArray, w: Int, h: Int, ox: Int, oy: Int, p: SatinParams): FloatArray {
+        val distance = p.distance.coerceIn(1, 100)
+        val size = p.size.coerceIn(1, 32)
+        val alpha = FloatArray(w * h) { src[it * 4 + 3] }
+        val eroded = minFilter(alpha, w, h, distance)
+        val band = FloatArray(w * h) { (alpha[it] - eroded[it]).coerceAtLeast(0f) }
+        val sheen = boxBlurAlpha(band, w, h, size)
+        val colour = ink(p.color)
+        val rad = Math.toRadians(p.angleDeg.toDouble()).toFloat()
+        val ux = cos(rad)
+        val uy = sin(rad)
+        val period = max(4f, distance.toFloat())
+        val out = src.copyOf()
+        for (y in 0 until h) for (x in 0 until w) {
+            val i = y * w + x
+            val a = alpha[i]
+            if (a <= 0f) continue
+            // The folds follow the canvas grid, so neighbouring tiles agree on their phase.
+            val wave = 0.5f + 0.5f * cos(((x + ox) * ux + (y + oy) * uy) * PI_F / period)
+            val k = (sheen[i] * wave * 0.9f).coerceIn(0f, 1f)
+            if (k <= 0.002f) continue
+            val j = i * 4
+            out[j] = (src[j] * (1f - k) + colour[0] * k).coerceAtMost(a)
+            out[j + 1] = (src[j + 1] * (1f - k) + colour[1] * k).coerceAtMost(a)
+            out[j + 2] = (src[j + 2] * (1f - k) + colour[2] * k).coerceAtMost(a)
+            // The sheen lives inside the shape, so alpha stays untouched.
+        }
+        return out
+    }
+
+    /** Wet edge: the last [WetEdgeParams.width] px inside the painted area darken like drying pigment. */
+    private fun wetEdge(src: FloatArray, w: Int, h: Int, p: WetEdgeParams): FloatArray {
+        val width = p.width.coerceIn(1, 64)
+        val alpha = FloatArray(w * h) { src[it * 4 + 3] }
+        val inner = minFilter(alpha, w, h, width)
+        val band = FloatArray(w * h) { (alpha[it] - inner[it]).coerceAtLeast(0f) }
+        val rim = boxBlurAlpha(band, w, h, max(1, width / 3))
+        val out = src.copyOf()
+        for (i in 0 until w * h) {
+            val a = alpha[i]
+            if (a <= 0f) continue
+            val k = (rim[i] / a).coerceIn(0f, 1f)
+            if (k <= 0.002f) continue
+            val f = 1f - 0.55f * k
+            val j = i * 4
+            out[j] = src[j] * f
+            out[j + 1] = src[j + 1] * f
+            out[j + 2] = src[j + 2] * f
+        }
+        return out
+    }
+
+    /**
+     * Extrude: every transparent pixel in front of the shape is filled with the solid side face, coloured by
+     * [ExtrudeParams.color] and darkened toward the far end. The march only looks [ExtrudeParams.length] px
+     * back along the light, so a padded patch is enough and no full-content snapshot is needed.
+     */
+    private fun extrude(src: FloatArray, w: Int, h: Int, p: ExtrudeParams): FloatArray {
+        val length = p.length.coerceIn(1, 100)
+        val shading = p.shading.coerceIn(0f, 1f)
+        val rad = Math.toRadians(p.angleDeg.toDouble()).toFloat()
+        val dx = cos(rad)
+        val dy = sin(rad)
+        val colour = ink(p.color)
+        val out = src.copyOf()
+        val s = FloatArray(4)
+        for (y in 0 until h) for (x in 0 until w) {
+            val j = (y * w + x) * 4
+            if (src[j + 3] > 0.002f) continue
+            var found = 0
+            for (n in 1..length) {
+                sample(src, w, h, x - dx * n, y - dy * n, s)
+                if (s[3] > 0.02f) {
+                    found = n
+                    break
+                }
+            }
+            if (found == 0) continue
+            val f = 1f - shading * (found / length.toFloat())
+            // The side face is solid; taking the rim coverage per march would stripe it along the light.
+            out[j] = colour[0] * f
+            out[j + 1] = colour[1] * f
+            out[j + 2] = colour[2] * f
+            out[j + 3] = 1f
+        }
+        return out
+    }
+
+    /**
+     * Clouds: fractal value noise between two colours. It is evaluated at canvas coordinates, so every tile
+     * computes the same clouds without reading a neighbour or a snapshot.
+     */
+    private fun clouds(src: FloatArray, w: Int, h: Int, ox: Int, oy: Int, p: CloudsParams): FloatArray {
+        val scale = p.scale.coerceIn(1f, 256f)
+        val detail = p.detail.coerceIn(1, 8)
+        val a = ink(p.colorA)
+        val b = ink(p.colorB)
+        val out = FloatArray(src.size)
+        for (y in 0 until h) for (x in 0 until w) {
+            var sum = 0f
+            var norm = 0f
+            var amp = 1f
+            var cell = scale
+            for (o in 0 until detail) {
+                sum += amp * valueNoise(x + ox, y + oy, cell, p.seed + o * 0x9E3779B9L)
+                norm += amp
+                amp *= 0.55f
+                cell *= 0.5f
+            }
+            val noise = (sum / norm).coerceIn(-1f, 1f) * 0.5f + 0.5f
+            val v = noise * noise * (3f - 2f * noise)
+            val j = (y * w + x) * 4
+            out[j] = b[0] + (a[0] - b[0]) * v
+            out[j + 1] = b[1] + (a[1] - b[1]) * v
+            out[j + 2] = b[2] + (a[2] - b[2]) * v
+            out[j + 3] = 1f
         }
         return out
     }
