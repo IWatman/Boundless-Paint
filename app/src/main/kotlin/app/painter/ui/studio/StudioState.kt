@@ -9,8 +9,9 @@ import app.painter.core.doc.AnimationPlayback
 import app.painter.core.doc.ColorTag
 import app.painter.core.doc.EditTarget
 import app.painter.core.fill.GradientType
-import app.painter.core.filter.FilterParams
+import app.painter.core.fill.PatternKind
 import app.painter.core.fill.Spread
+import app.painter.core.filter.FilterParams
 import app.painter.core.guide.OverlayRole
 import app.painter.core.history.MaskInit
 import app.painter.core.perspective.PerspectiveType
@@ -473,6 +474,9 @@ interface StudioActions {
 
     /** Fills everything outside the selection; without a selection this does nothing. */
     fun fillOutsideSelection() {}
+
+    /** Fills the active layer, or the selection, with a procedural pattern as one undo step. */
+    fun patternFill(kind: PatternKind, tileSize: Float, rotationDeg: Float, opacity: Float) {}
     fun setBrushSize(size: Float)
     fun setOpacity(opacity: Float)
     fun setFlow(flow: Float)

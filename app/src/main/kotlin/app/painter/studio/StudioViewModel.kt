@@ -35,11 +35,14 @@ import app.painter.core.doc.effectivelyLocked
 import app.painter.core.doc.newNodeId
 import app.painter.core.fill.BucketFill
 import app.painter.core.fill.FillCommand
-import app.painter.core.fill.LassoFill
 import app.painter.core.fill.Gradient
 import app.painter.core.fill.GradientSpec
 import app.painter.core.fill.GradientStop
 import app.painter.core.fill.GradientType
+import app.painter.core.fill.LassoFill
+import app.painter.core.fill.PatternFill
+import app.painter.core.fill.PatternKind
+import app.painter.core.fill.PatternSpec
 import app.painter.core.fill.RefSource
 import app.painter.core.fill.Region
 import app.painter.core.fill.RegionParams
@@ -2223,6 +2226,42 @@ class StudioViewModel(
 
     override fun fillOutsideSelection() {
         SelectionEdits.fillOutside(doc, _state.value.color)?.let { exec(it) }
+    }
+
+    /**
+     * Pattern fill (spec §09): the pattern mask is generated on a worker over a private copy of the active
+     * layer and committed as one history step. The selection clips it and alpha lock keeps the old alpha.
+     */
+    override fun patternFill(kind: PatternKind, tileSize: Float, rotationDeg: Float, opacity: Float) {
+        if (filterBusy) return
+        finishShape(commit = true)
+        finishTransform(apply = true)
+        finishGradient(apply = true)
+        commitPendingOpacity()
+        val layer = doc.activeRaster ?: return
+        if (layer.locked) return
+        val id = layer.id
+        val copy = RasterLayer(id, layer.name, layer.pixels.copy()).also {
+            it.alphaLock = layer.alphaLock
+            it.locked = layer.locked
+        }
+        val selection = doc.selection.coverageOrNull()?.copy()
+        val color = _state.value.color
+        val spec = PatternSpec(kind, tileSize, rotationDeg)
+        filterBusy = true
+        _state.update { it.copy(filterBusy = true) }
+        viewModelScope.launch {
+            val patch = runCatching {
+                withContext(Dispatchers.Default) { PatternFill.patch(copy, selection, spec, color, opacity) }
+            }.getOrNull()
+            filterBusy = false
+            _state.update { it.copy(filterBusy = false) }
+            if (patch == null || patch.after.isEmpty()) return@launch
+            // The layer may have been deleted while the pattern rendered; then the result is dropped.
+            if (doc.findNode(id) !is RasterLayer) return@launch
+            history.execute(doc, TilePatchCommand(patch, "Pattern fill"))
+            canvas?.invalidate(id, patch.after.keys)
+        }
     }
 
     override fun deselect() {

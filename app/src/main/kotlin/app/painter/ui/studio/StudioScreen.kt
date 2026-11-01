@@ -76,6 +76,7 @@ fun StudioScreen(
     var filtersOpen by remember { mutableStateOf(false) }
     var filterLayerOpen by remember { mutableStateOf(false) }
     var textOpen by remember { mutableStateOf(false) }
+    var patternOpen by remember { mutableStateOf(false) }
     var cropOpen by remember { mutableStateOf(false) }
     var resizeOpen by remember { mutableStateOf(false) }
     var straightenOpen by remember { mutableStateOf(false) }
@@ -106,6 +107,16 @@ fun StudioScreen(
             onConfirm = { text, size ->
                 textOpen = false
                 actions.stampText(text, size)
+            },
+        )
+    }
+    if (patternOpen) {
+        PatternDialog(
+            ink = state.color,
+            onDismiss = { patternOpen = false },
+            onApply = { kind, tileSize, rotation, opacity ->
+                patternOpen = false
+                actions.patternFill(kind, tileSize, rotation, opacity)
             },
         )
     }
@@ -181,6 +192,7 @@ fun StudioScreen(
                 onFilters = { filtersOpen = true },
                 onFilterLayer = { filterLayerOpen = true },
                 onText = { textOpen = true },
+                onPatternFill = { patternOpen = true },
                 onCrop = { cropOpen = true },
                 onResize = { resizeOpen = true },
                 onStraighten = { straightenOpen = true },
@@ -722,6 +734,7 @@ private fun StudioTopBar(
     onFilters: () -> Unit,
     onFilterLayer: () -> Unit,
     onText: () -> Unit,
+    onPatternFill: () -> Unit,
     onCrop: () -> Unit,
     onResize: () -> Unit,
     onStraighten: () -> Unit,
@@ -803,6 +816,13 @@ private fun StudioTopBar(
                             onClick = {
                                 toolsMenu = false
                                 actions.selectTool(ToolUi.GRADIENT)
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.pattern_fill)) },
+                            onClick = {
+                                toolsMenu = false
+                                onPatternFill()
                             },
                         )
                         DropdownMenuItem(

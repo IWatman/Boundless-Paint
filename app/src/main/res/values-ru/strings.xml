@@ -347,6 +347,16 @@
     <string name="tool_transform">Трансформация</string>
     <string name="tool_fill">Заливка</string>
     <string name="tool_gradient">Градиент</string>
+    <string name="pattern_fill">Заливка узором…</string>
+    <string name="pattern_fill_title">Заливка узором</string>
+    <string name="pattern_checks">Клетка</string>
+    <string name="pattern_dots">Точки</string>
+    <string name="pattern_stripes">Полосы</string>
+    <string name="pattern_brick">Кирпич</string>
+    <string name="pattern_herringbone">Ёлочка</string>
+    <string name="pattern_grain">Зерно</string>
+    <string name="pattern_tile_size">Размер плитки</string>
+    <string name="pattern_rotation">Поворот</string>
     <string name="tool_clone">Клон-кисть</string>
     <string name="clone_hint">Долгое нажатие — выбрать источник</string>
     <string name="gradient_linear">Линейный</string>

@@ -347,6 +347,16 @@
     <string name="tool_transform">Transform</string>
     <string name="tool_fill">Fill</string>
     <string name="tool_gradient">Gradient</string>
+    <string name="pattern_fill">Pattern fill…</string>
+    <string name="pattern_fill_title">Pattern fill</string>
+    <string name="pattern_checks">Checks</string>
+    <string name="pattern_dots">Dots</string>
+    <string name="pattern_stripes">Stripes</string>
+    <string name="pattern_brick">Brick</string>
+    <string name="pattern_herringbone">Herringbone</string>
+    <string name="pattern_grain">Grain</string>
+    <string name="pattern_tile_size">Tile size</string>
+    <string name="pattern_rotation">Rotation</string>
     <string name="tool_clone">Clone</string>
     <!-- Clone tool -->
     <string name="clone_hint">Long-press to set the source</string>

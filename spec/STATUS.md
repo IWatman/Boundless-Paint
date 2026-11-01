@@ -9,6 +9,16 @@
 - Release assets are named `boundless-paint-<version>.apk`; the updater reads the renamed
   `IWatman/Boundless-Paint` repository.
 
+## M5: in progress (2026-11-01)
+### Pattern fill (2026-11-01)
+- Core: `core/fill/PatternFill.kt` generates six seamless procedural patterns (checks, dots, diagonal stripes,
+  brick, herringbone, canvas grain) and fills a layer through the selection with alpha lock, reusing
+  `maskedPatch`/`TilePatch`. The pattern cell rotates with its repeat lattice, so rotated fills stay seamless.
+- UI: Editing Tools → Pattern fill… opens a compact dialog with a preview per pattern, tile size, rotation and
+  opacity; the fill runs on a worker and lands as one undo step.
+- Tests: `PatternFillTest` (9) — wrap at tile edges for every pattern, determinism, scale/rotation, rotated
+  lattice, selection clipping, alpha lock, locked layers, opacity and undo/redo.
+
 ## M3: done (2026-10-31)
 ### Filters (2026-10-31)
 - Core: `core/filter` — `FilterParams` (sealed, 9 kinds) and `Filters.apply`, which runs tile by tile with a patch
