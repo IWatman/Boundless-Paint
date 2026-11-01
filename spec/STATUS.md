@@ -43,12 +43,13 @@
   active layer through the selection with `maskedPatch`, so alpha lock and locked layers behave like the fill
   tools. Size is clamped to 32..2048 px and the stamp is placed at the selection centre, or the canvas centre
   when there is no selection.
-- UI: Editing Tools → Materials… shows eight live previews in the current colour and opacity, with size, rotation
-  and opacity sliders; Apply renders on a worker and lands as one undo step. No drag placement, stroke painting,
-  import or library persistence in this slice.
-- Tests: `MaterialStampTest` (14) — sampler and fill determinism for every material, clamped controls, visible
-  footprints and distinct textures, size, rotation, opacity, colour tinting, selection clipping and centring,
-  alpha lock, locked layers and undo/redo.
+- UI: Editing Tools → Materials… shows eight live previews in the current colour and opacity, with size, rotation,
+  opacity and spacing sliders; **Stamp** places one stamp at the selection/canvas centre, **Paint** switches to a
+  material tool that repeats stamps along a drag at stable spacing and commits the whole gesture as one undo step.
+  No drag placement of a single preview, import or library persistence yet.
+- Tests: `MaterialStampTest` (14) and `MaterialStrokeTest` (11) — determinism for every material, clamped controls,
+  visible footprints and distinct textures, size/rotation/opacity/spacing, selection clipping and centring,
+  alpha lock, locked layers, tap vs drag, one undo/redo per stroke and no stamps outside the canvas.
 - M5 now: **755 JVM tests** (648 core, 107 app).
 
 ### First filter batch (2026-11-01)
@@ -160,6 +161,23 @@
 - Not measured: 1080p60 throughput on the reference tablet. The export renders and encodes on the CPU and may
   take longer than real time; no performance number is claimed.
 - M5 now: **777 JVM tests** (670 core, 107 app); instrumented export tests green on the emulator.
+
+### Video mode S4 (2026-11-02)
+- Audio model: `AudioTimeline` normalizes clip placement, move/trim/delete, clip volume, track mute/volume and
+  master volume; `AudioMix` maps 48 kHz stereo samples, loops long clips, applies clip x track x master gain,
+  clamps and hashes the cache key from every audio and duration input.
+- Import/record: SAF import copies into the project `audio/` folder, probes the codec and rejects unsupported
+  files with the codec name; recording uses `RECORD_AUDIO` (permission/denial handled) and inserts at the playhead.
+- Mix/export/preview: `AudioMixer` decodes, resamples, mixes and encodes AAC-LC 48 kHz stereo into an M4A cache;
+  `VideoExporter` muxes `audio/mp4a-latm` with the video track, truncates beyond the video end and omits the track
+  when muted/absent. `AudioPreviewPlayer` plays the same cached mix from the playhead and follows transport/mute.
+- UI: audio lane with import/record/delete, clip/track/master volume, mute and move/trim; the export dialog has an
+  Include audio switch with disabled reasons and a size estimate.
+- Persistence: audio files are relative project files, survive `saveDelta` and are included in `.pnt` archives.
+- Tests: `AudioMixTest`, `AudioTimelineTest`, `VideoProjectIOTest` additions; instrumented `AudioMixerTest`,
+  `AudioPreviewPlayerTest`, `ProjectAudioTest` and `VideoExporterAudioTest` (8/8 green on the `painter_tab` AVD).
+- Not measured: audible A/V drift and 1080p60 throughput on hardware; recording itself was not instrumented.
+- M5 now: **810 JVM tests** (703 core, 107 app).
 
 ## M3: done (2026-10-31)
 ### Filters (2026-10-31)

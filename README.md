@@ -41,9 +41,9 @@ The app is completely free: no subscriptions, ads, watermarks or paid features.
 - Stylization and material filters: gloom, sketch edges, trace, bevel, emboss, relief, satin, wet edge, waterdrop, extrude and clouds (M5)
 - Artistic and generative filters: palette posterize, QR code, stained glass, dots, 1-bit stamp, glitch, retro game, chrome, sheer, impressionist, swirl painting and pop art (M5)
 - Final M5 filters: manga and manga background tones, anime background, pencil sketch, oil paint, blur frame, table frame and rain (M5)
-- Video timeline: converts frame animation to a 60 fps project with clip editing, playback and MP4 export at 720p/1080p (M5, slice 3)
+- Video timeline: converts frame animation to a 60 fps project with clip editing, playback, MP4 export at 720p/1080p and an audio track with import, record, volume and AAC muxing (M5, slices 3–4)
 - Pattern fill with twelve seamless procedural patterns (checks, dots, stripes, brick, herringbone, grain, zigzag, waves, triangles, stars, hexagons, wood grain), two colours, tile size, rotation, phase offset, contrast, invert and opacity (M5)
-- Materials: eight procedural stamps - balloon, fabric, wood, metal, stone, foliage, sparkle and paper - with size, rotation and opacity (M5)
+- Materials: eight procedural stamps - balloon, fabric, wood, metal, stone, foliage, sparkle and paper - with size, rotation and opacity, stamped or painted along a stroke (M5)
 - Liquify and text stamp tools, hardware-keyboard shortcuts (M3)
 - Canvas crop, canvas size with anchors, straighten; curvilinear 5-point perspective (M3)
 - Brush import/export (`.pbrush`, `.pbrushes`, MyPaint, GIMP, Krita, Procreate, PNG/JPG) (M3)
@@ -59,8 +59,8 @@ The app is completely free: no subscriptions, ads, watermarks or paid features.
 - In-app update from GitHub Releases
 
 **Next (M5)**
-- More pattern tools and the material library beyond the first stamp slice
-- Video mode slices 4–5: audio, 4K/capability work
+- More pattern tools and the material library beyond stamp/stroke painting
+- Video mode slice 5: 4K/capability and optional second track
 - Device performance and the real-tablet QA pass
 
 Full plan: [spec/ROADMAP.md](spec/ROADMAP.md), the finished M2 plan: [spec/PLAN-M2.md](spec/PLAN-M2.md), known issues: [spec/STATUS.md](spec/STATUS.md).
