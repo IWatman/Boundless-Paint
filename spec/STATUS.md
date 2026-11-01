@@ -10,6 +10,9 @@
   `IWatman/Boundless-Paint` repository.
 
 ## M5: in progress (2026-11-01)
+> QA closeout: [QA-M5.md](QA-M5.md) — feature evidence, the XP-Pen device matrix and the M5 exit criteria
+> (2026-11-02). Hardware rows, 4K, audio drift and throughput are still pending.
+
 ### Localization cleanup (2026-11-01)
 - The static UI strings in `app/src/main/kotlin` now come from resources: export toasts, HUD labels, default
   project and brush names, brush-import counts, the stroke out-of-memory error and the CMYK TIFF label. The
@@ -17,7 +20,9 @@
   plural.
 - `tools/check_localization.py` compares `values/strings.xml` with `values-ru/strings.xml`: missing and extra
   names, empty translations, format placeholders and Russian plural categories. It exits non-zero on a
-  mismatch. Current sets: **797 EN resources, 796 RU**; the only difference is the non-translatable `app_name`.
+  mismatch. At the 2026-11-01 cleanup: **797 EN resources, 796 RU**; the only difference was the non-translatable
+  `app_name`. Recheck on 2026-11-02: **891 EN (1 non-translatable), 890 RU**, 0 missing and 0 extra; see
+  [QA-M5.md](QA-M5.md).
 
 ### Pattern fill (2026-11-01)
 - Core: `core/fill/PatternFill.kt` generates twelve seamless procedural patterns (checks, dots, diagonal

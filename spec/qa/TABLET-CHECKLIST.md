@@ -72,7 +72,7 @@ Draw one stroke with pressure 0 → full → 0 and one quick scribble with each;
 | 6.4 | D: smudge (Blend), size 200 | ≤ 12 ms | | |
 | 6.5 | E: watercolour wet wash over a large area | Tick ≤ 8 ms; pen-up drying does not freeze the UI for long | | |
 | 6.6 | Wet edges preview (ink wash, large size) | No stutter while drawing | | |
-| 6.7 | 4K canvas, 10+ layers | Drawing and panning stay smooth | | |
+| 6.7 | 4K canvas at the supported layer limit (≤6 layers on a 512 MB heap; fewer on smaller heaps — see [PERFORMANCE-M5.md §4.8](../PERFORMANCE-M5.md)) | Drawing, panning and one filter stay usable; record the actual layer count and heap | | |
 
 ## 7. Persistence, files, updates
 | # | Check | Steps | Expected | Result | Notes |
@@ -88,3 +88,29 @@ Draw one stroke with pressure 0 → full → 0 and one quick scribble with each;
 |---|---|---|---|---|
 | 8.1 | New canvas | Layers panel collapsed, layer name localized | | |
 | 8.2 | Recent preview of a wide canvas | No checkerboard at the card edges | | |
+
+## 9. M5: video, audio, 4K, materials, patterns, localization
+
+Run these rows on **0.5.10 or later**. The JVM/emulator evidence and the exit criteria are in
+[../QA-M5.md](../QA-M5.md); this section is the real-hardware part. Keep the exported MP4/M4A files and record
+wall-clock times with a stopwatch. Inspect files with `MediaExtractor` or `ffprobe` (tracks, duration, frame
+count). A row with no 4K support is **skip with the exact reason**, not fail.
+
+| # | Check | Steps | Expected | Result | Notes |
+|---|---|---|---|---|---|
+| 9.1 | Video conversion and timeline | Open an animation → Options → Video mode…; compare duration and clips, then scrub | Duration is `round(steps × 60 / fps)` ticks; one clip per playback step; scrubbing changes only the playhead/frame, not pixels or history | | |
+| 9.2 | Preview and transport | Play, pause, stop, scrub; paint during playback; undo; close the panel | Canvas follows the playhead at 60 fps; painting/undo stop playback and edit the visible frame; closing restores the editing frame; no timelapse frame is added | | |
+| 9.3 | Clip editing | Add after selection, blank, delete, trim the right edge to zero, move, toggle snap | Track stays sorted, butt-jointed and non-overlapping; delete-to-zero removes the clip; a deleted frame leaves a blank clip (not a crash) | | |
+| 9.4 | 1080p60 export | 5 s timeline, 1080p, audio off; export and time it | Record wall-clock time; one `video/avc` track, 300 frames, duration 5 s ±1 frame; temp file deleted; plays in Android and a desktop player | | |
+| 9.5 | 1440p / 4K chips | Inspect the resolution chips and their disabled reasons; force a low-heap refusal if possible | Chips match the encoder; 4K30 is explicit; memory guard names the estimate and heap; no silent fps or size change | | |
+| 9.6 | 4K export | If offered, export 5 s at 4K30 or 4K60; otherwise record the disabled reason | Record wall-clock time; completes without OOM; layer count stays within the derived limit (≤6 at 4K on a 512 MB heap); skip with reason if unsupported | | |
+| 9.7 | Audio import | Import MP3 and M4A; try WAV if the device decoder supports it; place at the playhead; try an unsupported codec | A supported clip appears, plays and is trimmed/moved; an unsupported codec is rejected with its name; audio file is copied into the project | | |
+| 9.8 | Audio record | Allow `RECORD_AUDIO`, record 10 s of voice; repeat with permission denied | Allowed: clip inserted at the playhead and audible. Denied: clear message, no crash, project unchanged | | |
+| 9.9 | Audio mux and mute | Export with audio, then with mute; inspect tracks and durations | Two tracks (`video/avc`, `audio/mp4a-latm`) with audio; one track when muted; audio duration ≤ video; trailing audio truncated | | |
+| 9.10 | A/V sync | Record/import a clap or voice, export 60 s, watch and listen on the tablet and a desktop player | First clap aligned within one frame; no audible drift over the clip | | |
+| 9.11 | Playback compatibility | Play 720p, 1080p, 1440p and 4K files in the Android player and a desktop player | Correct duration, orientation and audio; no decode errors or black frames | | |
+| 9.12 | Big-project stability | 1080p, 10 layers if the heap allows, 60 s timeline with audio; then a 4K canvas at its layer limit; scrub, play, filter, export repeatedly | No ANR, OOM or force-stop; Dalvik heap stable; temp files cleaned; record the actual layer count and heap | | |
+| 9.13 | Pattern fill visual | Fill with each of the twelve patterns; rotate, offset and change colours on a large canvas | No seams at tile edges or after rotation; controls visibly change the result; selection/alpha lock respected | | |
+| 9.14 | Materials visual | Stamp and paint each of the eight materials; change size, rotation, opacity and spacing; restart | All eight are distinct and visible; spacing is stable along a drag; favourites, recents and settings survive restart | | |
+| 9.15 | Localization spot check | Switch the device to Russian; open Filter, Pattern fill, Materials, Video, Audio and Export dialogs; trigger brush-import counts | No English leftovers, clipped labels or broken plurals; numbers and units read correctly | | |
+| 9.16 | Stylus/palm regression | On the M5 build repeat 1.1 (full pressure), 2.1 (primary button), 2.4 (eraser end) and 4.1 (palm rest) | Pressure, buttons, eraser and palm rejection behave as in the M0–M1 baseline | | |
