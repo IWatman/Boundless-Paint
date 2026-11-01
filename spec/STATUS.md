@@ -50,6 +50,9 @@
 - Tests: `MaterialStampTest` (14) and `MaterialStrokeTest` (11) — determinism for every material, clamped controls,
   visible footprints and distinct textures, size/rotation/opacity/spacing, selection clipping and centring,
   alpha lock, locked layers, tap vs drag, one undo/redo per stroke and no stamps outside the canvas.
+- Persistence: `MaterialPrefsCodec` + `ToolPrefs` keep the last kind, size, rotation, opacity, spacing and
+  Paint/Stamp mode, plus a favourites set and the last four used materials, across app restarts; values are
+  clamped on restore. `MaterialPrefsCodecTest` (13) covers parsing, favourites, recents and clamping.
 - M5 now: **755 JVM tests** (648 core, 107 app).
 
 ### First filter batch (2026-11-01)
@@ -203,7 +206,7 @@
   it, so no 4K hardware result is claimed.
 - Not measured: 4K/60 and 4K/30 throughput on the reference tablet; the instrumented 4K smoke is a capability
   check, not a benchmark. The 1080p60 timing remains unmeasured.
-- M5 now: **818 JVM tests** (710 core, 108 app).
+- M5 now: **831 JVM tests** (723 core, 108 app).
 
 ## M3: done (2026-10-31)
 ### Filters (2026-10-31)
