@@ -722,6 +722,13 @@
     <string name="video_clip_missing_frame">Frame missing</string>
     <string name="video_track_visible">Track visible</string>
     <string name="video_track_hidden">Track hidden</string>
+    <string name="video_track_drawing_number">Drawing %1$d</string>
+    <string name="video_tracks">Drawing tracks</string>
+    <string name="video_track_add">Add drawing track</string>
+    <string name="video_track_delete">Delete drawing track</string>
+    <string name="video_track_delete_title">Delete drawing track?</string>
+    <string name="video_track_delete_message">%1$s is removed from the timeline. Its clips are deleted; the frame layers stay in the layer list, hidden.</string>
+    <string name="animation_edit_track">Edit track</string>
     <string name="video_not_available_hint">Start an animation first (Options → Animation).</string>
     <string name="video_convert_title">Video mode</string>
     <string name="video_convert_message">Frame count: %1$d. The animation becomes a 60 fps timeline; each frame keeps its duration. Video mode is one-way in the UI; the frame layers are kept.</string>

@@ -30,9 +30,11 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.VolumeOff
 import androidx.compose.material.icons.automirrored.outlined.VolumeUp
 import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.FileDownload
+import androidx.compose.material.icons.outlined.Layers
 import androidx.compose.material.icons.outlined.LibraryMusic
 import androidx.compose.material.icons.outlined.Loop
 import androidx.compose.material.icons.outlined.Mic
@@ -42,6 +44,10 @@ import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material.icons.outlined.Stop
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.VisibilityOff
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
@@ -74,6 +80,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.painter.R
 import app.painter.core.doc.VIDEO_TICKS_PER_SECOND
+import app.painter.core.doc.VideoEdit
 import app.painter.ui.components.IconToggle
 import app.painter.ui.components.PainterIconButton
 import app.painter.ui.components.PanelSurface
@@ -113,6 +120,7 @@ internal fun VideoPanel(
                     for (track in video.tracks) {
                         VideoTrackHeader(
                             track = track,
+                            selected = track.id == video.selectedTrackId,
                             actions = actions,
                             modifier = Modifier.fillMaxWidth().height(VIDEO_LANE_HEIGHT),
                         )
@@ -241,16 +249,14 @@ private fun VideoTransport(video: VideoUi, actions: StudioActions) {
     }
 }
 
-/** Add, blank, delete and snap controls above the tracks. */
+/** Add, blank, delete and snap controls above the tracks, plus the drawing-track menu. */
 @Composable
 private fun VideoEditBar(video: VideoUi, actions: StudioActions) {
-    val selected = video.tracks.firstNotNullOfOrNull { track ->
-        track.clips.firstOrNull { it.id == video.selectedClipId }
-    }
-    val firstFrameId = video.tracks.firstNotNullOfOrNull { track ->
-        track.clips.firstNotNullOfOrNull { if (it.missing) null else it.frameId }
-    }
-    val addFrameId = selected?.takeUnless { it.missing }?.frameId ?: firstFrameId
+    val track = video.tracks.firstOrNull { it.id == video.selectedTrackId } ?: video.tracks.firstOrNull()
+    val selected = track?.clips?.firstOrNull { it.id == video.selectedClipId }
+    val addFrameId = selected?.takeUnless { it.missing }?.frameId
+        ?: track?.clips?.firstNotNullOfOrNull { if (it.missing) null else it.frameId }
+    var deleteTrack by remember { mutableStateOf<VideoTrackUi?>(null) }
     Row(
         Modifier.fillMaxWidth().padding(top = 2.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -262,7 +268,7 @@ private fun VideoEditBar(video: VideoUi, actions: StudioActions) {
             modifier = Modifier.size(36.dp),
             enabled = addFrameId != null,
         )
-        TextButton(onClick = { actions.addVideoClip(null) }) {
+        TextButton(onClick = { actions.addVideoClip(null) }, enabled = track != null) {
             Text(stringResource(R.string.video_add_blank))
         }
         PainterIconButton(
@@ -272,12 +278,88 @@ private fun VideoEditBar(video: VideoUi, actions: StudioActions) {
             modifier = Modifier.size(36.dp),
             enabled = selected != null,
         )
+        VideoTrackMenu(video, actions, onDeleteTrack = { deleteTrack = it })
         Spacer(Modifier.weight(1f))
         ToggleChip(
             label = stringResource(R.string.video_snap),
             checked = video.snapEnabled,
             onToggle = { actions.setVideoSnap(!video.snapEnabled) },
         )
+    }
+    deleteTrack?.let { target ->
+        AlertDialog(
+            onDismissRequest = { deleteTrack = null },
+            title = { Text(stringResource(R.string.video_track_delete_title)) },
+            text = { Text(stringResource(R.string.video_track_delete_message, target.name)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        actions.deleteVideoTrack(target.id)
+                        deleteTrack = null
+                    },
+                ) {
+                    Text(stringResource(R.string.delete))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { deleteTrack = null }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            },
+        )
+    }
+}
+
+/** Track list with selection, "add track" and a guarded "delete track"; one button keeps the edit bar short. */
+@Composable
+private fun VideoTrackMenu(
+    video: VideoUi,
+    actions: StudioActions,
+    onDeleteTrack: (VideoTrackUi) -> Unit,
+) {
+    var open by remember { mutableStateOf(false) }
+    val selected = video.tracks.firstOrNull { it.id == video.selectedTrackId }
+    Box {
+        PainterIconButton(
+            Icons.Outlined.Layers,
+            stringResource(R.string.video_tracks),
+            onClick = { open = true },
+            modifier = Modifier.size(36.dp),
+        )
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            for (track in video.tracks) {
+                DropdownMenuItem(
+                    text = { Text(track.name) },
+                    leadingIcon = {
+                        Icon(
+                            if (track.id == video.selectedTrackId) Icons.Outlined.Check else Icons.Outlined.Layers,
+                            contentDescription = null,
+                        )
+                    },
+                    onClick = {
+                        open = false
+                        actions.selectVideoTrack(track.id)
+                    },
+                )
+            }
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.video_track_add)) },
+                enabled = video.canAddTrack && video.tracks.size < VideoEdit.MAX_TRACKS,
+                onClick = {
+                    open = false
+                    actions.addVideoTrack()
+                },
+            )
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.video_track_delete)) },
+                enabled = video.tracks.size > 1 && selected != null,
+                onClick = {
+                    open = false
+                    selected?.let(onDeleteTrack)
+                },
+            )
+        }
     }
 }
 
@@ -745,15 +827,26 @@ private fun VideoRuler(
     }
 }
 
-/** Eye, name and duration of one track; the eye is a real visibility toggle. */
+/** Eye, name and duration of one track; tapping the header selects the track for edits. */
 @Composable
 private fun VideoTrackHeader(
     track: VideoTrackUi,
+    selected: Boolean,
     actions: StudioActions,
     modifier: Modifier = Modifier,
 ) {
     Row(
-        modifier.padding(horizontal = 4.dp),
+        modifier
+            .background(
+                if (selected) {
+                    MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+                } else {
+                    Color.Transparent
+                },
+                RoundedCornerShape(4.dp),
+            )
+            .clickable { actions.selectVideoTrack(track.id) }
+            .padding(horizontal = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(
@@ -802,12 +895,22 @@ private fun VideoTrackLane(
 ) {
     val shape = RoundedCornerShape(4.dp)
     val density = LocalDensity.current
+    val selected = track.id == video.selectedTrackId
     BoxWithConstraints(
         modifier
             .padding(vertical = 2.dp)
             .clip(shape)
-            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f))
-            .clickable { actions.selectVideoClip(null) },
+            .background(
+                if (selected) {
+                    MaterialTheme.colorScheme.primary.copy(alpha = 0.08f)
+                } else {
+                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f)
+                },
+            )
+            .clickable {
+                actions.selectVideoTrack(track.id)
+                actions.selectVideoClip(null)
+            },
     ) {
         val total = maxOf(1L, video.durationTicks)
         val totalFloat = total.toFloat()

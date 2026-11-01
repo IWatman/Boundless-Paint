@@ -11,6 +11,9 @@ import app.painter.core.doc.RasterLayer
 import app.painter.core.doc.VectorLayer
 import app.painter.core.doc.Video
 import app.painter.core.doc.VideoAudio
+import app.painter.core.doc.VideoClip
+import app.painter.core.doc.VideoEdit
+import app.painter.core.doc.VideoTrack
 import app.painter.core.io.ProjectIO
 import app.painter.core.io.SaveTracker
 import app.painter.core.vector.VectorPoint
@@ -111,6 +114,41 @@ class SnapshotTest {
         }
         val plain = Document(16, 16, name = "Plain")
         assertNull(snapshotDocument(plain).video)
+    }
+
+    @Test
+    fun snapshotsKeepBothDrawingTracksAndTheirFrameGroups() {
+        val doc = videoDocument()
+        val group = GroupNode("frames-b", "Animation 2")
+        doc.root.add(group)
+        val first = doc.newRasterLayer("B1").also { group.add(it) }
+        val second = doc.newRasterLayer("B2").also { group.add(it) }
+        doc.video = VideoEdit.addTrack(
+            doc.video!!,
+            VideoTrack(
+                id = "vtrack-b",
+                name = "Drawing 2",
+                groupId = group.id,
+                visible = false,
+                clips = listOf(
+                    VideoClip("b-1", first.id, 0, 30),
+                    VideoClip("b-2", second.id, 30, 30),
+                ),
+            ),
+        )
+        doc.activeId = first.id
+
+        for (pixels in listOf(true, false)) {
+            val snapshot = snapshotDocument(doc, pixels = pixels)
+            assertEquals(doc.video, snapshot.video)
+            assertEquals(2, snapshot.video!!.tracks.size)
+            assertEquals("vtrack-b", snapshot.video!!.tracks[1].id)
+            assertFalse(snapshot.video!!.tracks[1].visible)
+            assertEquals(listOf("b-1", "b-2"), snapshot.video!!.tracks[1].clips.map { it.id })
+            assertTrue(snapshot.findNode(group.id) is GroupNode)
+            assertEquals(first.id, snapshot.activeId)
+            if (pixels) assertTrue(snapshot.findNode(second.id) is RasterLayer)
+        }
     }
 
     @Test

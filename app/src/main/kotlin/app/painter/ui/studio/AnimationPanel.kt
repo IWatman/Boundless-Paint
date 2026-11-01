@@ -26,6 +26,7 @@ import androidx.compose.material.icons.outlined.ArrowDropDown
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Layers
 import androidx.compose.material.icons.outlined.Movie
 import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material.icons.outlined.Remove
@@ -122,6 +123,10 @@ internal fun AnimationPanel(
                 return@Column
             }
 
+            if (state.video != null && state.video.tracks.size > 1) {
+                AnimationTrackPicker(state.video, actions)
+            }
+
             Row(
                 Modifier.fillMaxWidth().padding(top = 2.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -207,6 +212,61 @@ internal fun AnimationPanel(
                         min = 0,
                         max = AnimationMeta.MAX_ONION_FRAMES,
                         onChange = { actions.setAnimationOnionFrames(animation.onionBefore, it) },
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** Selects which drawing track's frames the panel edits; switching restores that track's current frame. */
+@Composable
+private fun AnimationTrackPicker(video: VideoUi, actions: StudioActions) {
+    val selected = video.tracks.firstOrNull { it.id == video.selectedTrackId }
+        ?: video.tracks.firstOrNull()
+        ?: return
+    var open by remember { mutableStateOf(false) }
+    Row(
+        Modifier.fillMaxWidth().padding(top = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            stringResource(R.string.animation_edit_track),
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(end = 4.dp),
+        )
+        Box {
+            Row(
+                Modifier
+                    .clip(MaterialTheme.shapes.small)
+                    .clickable { open = true }
+                    .padding(horizontal = 6.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(Icons.Outlined.Layers, contentDescription = null, modifier = Modifier.size(16.dp))
+                Text(
+                    selected.name,
+                    style = MaterialTheme.typography.labelMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(horizontal = 4.dp),
+                )
+                Icon(Icons.Outlined.ArrowDropDown, contentDescription = null)
+            }
+            DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+                for (track in video.tracks) {
+                    DropdownMenuItem(
+                        text = { Text(track.name) },
+                        trailingIcon = {
+                            if (track.id == selected.id) {
+                                Icon(Icons.Outlined.Check, contentDescription = null)
+                            }
+                        },
+                        onClick = {
+                            open = false
+                            actions.selectVideoTrack(track.id)
+                        },
                     )
                 }
             }

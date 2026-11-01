@@ -1,16 +1,22 @@
 package app.painter.core.doc
 
 /**
- * Pure, copy-on-write timeline edits of the single drawing track (spec/VIDEO-MODE.md §5.4).
+ * Pure, copy-on-write timeline edits of the drawing tracks (spec/VIDEO-MODE.md §5.4).
  *
  * Every operation returns a new [VideoMeta] and never mutates [meta]. Clips of a track stay sorted by
  * [VideoClip.startTick] and non-overlapping; operations ripple the following clips by the change so a
  * butt-jointed track stays butt-jointed. Existing gaps are preserved but no operation creates a new one in a
  * butt-jointed track. [Video.normalize] remains the final authority and is expected to be called by the studio.
+ *
+ * Track add/delete only edits the timeline metadata. The frame layers and their group live in the document and
+ * are never touched here: deleting a track removes its clips and the reference, not the artwork (spec §5.4).
  */
 object VideoEdit {
     /** Duration used when the timeline has no selected clip to copy the length from: one second. */
     const val DEFAULT_CLIP_TICKS = VIDEO_TICKS_PER_SECOND.toLong()
+
+    /** Drawing tracks the M5 UI offers. The model itself (and [Video.normalize]) accepts any number. */
+    const val MAX_TRACKS = 2
 
     /**
      * Inserts a clip after [afterClipId], or at [playheadTick] when nothing is selected.
@@ -137,6 +143,32 @@ object VideoEdit {
     /** Shows or hides one drawing track. */
     fun setTrackVisible(meta: VideoMeta, trackId: String, visible: Boolean): VideoMeta =
         updateTrack(meta, trackId) { it.copy(visible = visible) }
+
+    /**
+     * Appends [track] when the timeline has fewer than [MAX_TRACKS] drawing tracks. Returns [meta] unchanged
+     * when the limit is reached, or when the id or the frame group already belongs to another track: every
+     * track owns its own group (spec §4.3).
+     */
+    fun addTrack(meta: VideoMeta, track: VideoTrack): VideoMeta {
+        if (meta.tracks.size >= MAX_TRACKS) return meta
+        if (meta.tracks.any { it.id == track.id || it.groupId == track.groupId }) return meta
+        return meta.copy(tracks = meta.tracks + track)
+    }
+
+    /**
+     * Removes [trackId] with its clips. The frame group and its layers stay in the document, so deleting a
+     * track is non-destructive; the caller decides whether to keep or delete the group. Deleting the last
+     * track is allowed here and leaves an empty block; the studio never offers it and [Video.normalize] drops
+     * an empty block.
+     */
+    fun deleteTrack(meta: VideoMeta, trackId: String): VideoMeta {
+        if (meta.tracks.none { it.id == trackId }) return meta
+        return meta.copy(tracks = meta.tracks.filterNot { it.id == trackId })
+    }
+
+    /** Track owning [clipId], or null when the clip is unknown. A clip belongs to at most one track. */
+    fun trackOfClip(meta: VideoMeta, clipId: String): VideoTrack? =
+        meta.tracks.firstOrNull { track -> track.clips.any { it.id == clipId } }
 
     /** All clip edges of [track], useful as snap targets; [excludeId] omits the clip being dragged. */
     fun edges(track: VideoTrack, excludeId: String? = null): List<Long> {
