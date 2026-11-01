@@ -6,6 +6,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.heightIn
@@ -13,8 +14,13 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.outlined.StarBorder
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -31,11 +37,13 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import app.painter.R
 import app.painter.core.color.Rgba
 import app.painter.core.material.MaterialKind
+import app.painter.core.material.MaterialMode
 import app.painter.core.material.MaterialSampler
 import app.painter.core.material.MaterialSpec
 import app.painter.ui.components.ParamSlider
@@ -57,28 +65,41 @@ private fun MaterialKind.titleRes(): Int = when (this) {
 
 /**
  * Material library dialog (spec §21): eight built-in procedural materials shown as live previews in the
- * current colour and opacity, with the stamp size, rotation, opacity and stroke spacing. "Paint" selects the
- * material tool: a drag paints along the gesture and a tap stamps once at the pointer. "Stamp" keeps the
- * one-shot path and places a single stamp at the canvas or selection centre.
+ * current colour and opacity, with the stamp size, rotation, opacity and stroke spacing. Starred materials
+ * can be filtered and the last four kinds are offered in a recent row. The Paint/Stamp mode is remembered
+ * with the other settings: "Paint" drags the material along the gesture and taps once at the pointer, "Stamp"
+ * places a single stamp at the canvas or selection centre.
  */
 @Composable
 fun MaterialDialog(
     ink: Rgba,
     initial: MaterialSpec? = null,
+    initialMode: MaterialMode = MaterialMode.PAINT,
+    favourites: Set<MaterialKind> = emptySet(),
+    recent: List<MaterialKind> = emptyList(),
     onDismiss: () -> Unit,
+    onFavourite: (MaterialKind) -> Unit,
     onStamp: (MaterialSpec) -> Unit,
     onPaint: (MaterialSpec) -> Unit,
 ) {
     var kind by remember(initial) { mutableStateOf(initial?.kind ?: MaterialKind.BALLOON) }
-    var size by remember(initial) { mutableStateOf(initial?.size ?: 512f) }
-    var rotation by remember(initial) { mutableStateOf(initial?.rotationDeg ?: 0f) }
-    var opacity by remember(initial) { mutableStateOf(initial?.opacity ?: 1f) }
+    var size by remember(initial) { mutableStateOf(initial?.size ?: MaterialSpec.DEFAULT_SIZE) }
+    var rotation by remember(initial) { mutableStateOf(initial?.rotationDeg ?: MaterialSpec.DEFAULT_ROTATION) }
+    var opacity by remember(initial) { mutableStateOf(initial?.opacity ?: MaterialSpec.DEFAULT_OPACITY) }
     var spacing by remember(initial) { mutableStateOf(initial?.spacing ?: MaterialSpec.DEFAULT_SPACING) }
+    var mode by remember(initial, initialMode) { mutableStateOf(initialMode) }
+    // A filter without favourites would leave an empty grid, so it falls back to the full library.
+    var onlyFavourites by remember(favourites.isEmpty()) { mutableStateOf(false) }
     val previews = remember(ink, rotation, opacity) {
         MaterialKind.entries.associateWith { previewBitmap(it, ink, rotation, opacity) }
     }
     val percent = { v: Float -> "${(v * 100).roundToInt()}%" }
     val spec = { MaterialSpec(kind, size, rotation, opacity, spacing) }
+    val visible = if (onlyFavourites && favourites.isNotEmpty()) {
+        MaterialKind.entries.filter { it in favourites }
+    } else {
+        MaterialKind.entries
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -90,10 +111,16 @@ fun MaterialDialog(
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                for (row in MaterialKind.entries.chunked(3)) {
+                if (recent.isNotEmpty()) {
+                    Text(
+                        stringResource(R.string.material_recent),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 4.dp),
+                    )
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        for (option in row) {
-                            MaterialTile(
+                        for (option in recent) {
+                            MaterialRecentTile(
                                 label = stringResource(option.titleRes()),
                                 preview = previews.getValue(option),
                                 selected = kind == option,
@@ -102,8 +129,43 @@ fun MaterialDialog(
                         }
                     }
                 }
+                if (favourites.isNotEmpty()) {
+                    ToggleChip(
+                        label = stringResource(R.string.material_favourites),
+                        checked = onlyFavourites,
+                        onToggle = { onlyFavourites = !onlyFavourites },
+                    )
+                }
+                for (row in visible.chunked(3)) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        for (option in row) {
+                            MaterialTile(
+                                label = stringResource(option.titleRes()),
+                                preview = previews.getValue(option),
+                                selected = kind == option,
+                                favourite = option in favourites,
+                                onFavourite = { onFavourite(option) },
+                                onPick = { kind = option },
+                            )
+                        }
+                    }
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    ToggleChip(
+                        label = stringResource(R.string.material_paint),
+                        checked = mode == MaterialMode.PAINT,
+                        onToggle = { mode = MaterialMode.PAINT },
+                    )
+                    ToggleChip(
+                        label = stringResource(R.string.material_stamp),
+                        checked = mode == MaterialMode.STAMP,
+                        onToggle = { mode = MaterialMode.STAMP },
+                    )
+                }
                 Text(
-                    stringResource(R.string.material_hint),
+                    stringResource(
+                        if (mode == MaterialMode.PAINT) R.string.material_hint else R.string.material_stamp_hint,
+                    ),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
@@ -145,25 +207,24 @@ fun MaterialDialog(
             }
         },
         confirmButton = {
-            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                TextButton(onClick = { onPaint(spec()) }) {
-                    Text(stringResource(R.string.material_paint))
-                }
-                TextButton(onClick = { onStamp(spec()) }) {
-                    Text(stringResource(R.string.material_stamp))
-                }
-            }
+            TextButton(
+                onClick = {
+                    if (mode == MaterialMode.PAINT) onPaint(spec()) else onStamp(spec())
+                },
+            ) { Text(stringResource(R.string.apply)) }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
     )
 }
 
-/** One material chooser card: a live stamp preview above its name. */
+/** One material chooser card: a live stamp preview above its name, with a star in the corner. */
 @Composable
 private fun MaterialTile(
     label: String,
     preview: ImageBitmap,
     selected: Boolean,
+    favourite: Boolean,
+    onFavourite: () -> Unit,
     onPick: () -> Unit,
 ) {
     Column(
@@ -181,12 +242,77 @@ private fun MaterialTile(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
+        Box {
+            Image(
+                bitmap = preview,
+                contentDescription = label,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .size(56.dp)
+                    .clip(MaterialTheme.shapes.small),
+            )
+            Box(
+                Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(2.dp)
+                    .size(24.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.82f))
+                    .clickable(role = Role.Button, onClick = onFavourite),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    if (favourite) Icons.Filled.Star else Icons.Outlined.StarBorder,
+                    contentDescription = stringResource(
+                        if (favourite) R.string.material_favourite_remove else R.string.material_favourite_add,
+                    ),
+                    tint = if (favourite) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    },
+                    modifier = Modifier.size(16.dp),
+                )
+            }
+        }
+        Text(
+            label,
+            style = MaterialTheme.typography.labelSmall,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
+/** Compact shortcut of a recently used material in the row above the grid. */
+@Composable
+private fun MaterialRecentTile(
+    label: String,
+    preview: ImageBitmap,
+    selected: Boolean,
+    onPick: () -> Unit,
+) {
+    Column(
+        Modifier
+            .width(52.dp)
+            .clip(MaterialTheme.shapes.small)
+            .background(if (selected) AccentFill else Color.Transparent)
+            .border(
+                1.dp,
+                if (selected) MaterialTheme.colorScheme.primary else PainterTheme.colors.panelBorder,
+                MaterialTheme.shapes.small,
+            )
+            .clickable(onClick = onPick)
+            .padding(2.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
         Image(
             bitmap = preview,
             contentDescription = label,
             contentScale = ContentScale.Crop,
             modifier = Modifier
-                .size(56.dp)
+                .size(36.dp)
                 .clip(MaterialTheme.shapes.small),
         )
         Text(

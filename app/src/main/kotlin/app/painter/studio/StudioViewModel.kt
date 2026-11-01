@@ -103,6 +103,9 @@ import app.painter.core.io.SaveTracker
 import app.painter.core.io.TiffCmyk
 import app.painter.core.io.import.BrushImport
 import app.painter.core.liquify.LiquifySession
+import app.painter.core.material.MaterialKind
+import app.painter.core.material.MaterialMode
+import app.painter.core.material.MaterialPrefsCodec
 import app.painter.core.material.MaterialSpec
 import app.painter.core.material.MaterialStamp
 import app.painter.core.material.MaterialStroke
@@ -1258,14 +1261,23 @@ class StudioViewModel(
         if (tool != ToolUi.SHAPE) finishShape(commit = true)
         if (tool != ToolUi.LIQUIFY) finishLiquify(commit = true)
         if (tool != ToolUi.MATERIAL) materialCancel()
+        // Choosing the tool from the menu after a restart brings back the material of the last session.
+        if (tool == ToolUi.MATERIAL) restoreMaterialPrefs()
         _state.update { it.copy(tool = tool, selectionDraft = null, selectionDraftPath = null) }
         if (tool == ToolUi.TRANSFORM) startTransform()
     }
 
     /** Picks the material and enters its tool; the next drag paints and a tap stamps once. */
     override fun selectMaterial(spec: MaterialSpec) {
-        _state.update { it.copy(materialSpec = spec) }
+        rememberMaterial(spec, MaterialMode.PAINT)
         selectTool(ToolUi.MATERIAL)
+    }
+
+    /** Star or unstar [kind] in the material dialog; the set outlives the session. */
+    override fun toggleMaterialFavourite(kind: MaterialKind) {
+        val favourites = MaterialPrefsCodec.toggleFavourite(_state.value.materialFavourites, kind)
+        _state.update { it.copy(materialFavourites = favourites) }
+        prefs?.materialFavourites = favourites
     }
 
     private fun clampX(x: Float) = x.coerceIn(0f, doc.width.toFloat())
@@ -2414,6 +2426,7 @@ class StudioViewModel(
      */
     override fun stampMaterial(spec: MaterialSpec) {
         if (filterBusy) return
+        rememberMaterial(spec, MaterialMode.STAMP)
         finishShape(commit = true)
         finishTransform(apply = true)
         finishGradient(apply = true)
@@ -5253,11 +5266,50 @@ class StudioViewModel(
         viewModelScope.launch(Dispatchers.IO) { ioLock.withLock { settings.save(stored) } }
     }
 
-    /** Restores the color and the palette at start-up; the per-mode brushes follow in [loadBrushes]. */
+    /** Restores the color, the palette and the material settings; the per-mode brushes follow in [loadBrushes]. */
     private fun restoreToolPrefs() {
         val p = prefs ?: return
-        val saved = p.palette
-        _state.update { it.copy(color = p.color, palette = saved.ifEmpty { it.palette }) }
+        val savedPalette = p.palette
+        _state.update {
+            it.copy(
+                color = p.color,
+                palette = savedPalette.ifEmpty { it.palette },
+                materialSpec = p.materialSpec,
+                materialMode = p.materialMode,
+                materialFavourites = p.materialFavourites,
+                materialRecent = p.materialRecent,
+            )
+        }
+    }
+
+    /** Re-reads the material settings, so the dialog opens on the values the last session confirmed. */
+    private fun restoreMaterialPrefs() {
+        val p = prefs ?: return
+        _state.update {
+            it.copy(
+                materialSpec = p.materialSpec,
+                materialMode = p.materialMode,
+                materialFavourites = p.materialFavourites,
+                materialRecent = p.materialRecent,
+            )
+        }
+    }
+
+    /**
+     * Stores the confirmed material settings and moves its kind to the front of the recent list. Values are
+     * clamped first, so a spec assembled by an out-of-range caller cannot leave the tools their limits.
+     */
+    private fun rememberMaterial(spec: MaterialSpec, mode: MaterialMode) {
+        val clamped = MaterialPrefsCodec.clamp(spec)
+        val recent = MaterialPrefsCodec.addRecent(_state.value.materialRecent, clamped.kind)
+        _state.update {
+            it.copy(materialSpec = clamped, materialMode = mode, materialRecent = recent)
+        }
+        prefs?.let {
+            it.materialSpec = clamped
+            it.materialMode = mode
+            it.materialRecent = recent
+        }
     }
 
     /**

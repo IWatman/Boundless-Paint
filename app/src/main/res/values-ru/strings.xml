@@ -426,8 +426,13 @@
     <string name="materials">Материалы…</string>
     <string name="materials_title">Материалы</string>
     <string name="material_hint">Проведите, чтобы рисовать материалом; коснитесь, чтобы поставить штамп.</string>
+    <string name="material_stamp_hint">Ставит один штамп в центре холста или выделения.</string>
     <string name="material_paint">Рисовать</string>
     <string name="material_stamp">Штамп</string>
+    <string name="material_favourites">Избранное</string>
+    <string name="material_recent">Недавние</string>
+    <string name="material_favourite_add">Добавить в избранное</string>
+    <string name="material_favourite_remove">Убрать из избранного</string>
     <string name="tool_material">Материал</string>
     <string name="material_balloon">Шар</string>
     <string name="material_fabric">Ткань</string>

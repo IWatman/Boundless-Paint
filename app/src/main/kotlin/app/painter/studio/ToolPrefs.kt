@@ -3,6 +3,10 @@ package app.painter.studio
 import android.content.Context
 import android.content.SharedPreferences
 import app.painter.core.color.Rgba
+import app.painter.core.material.MaterialKind
+import app.painter.core.material.MaterialMode
+import app.painter.core.material.MaterialPrefsCodec
+import app.painter.core.material.MaterialSpec
 import app.painter.ui.studio.BrushModeUi
 import java.util.Locale
 
@@ -72,6 +76,70 @@ class ToolPrefs(context: Context) {
             prefs.edit().putBoolean(KEY_TIMELAPSE, value).apply()
         }
 
+    /**
+     * Material of the material tool as last confirmed in its dialog: null until the user picks one, so a
+     * fresh install keeps the dialog defaults and the tool stays out of the menu. Values are clamped on read.
+     */
+    var materialSpec: MaterialSpec?
+        get() = MaterialPrefsCodec.decodeSpec(
+            kind = prefs.getString(KEY_MATERIAL_KIND, null),
+            size = prefs.floatOrNull(KEY_MATERIAL_SIZE),
+            rotationDeg = prefs.floatOrNull(KEY_MATERIAL_ROTATION),
+            opacity = prefs.floatOrNull(KEY_MATERIAL_OPACITY),
+            spacing = prefs.floatOrNull(KEY_MATERIAL_SPACING),
+        )
+        set(value) {
+            val edit = prefs.edit()
+            if (value == null) {
+                edit.remove(KEY_MATERIAL_KIND)
+                    .remove(KEY_MATERIAL_SIZE)
+                    .remove(KEY_MATERIAL_ROTATION)
+                    .remove(KEY_MATERIAL_OPACITY)
+                    .remove(KEY_MATERIAL_SPACING)
+            } else {
+                val spec = MaterialPrefsCodec.clamp(value)
+                edit.putString(KEY_MATERIAL_KIND, MaterialPrefsCodec.encodeKind(spec.kind))
+                    .putFloat(KEY_MATERIAL_SIZE, spec.size)
+                    .putFloat(KEY_MATERIAL_ROTATION, spec.rotationDeg)
+                    .putFloat(KEY_MATERIAL_OPACITY, spec.opacity)
+                    .putFloat(KEY_MATERIAL_SPACING, spec.spacing)
+            }
+            edit.apply()
+        }
+
+    /** Paint or stamp mode last confirmed in the material dialog. */
+    var materialMode: MaterialMode
+        get() = MaterialPrefsCodec.decodeMode(prefs.getString(KEY_MATERIAL_MODE, null))
+            ?: MaterialMode.PAINT
+        set(value) {
+            prefs.edit().putString(KEY_MATERIAL_MODE, MaterialPrefsCodec.encodeMode(value)).apply()
+        }
+
+    /** Materials starred in the material dialog. */
+    var materialFavourites: Set<MaterialKind>
+        get() = MaterialPrefsCodec.decodeKinds(
+            prefs.getString(KEY_MATERIAL_FAVOURITES, null),
+            MaterialKind.entries.size,
+        ).toSet()
+        set(value) {
+            val ordered = MaterialKind.entries.filter { it in value }
+            prefs.edit()
+                .putString(KEY_MATERIAL_FAVOURITES, MaterialPrefsCodec.encodeKinds(ordered))
+                .apply()
+        }
+
+    /** Last used materials, newest first, at most [MaterialPrefsCodec.MAX_RECENT]. */
+    var materialRecent: List<MaterialKind>
+        get() = MaterialPrefsCodec.decodeKinds(
+            prefs.getString(KEY_MATERIAL_RECENT, null),
+            MaterialPrefsCodec.MAX_RECENT,
+        )
+        set(value) {
+            prefs.edit()
+                .putString(KEY_MATERIAL_RECENT, MaterialPrefsCodec.encodeKinds(value.take(MaterialPrefsCodec.MAX_RECENT)))
+                .apply()
+        }
+
     private fun key(mode: BrushModeUi, field: String) = "brush.${mode.name.lowercase(Locale.ROOT)}.$field"
 
     private fun SharedPreferences.floatOrNull(key: String): Float? =
@@ -87,6 +155,14 @@ class ToolPrefs(context: Context) {
         const val KEY_LIGHT_BG = "view.light_background"
         const val KEY_DOUBLE_TAP_FIT = "view.double_tap_fit"
         const val KEY_TIMELAPSE = "timelapse.enabled"
+        const val KEY_MATERIAL_KIND = "material.kind"
+        const val KEY_MATERIAL_SIZE = "material.size"
+        const val KEY_MATERIAL_ROTATION = "material.rotation"
+        const val KEY_MATERIAL_OPACITY = "material.opacity"
+        const val KEY_MATERIAL_SPACING = "material.spacing"
+        const val KEY_MATERIAL_MODE = "material.mode"
+        const val KEY_MATERIAL_FAVOURITES = "material.favourites"
+        const val KEY_MATERIAL_RECENT = "material.recent"
     }
 }
 

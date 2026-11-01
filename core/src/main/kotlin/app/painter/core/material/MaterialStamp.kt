@@ -57,14 +57,19 @@ enum class MaterialKind {
  */
 data class MaterialSpec(
     val kind: MaterialKind,
-    val size: Float = 512f,
-    val rotationDeg: Float = 0f,
-    val opacity: Float = 1f,
+    val size: Float = DEFAULT_SIZE,
+    val rotationDeg: Float = DEFAULT_ROTATION,
+    val opacity: Float = DEFAULT_OPACITY,
     val spacing: Float = DEFAULT_SPACING,
 ) {
     companion object {
+        /** Default footprint of a fresh stamp, and the fallback of a malformed stored size. */
+        const val DEFAULT_SIZE = 512f
         const val MIN_SIZE = 32f
         const val MAX_SIZE = 2048f
+
+        const val DEFAULT_ROTATION = 0f
+        const val DEFAULT_OPACITY = 1f
 
         /** Default distance between two stamps of a stroke, as a fraction of the stamp size. */
         const val DEFAULT_SPACING = 0.25f

@@ -14,6 +14,8 @@ import app.painter.core.fill.Spread
 import app.painter.core.filter.FilterParams
 import app.painter.core.guide.OverlayRole
 import app.painter.core.history.MaskInit
+import app.painter.core.material.MaterialKind
+import app.painter.core.material.MaterialMode
 import app.painter.core.material.MaterialSpec
 import app.painter.core.perspective.PerspectiveType
 import app.painter.core.shape.ShapeTool
@@ -356,6 +358,12 @@ data class StudioUiState(
     val tool: ToolUi = ToolUi.BRUSH,
     /** Material the [ToolUi.MATERIAL] tool paints, null until a material is chosen from the dialog. */
     val materialSpec: MaterialSpec? = null,
+    /** Paint or stamp mode last confirmed in the material dialog. */
+    val materialMode: MaterialMode = MaterialMode.PAINT,
+    /** Materials starred in the material dialog. */
+    val materialFavourites: Set<MaterialKind> = emptySet(),
+    /** Last materials confirmed in the dialog, newest first. */
+    val materialRecent: List<MaterialKind> = emptyList(),
     /** Live selection rectangle while dragging a rectangle selection (document pixels), null when idle. */
     val selectionDraft: RectUi? = null,
     /** Live outline of an ellipse (bounding box) or lasso (trail) selection draft, null when idle. */
@@ -601,6 +609,10 @@ interface StudioActions {
      * the gesture and a tap stamps it once at the pointer, each as one undo step.
      */
     fun selectMaterial(spec: MaterialSpec) {}
+
+    /** Adds [kind] to the material favourites, or removes it when it is already starred. */
+    fun toggleMaterialFavourite(kind: MaterialKind) {}
+
     fun setBrushSize(size: Float)
     fun setOpacity(opacity: Float)
     fun setFlow(flow: Float)

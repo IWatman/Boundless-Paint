@@ -130,7 +130,11 @@ fun StudioScreen(
         MaterialDialog(
             ink = state.color,
             initial = state.materialSpec,
+            initialMode = state.materialMode,
+            favourites = state.materialFavourites,
+            recent = state.materialRecent,
             onDismiss = { materialsOpen = false },
+            onFavourite = actions::toggleMaterialFavourite,
             onStamp = { spec ->
                 materialsOpen = false
                 actions.stampMaterial(spec)
