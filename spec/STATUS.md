@@ -159,7 +159,7 @@
   unchanged, 5 s/300 frames with a one-frame duration tolerance, and cancel deleting the temp file.
 - Not measured: 1080p60 throughput on the reference tablet. The export renders and encodes on the CPU and may
   take longer than real time; no performance number is claimed.
-- M5 now: **763 JVM tests** (656 core, 107 app); instrumented export tests green on the emulator.
+- M5 now: **777 JVM tests** (670 core, 107 app); instrumented export tests green on the emulator.
 
 ## M3: done (2026-10-31)
 ### Filters (2026-10-31)
