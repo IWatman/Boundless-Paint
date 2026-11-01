@@ -16,7 +16,7 @@ The app is completely free: no subscriptions, ads, watermarks or paid features.
   <img src="docs/screenshots/update.png" width="49%" alt="In-app update">
 </p>
 
-> **Status:** M2 is complete (October 2026) and M3 has started. The app has the full brush engine (texture, paint mixing, watercolor, particles, harmony, 3D, filter and clone brushes), a catalog of 91 presets in 17 categories, the brush editor, stylus settings with calibration, layers with masks and adjustment layers, selections, transform, fills, gradients, symmetry, guides, perspective grids and shapes.
+> **Status:** M4 is complete (November 2026), M5 (polish) is next. The app has the full brush engine (texture, paint mixing, watercolor, particles, harmony, 3D, filter and clone brushes), a catalog of 91 presets in 17 categories, the brush editor, stylus settings with calibration, layers with masks and adjustment layers, selections, transform, fills, gradients, symmetry, guides, perspective grids, shapes, filters, PSD in/out, timelapse, vector layers, frame animation and Google Drive backup.
 
 ## Features
 
@@ -44,21 +44,14 @@ The app is completely free: no subscriptions, ads, watermarks or paid features.
 - Rounded rectangle, arrow and speech-balloon shape tools (M4)
 - Fill/erase selection and fill outside selection, direct lasso fill/erase (M4)
 - Screentone, manuscript guides, radial/array rulers, CMYK TIFF, editable vector layers and frame animation with onion skin (M4)
-- Google Drive backup: in-app Google sign-in, one archive per project in `Boundless Paint/Projects`, PNG saves in `Boundless Paint/Drawings`, restore from Home or Settings (M4)
+- Google Drive backup: in-app Google sign-in, one archive per project in `Boundless Paint/Projects`, PNG saves in `Boundless Paint/Drawings`, optional auto-sync after every save, restore from Home or Settings; setup in [docs/google-drive.md](docs/google-drive.md) (M4)
 - Unfinished brush-editor controls are disabled and marked with a small construction icon (M3.7)
 - Autosave 2 seconds after a change, PNG/JPG export with quality and transparency options
 - In-app update from GitHub Releases
-- Google Drive backup and restore using the `drive.file` scope; setup details in [docs/google-drive.md](docs/google-drive.md)
 
-**Ready in the core, UI in progress**
-- Transform modes beyond the basic one: distort, perspective, warp
-- Path guide, hatching, shape detection
-- Filters (M3)
-
-**In progress (M3)**
-- More filters (dilate/erode, zoom/spin blur, radial and speed lines, halftone, layer styles), filter layers, liquify, text
-- PSD import/export, timelapse, canvas crop/resize/straighten
-- The full catalog of about 236 presets and brush import/export ([spec/tools/brush-import.md](spec/tools/brush-import.md))
+**Next (M5)**
+- Remaining filters, pattern tools and materials
+- Video mode, localization and performance work
 
 Full plan: [spec/ROADMAP.md](spec/ROADMAP.md), the finished M2 plan: [spec/PLAN-M2.md](spec/PLAN-M2.md), known issues: [spec/STATUS.md](spec/STATUS.md).
 

@@ -79,6 +79,26 @@ class DriveApiTest {
         assertEquals(DriveFolders("root-1", "projects-1", "drawings-1"), folders)
         assertEquals(3, transport.requests.size)
         assertTrue(transport.requests.all { it.method == "GET" })
+        assertTrue(transport.requests.all { it.url.contains("orderBy=createdTime") })
+    }
+
+    @Test
+    fun ensureFoldersFindsTheSameTreeAgainAfterReconnect() {
+        val transport = FakeTransport().apply {
+            repeat(2) {
+                responses += DriveResponse(200, """{"files":[{"id":"root-1","name":"Boundless Paint"}]}""")
+                responses += DriveResponse(200, """{"files":[{"id":"projects-1","name":"Projects"}]}""")
+                responses += DriveResponse(200, """{"files":[{"id":"drawings-1","name":"Drawings"}]}""")
+            }
+        }
+        val api = DriveApi(transport)
+
+        val first = api.ensureFolders("token")
+        val second = api.ensureFolders("token")
+
+        assertEquals(first, second)
+        assertEquals(6, transport.requests.size)
+        assertTrue(transport.requests.none { it.method == "POST" })
     }
 
     @Test

@@ -638,6 +638,8 @@
     <string name="drive_no_projects">Нет проектов для сохранения.</string>
     <string name="drive_save_drawing">Сохранить рисунок в PNG</string>
     <string name="drive_drawing_saved">Рисунок сохранён на Google Drive: %1$s</string>
+    <string name="drive_auto_sync">Синхронизировать после сохранения</string>
+    <string name="drive_auto_sync_hint">Сохранять открытый проект в Google Drive при каждом сохранении.</string>
     <string name="drive_folders_hint">Проекты сохраняются в Boundless Paint/Projects, рисунки — в Boundless Paint/Drawings.</string>
     <plurals name="drive_backed_up_all">
         <item quantity="one">Сохранён %1$d проект.</item>

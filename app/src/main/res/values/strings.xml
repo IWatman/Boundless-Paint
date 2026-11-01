@@ -639,6 +639,8 @@
     <string name="drive_no_projects">There are no projects to back up.</string>
     <string name="drive_save_drawing">Save drawing as PNG</string>
     <string name="drive_drawing_saved">Drawing saved to Google Drive: %1$s</string>
+    <string name="drive_auto_sync">Sync after saving</string>
+    <string name="drive_auto_sync_hint">Back up the open project whenever you save it.</string>
     <string name="drive_folders_hint">Projects go to Boundless Paint/Projects, drawings to Boundless Paint/Drawings.</string>
     <plurals name="drive_backed_up_all">
         <item quantity="one">Backed up %1$d project.</item>

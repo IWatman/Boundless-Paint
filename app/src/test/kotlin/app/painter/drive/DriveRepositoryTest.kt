@@ -35,6 +35,7 @@ class DriveRepositoryTest {
         override var account: DriveAccount? = null
         override var folders: DriveFolders? = null
         override var lastSyncMs: Long = 0L
+        override var autoSync: Boolean = true
         override fun clear() {
             account = null
             folders = null
@@ -156,6 +157,21 @@ class DriveRepositoryTest {
         assertEquals(account, preferences.account)
         assertEquals(gateway.folders, preferences.folders)
         assertEquals(1, gateway.ensured)
+    }
+
+    @Test
+    fun reconnectReusesTheFolderTreeThatAlreadyExists() {
+        val preferences = FakePreferences()
+        val gateway = FakeGateway()
+        val repository = repository(FakeTokens("token"), preferences, gateway)
+
+        runBlocking { repository.connect() }
+        val firstTree = preferences.folders
+        runBlocking { repository.disconnect() }
+        runBlocking { repository.connect() }
+
+        assertEquals(firstTree, preferences.folders)
+        assertEquals(2, gateway.ensured)
     }
 
     @Test

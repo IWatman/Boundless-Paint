@@ -28,6 +28,8 @@ data class DriveUiState(
     val backups: List<DriveBackupUi> = emptyList(),
     val loaded: Boolean = false,
     val lastSyncMs: Long = 0L,
+    /** True when a project save also backs the project up; persisted separately from the account. */
+    val autoSync: Boolean = true,
     /** False on a cold start before any project is opened. */
     val canSyncCurrent: Boolean = false,
 )

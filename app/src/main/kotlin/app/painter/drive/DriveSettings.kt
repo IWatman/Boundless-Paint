@@ -50,8 +50,22 @@ class DriveSettings(context: Context) : DrivePreferences {
             prefs.edit().putLong(KEY_LAST_SYNC, value).apply()
         }
 
+    override var autoSync: Boolean
+        get() = prefs.getBoolean(KEY_AUTO_SYNC, true)
+        set(value) {
+            prefs.edit().putBoolean(KEY_AUTO_SYNC, value).apply()
+        }
+
+    /** Clears the link but keeps the auto-sync preference, which is not tied to one account. */
     override fun clear() {
-        prefs.edit().clear().apply()
+        prefs.edit()
+            .remove(KEY_EMAIL)
+            .remove(KEY_NAME)
+            .remove(KEY_ROOT_FOLDER)
+            .remove(KEY_PROJECTS_FOLDER)
+            .remove(KEY_DRAWINGS_FOLDER)
+            .remove(KEY_LAST_SYNC)
+            .apply()
     }
 
     private companion object {
@@ -62,5 +76,6 @@ class DriveSettings(context: Context) : DrivePreferences {
         const val KEY_PROJECTS_FOLDER = "folders.projects"
         const val KEY_DRAWINGS_FOLDER = "folders.drawings"
         const val KEY_LAST_SYNC = "last_sync"
+        const val KEY_AUTO_SYNC = "auto_sync"
     }
 }

@@ -768,6 +768,9 @@ interface StudioActions {
     /** Saves the flattened canvas as a PNG in `Boundless Paint/Drawings`. */
     fun driveSaveDrawing() {}
 
+    /** Enables or disables backing the project up after every explicit save. */
+    fun driveSetAutoSync(on: Boolean) {}
+
     /** Reloads the remote backup list. */
     fun driveRefreshBackups() {}
 

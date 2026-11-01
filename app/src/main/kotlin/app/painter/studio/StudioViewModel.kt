@@ -239,9 +239,15 @@ class StudioViewModel(
     private val driveSettings = DriveSettings(app)
     private val drive = driveTokens?.let { DriveRepository(it, driveSettings, app.cacheDir) }
     private val _driveState = MutableStateFlow(
-        DriveUiState(account = driveSettings.account?.toUi(), lastSyncMs = driveSettings.lastSyncMs),
+        DriveUiState(
+            account = driveSettings.account?.toUi(),
+            lastSyncMs = driveSettings.lastSyncMs,
+            autoSync = driveSettings.autoSync,
+        ),
     )
     val driveState: StateFlow<DriveUiState> = _driveState
+    /** Upload started by [scheduleDriveAutoSync]; one at a time so a quick Save does not race itself. */
+    private var autoSyncJob: Job? = null
 
     /** Pressure calibration of every input device seen so far, keyed by `InputDevice.descriptor`. */
     private val calibrations = HashMap<String, InputCalibration>()
@@ -3140,12 +3146,17 @@ class StudioViewModel(
     }
 
     override fun save() {
+        commitDocumentEdits()
+        save(refreshList = true, autoSync = true)
+    }
+
+    /** Commits the interactive tools so their pixels are part of the document before it is written. */
+    private fun commitDocumentEdits() {
         if (_state.value.animation?.playing == true) stopAnimationPlayback()
         finishShape(commit = true)
         finishTransform(apply = true)
         finishGradient(apply = true)
         finishLiquify(commit = true)
-        save(refreshList = true)
     }
 
     /**
@@ -3156,15 +3167,21 @@ class StudioViewModel(
      * and the writer reuses the stored files of every untouched grid (debt 10). [withThumbnail] = false keeps
      * the previous `thumb.png` during autosave; a project without one still gets it rendered.
      */
-    private fun save(refreshList: Boolean, withThumbnail: Boolean = true) {
+    private fun save(refreshList: Boolean, withThumbnail: Boolean = true, autoSync: Boolean = false) {
         autosaveJob?.cancel()
         autosaveJob = null
         commitPendingOpacity()
         // A frame group removed by undo leaves the metadata behind until redo; a save commits that removal.
         if (doc.animation != null) Animation.normalize(doc)
         if (!dirtySinceSave) {
-            // Autosave may already have written the latest state; Home still needs fresh thumbnails.
-            if (withThumbnail && thumbStale) updateThumbnailOnly(refreshList) else if (refreshList) refreshProjects()
+            // Autosave may already have written the latest state; Home still needs fresh thumbnails. An explicit
+            // save still backs the project up: the usual case is that autosave emptied the dirty flag first.
+            if (withThumbnail && thumbStale) {
+                updateThumbnailOnly(refreshList, autoSync)
+            } else {
+                if (refreshList) refreshProjects()
+                if (autoSync) scheduleDriveAutoSync()
+            }
             return
         }
         dirtySinceSave = false
@@ -3201,6 +3218,7 @@ class StudioViewModel(
                 docOnDisk = true
                 thumbStale = !thumbNeeded
                 if (refreshList) refreshProjects()
+                if (autoSync) scheduleDriveAutoSync()
             } else {
                 dirtySinceSave = true
             }
@@ -3208,7 +3226,7 @@ class StudioViewModel(
     }
 
     /** Refreshes `thumb.png` of a project whose tiles are already saved (an autosave kept the old preview). */
-    private fun updateThumbnailOnly(refreshList: Boolean) {
+    private fun updateThumbnailOnly(refreshList: Boolean, autoSync: Boolean = false) {
         val dir = store.dirFor(doc.id)
         val previous = saveJob
         saveJob = viewModelScope.launch {
@@ -3220,6 +3238,7 @@ class StudioViewModel(
             }.isSuccess
             if (ok) thumbStale = false
             if (refreshList) refreshProjects()
+            if (ok && autoSync) scheduleDriveAutoSync()
         }
     }
 
@@ -3520,6 +3539,8 @@ class StudioViewModel(
 
     override fun driveDisconnect() = driveOperation {
         val repo = drive ?: throw DriveException(0, uiString(R.string.drive_unavailable))
+        autoSyncJob?.cancel()
+        autoSyncJob = null
         repo.disconnect()
         _driveState.update {
             it.copy(account = null, backups = emptyList(), loaded = false, lastSyncMs = 0L)
@@ -3527,9 +3548,15 @@ class StudioViewModel(
         uiString(R.string.drive_signed_out)
     }
 
+    override fun driveSetAutoSync(on: Boolean) {
+        driveSettings.autoSync = on
+        _driveState.update { it.copy(autoSync = on) }
+    }
+
     override fun driveSyncCurrent() = driveOperation {
         val repo = drive ?: throw DriveException(0, uiString(R.string.drive_unavailable))
-        save()
+        commitDocumentEdits()
+        save(refreshList = true)
         saveJob?.join()
         val backup = repo.backup(doc.id, doc.name, store.dirFor(doc.id))
         _driveState.update { it.copy(lastSyncMs = repo.lastSyncMs) }
@@ -3539,7 +3566,8 @@ class StudioViewModel(
 
     override fun driveSyncAll() = driveOperation {
         val repo = drive ?: throw DriveException(0, uiString(R.string.drive_unavailable))
-        save()
+        commitDocumentEdits()
+        save(refreshList = true)
         saveJob?.join()
         val projects = withContext(Dispatchers.IO) { ioLock.withLock { store.list() } }
         if (projects.isEmpty()) return@driveOperation uiString(R.string.drive_no_projects)
@@ -3625,6 +3653,36 @@ class StudioViewModel(
                     .sortedByDescending { row -> row.modifiedMs },
                 loaded = true,
             )
+        }
+    }
+
+    /**
+     * Backs the open project up after an explicit save when an account is linked and auto-sync is on.
+     * It is called at the end of a successful write, so the upload reads the archive of the saved state;
+     * autosave and project switches do not trigger it, which keeps Drive traffic to deliberate saves.
+     */
+    private fun scheduleDriveAutoSync() {
+        val repo = drive ?: return
+        if (!driveSettings.autoSync || _driveState.value.account == null) return
+        if (autoSyncJob?.isActive == true) return
+        val id = doc.id
+        val name = doc.name
+        autoSyncJob = viewModelScope.launch {
+            // A manual backup already in flight wins; its result updates the same remote file.
+            if (_driveState.value.busy) return@launch
+            _driveState.update { it.copy(busy = true, error = false) }
+            runCatching { repo.backup(id, name, store.dirFor(id)) }
+                .onSuccess { backup ->
+                    _driveState.update {
+                        it.copy(busy = false, lastSyncMs = repo.lastSyncMs, error = false)
+                    }
+                    upsertDriveBackup(backup.toUi())
+                }
+                .onFailure { error ->
+                    _driveState.update {
+                        it.copy(busy = false, message = driveErrorText(error), error = true)
+                    }
+                }
         }
     }
 

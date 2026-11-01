@@ -12,6 +12,11 @@ The tree is created by the app on the first connection. Do not create it manuall
 scope the app can only see files it created itself, so a hand-made folder would be ignored and a second
 folder with the same name would appear.
 
+Connecting again (after **Disconnect Google Drive**, an app reinstall, or a token that was revoked) does not
+create a second tree: the app searches Drive for `Boundless Paint`, `Projects` and `Drawings` by name and parent,
+and only creates the folders that are missing. If several folders share a name, the oldest one is used so the
+backups stay in the original tree.
+
 ## What is stored
 
 - **Projects/**: one `.pnt` archive per project. The file is named `boundless-paint-<projectId>.pnt`, and
@@ -24,6 +29,17 @@ folder with the same name would appear.
 Restoring a project downloads the archive and imports it as a gallery project. If the gallery has no project
 with the archived id, the id is kept so later syncs update the same remote backup; if that project already
 exists, a fresh id is generated and the restore becomes a copy.
+
+## Auto-sync
+
+**Sync after saving** (enabled by default once an account is linked, and switchable in the Drive sheet) backs the
+open project up after an explicit save: the Save command in the studio, or leaving the studio for Home. The
+two-second autosave does not upload, so a long stroke session produces one remote write per deliberate save, not
+one every two seconds. The upload runs in the background after the project file is written; the Drive sheet's
+**Last sync** line and its backup list update when it finishes.
+
+Auto-sync never uploads a project while another Drive operation is running. If the upload fails, the Drive sheet
+shows the error on its next open, and a manual **Back up current project** retries.
 
 ## Authorization
 
@@ -65,8 +81,9 @@ JSON file is compiled into the app.
 ## Requirements and limits
 
 - Google Play services must be installed and up to date; the app targets Android 10+.
-- Sync is manual: **Back up current project**, **Back up all projects** and **Save drawing as PNG**. There is
-  one project backup per project, not a version history.
+- Sync is manual by default except for **Sync after saving**: **Back up current project**, **Back up all
+  projects** and **Save drawing as PNG** stay explicit, while auto-sync covers the open project after a save.
+  There is one project backup per project, not a version history.
 - Large projects are streamed from a temporary archive in the app cache; the archive is removed after upload.
 - If the user deletes the `Boundless Paint` tree, the next operation recreates it. Existing remote backups are
   not restored by that operation.

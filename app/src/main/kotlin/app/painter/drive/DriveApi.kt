@@ -211,7 +211,10 @@ class DriveApi(private val transport: DriveTransport = HttpUrlConnectionTranspor
             if (parentId != null) append(" and '").append(escapeQuery(parentId)).append("' in parents")
         }
         val fields = encode("files(id,name)")
-        val url = "$DRIVE_API/files?spaces=drive&pageSize=10&fields=$fields&q=${encode(query)}"
+        // Oldest first: if an account somehow holds more than one folder with this name, every reconnect keeps
+        // using the original tree instead of picking a random duplicate and splitting the backups.
+        val url = "$DRIVE_API/files?spaces=drive&pageSize=10&orderBy=createdTime" +
+            "&fields=$fields&q=${encode(query)}"
         val response = transport.execute(DriveRequest("GET", url, authHeaders(accessToken)))
         val json = jsonObject(response, "find the Boundless Paint folder")
         val existing = json["files"]?.jsonArray?.firstOrNull()?.jsonObject?.string("id")

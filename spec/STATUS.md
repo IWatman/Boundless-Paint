@@ -81,7 +81,7 @@
   `StrokeBench` E: **3.6 ms mean** (was 10.0 at 0.3.6, 5.5 at 0.3.7), max ≈60 ms (the pen-up dry loop).
   Wet wash checked on `painter_tab`: a 1000 px stroke renders with its dark core and wet halo.
 
-## M4: done (2026-11-01, 0.4.9)
+## M4: done (2026-11-01, 0.5.0)
 ### Shape toolbox (2026-10-31, 0.4.0)
 - New Shape tools: **Rounded rectangle**, **Arrow** and **Speech balloon** alongside line/rect/ellipse/polygon/arc.
   Outlines are closed polylines rendered through the current brush; move/rotate/resize handles work for the new
@@ -113,15 +113,22 @@
   reachable from Home and Settings: connect/disconnect, back up the current project or every project, save the
   current drawing as PNG, and restore any backup. The app creates a visible `Boundless Paint` tree with
   `Projects` (one `.pnt` archive per project, project name in Drive app properties) and `Drawings` (timestamped
-  PNG files). A restore keeps the project id when it is free so later syncs update the same remote file, and
-  otherwise creates a copy. `ProjectStore.importArchive` rewrites the manifest id/name; `DriveApiTest` and
-  `DriveRepositoryTest` cover folders, upload/download, 401 retry, account linking and sign-out. Setup is in
+  PNG files); reconnecting searches for the existing folders by name and parent and only creates the missing
+  ones (the oldest match wins, so a duplicate never splits the backups). A restore keeps the project id when it
+  is free so later syncs update the same remote file, and otherwise creates a copy.
+  `ProjectStore.importArchive` rewrites the manifest id/name; `DriveApiTest` and `DriveRepositoryTest` cover
+  folders, reconnect reuse, upload/download, 401 retry, account linking and sign-out. Setup is in
   `docs/google-drive.md`.
+- **Auto-sync after saving**: **Sync after saving** in the Drive sheet (on by default once connected, stored in
+  `DriveSettings` independently of the account) backs the open project up after an explicit Save or leaving the
+  studio. Autosave, undo and project switches do not upload; an upload in flight is not duplicated, and disconnect
+  cancels a pending one.
 - Drive was exercised end to end on `painter_tab` with the test Google account: Play services account chooser and
   consent, visible `Boundless Paint/Projects` and `Drawings` folders, back up all/current, PNG save, restore as
   `Untitled (Drive)`, disconnect/reconnect, and the cancelled-sign-in path. A rejected cached token is cleared
-  with `GoogleAuthUtil.clearToken` and re-authorized; disconnect clears only the local link. M4 tests:
-  **604 JVM tests** (511 core, 93 app).
+  with `GoogleAuthUtil.clearToken` and re-authorized; disconnect clears only the local link. A reconnect found
+  the existing folder ids unchanged (`1vp-…`, `1viK…`, `15Hh…`) and created nothing. M4 tests:
+  **606 JVM tests** (511 core, 95 app).
 
 ## M2: done (2026-10-31)
 - Build: `. .\tools\env.ps1; .\gradlew.bat :core:test :app:testDebugUnitTest :app:assembleDebug`.

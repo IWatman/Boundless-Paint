@@ -37,6 +37,9 @@ interface DrivePreferences {
     var account: DriveAccount?
     var folders: DriveFolders?
     var lastSyncMs: Long
+
+    /** True when an explicit project save should also back the project up to Drive. */
+    var autoSync: Boolean
     fun clear()
 }
 
