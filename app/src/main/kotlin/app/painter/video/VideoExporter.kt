@@ -3,6 +3,7 @@ package app.painter.video
 import android.media.Image
 import android.media.MediaCodec
 import android.media.MediaCodecInfo
+import android.media.MediaExtractor
 import android.media.MediaFormat
 import android.media.MediaMuxer
 import app.painter.core.blend.Compositor
@@ -13,6 +14,7 @@ import app.painter.core.doc.VideoMeta
 import app.painter.core.video.VideoExportPlan
 import app.painter.core.video.Yuv
 import java.io.File
+import java.nio.ByteBuffer
 import kotlin.math.min
 
 /** The user cancelled the export between frames or during the SAF copy. */
@@ -47,6 +49,7 @@ object VideoExporter {
         plan: VideoExportPlan.Plan,
         encoder: AvcEncoder,
         output: File,
+        audio: File? = null,
         onProgress: (rendered: Long, total: Long) -> Unit = { _, _ -> },
         isCancelled: () -> Boolean = { false },
     ): Result {
@@ -55,10 +58,13 @@ object VideoExporter {
         if (durationTicks <= 0L || totalFrames <= 0L) {
             throw VideoExportException("The timeline has no frames")
         }
+        val videoEndUs = durationTicks * 1_000_000L / VIDEO_TICKS_PER_SECOND
         output.parentFile?.mkdirs()
         var codec: MediaCodec? = null
         var muxer: MediaMuxer? = null
         var muxerStarted = false
+        var audioReader: AudioSampleReader? = null
+        var audioTrackIndex = -1
         var success = false
         val info = MediaCodec.BufferInfo()
         try {
@@ -66,6 +72,11 @@ object VideoExporter {
             codec = c
             val m = MediaMuxer(output.absolutePath, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
             muxer = m
+            if (audio != null) {
+                val reader = AudioSampleReader(audio)
+                audioReader = reader
+                audioTrackIndex = m.addTrack(reader.format)
+            }
             c.start()
             val rasterizer = VideoRasterizer(
                 canvasWidth = doc.width,
@@ -96,6 +107,10 @@ object VideoExporter {
                         continue
                     }
                     if (outIndex < 0) continue
+                    // Keep the tracks interleaved by PTS: all audio before this video sample is written first.
+                    if (muxerStarted && audioReader != null) {
+                        audioReader.writeBefore(m, audioTrackIndex, info.presentationTimeUs, videoEndUs)
+                    }
                     val buffer = c.getOutputBuffer(outIndex)
                     if (buffer != null && info.size > 0 && muxerStarted) {
                         buffer.position(info.offset)
@@ -150,6 +165,8 @@ object VideoExporter {
 
             if (!muxerStarted) throw VideoExportException("The encoder produced no video track")
             if (isCancelled()) throw VideoExportCancelled()
+            // Audio that starts after the last video sample still belongs to the file, up to the video end.
+            if (audioReader != null) audioReader.flushBefore(m, audioTrackIndex, videoEndUs)
             m.stop()
             muxerStarted = false
             success = true
@@ -163,6 +180,7 @@ object VideoExporter {
                 if (muxerStarted) runCatching { it.stop() }
                 it.release()
             }
+            audioReader?.release()
             if (!success) output.delete()
         }
     }
@@ -250,6 +268,84 @@ object VideoExporter {
                     dst += pixelStride
                 }
             }
+        }
+    }
+
+    /**
+     * Reads compressed AAC samples of the mixed M4A and writes them into the MP4 muxer by PTS. The sample
+     * after [writeBefore]'s limit is kept as a one-sample lookahead, because [MediaExtractor] cannot unread it.
+     */
+    private class AudioSampleReader(audio: File) {
+        val format: MediaFormat
+        private val extractor = MediaExtractor()
+        private val buffer: ByteBuffer = ByteBuffer.allocateDirect(256 * 1024)
+        private val info = MediaCodec.BufferInfo()
+        private var pending = false
+        private var done = false
+
+        init {
+            try {
+                extractor.setDataSource(audio.absolutePath)
+                var index = -1
+                var found: MediaFormat? = null
+                for (track in 0 until extractor.trackCount) {
+                    val candidate = extractor.getTrackFormat(track)
+                    val mime = candidate.getString(MediaFormat.KEY_MIME) ?: continue
+                    if (mime.startsWith("audio/")) {
+                        index = track
+                        found = candidate
+                        break
+                    }
+                }
+                if (index < 0 || found == null) {
+                    throw VideoExportException("The audio file has no audio track")
+                }
+                extractor.selectTrack(index)
+                format = found
+            } catch (t: Throwable) {
+                runCatching { extractor.release() }
+                throw t
+            }
+        }
+
+        /** Writes every pending sample with `pts < limitUs` and `pts < endUs`. */
+        fun writeBefore(muxer: MediaMuxer, trackIndex: Int, limitUs: Long, endUs: Long) {
+            while (true) {
+                if (!pending && !readNext()) return
+                if (info.presentationTimeUs >= limitUs || info.presentationTimeUs >= endUs) return
+                buffer.position(0)
+                buffer.limit(info.size)
+                muxer.writeSampleData(trackIndex, buffer, info)
+                pending = false
+                extractor.advance()
+            }
+        }
+
+        /** Writes the remaining samples up to [endUs]; used after the last video sample. */
+        fun flushBefore(muxer: MediaMuxer, trackIndex: Int, endUs: Long) {
+            writeBefore(muxer, trackIndex, Long.MAX_VALUE, endUs)
+        }
+
+        private fun readNext(): Boolean {
+            if (done) return false
+            buffer.clear()
+            val size = extractor.readSampleData(buffer, 0)
+            if (size < 0) {
+                done = true
+                return false
+            }
+            val flags = if (extractor.sampleFlags and MediaExtractor.SAMPLE_FLAG_SYNC != 0) {
+                MediaCodec.BUFFER_FLAG_KEY_FRAME
+            } else {
+                0
+            }
+            info.set(0, size, extractor.sampleTime, flags)
+            pending = true
+            return true
+        }
+
+        fun release() {
+            runCatching { extractor.release() }
         }
     }
 }

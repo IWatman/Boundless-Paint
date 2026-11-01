@@ -739,8 +739,8 @@
     <string name="video_export_title">Export video</string>
     <string name="video_export_duration">Duration: %1$s</string>
     <string name="video_export_frames">%1$d frames at %2$d fps</string>
-    <string name="video_export_format">Format: MP4 · H.264</string>
-    <string name="video_export_no_audio_note">Video only: this version exports no audio.</string>
+    <string name="video_export_format">Format: MP4 · H.264 + AAC</string>
+    <string name="video_export_audio_note">Audio is mixed at 48 kHz stereo; the master volume applies. Audio beyond the video end is cut.</string>
     <string name="video_export_quality">Resolution</string>
     <string name="video_export_estimate">Estimated size: %1$s (estimate, not a promise)</string>
     <string name="video_export_unsupported_item">%1$s: %2$s</string>
@@ -868,4 +868,38 @@
     <string name="both">Both</string>
     <string name="black">Black</string>
     <string name="gray">Gray</string>
+
+    <!-- Video audio (S4) -->
+    <string name="video_audio_track">Audio</string>
+    <string name="video_audio_empty">Import or record audio to add sound.</string>
+    <string name="video_audio_import">Import audio</string>
+    <string name="video_audio_record">Record audio</string>
+    <string name="video_audio_stop">Stop recording</string>
+    <string name="video_audio_recording">Recording %1$s</string>
+    <string name="video_audio_recording_name">Recording</string>
+    <string name="video_audio_mute">Mute audio</string>
+    <string name="video_audio_unmute">Unmute audio</string>
+    <string name="video_audio_delete_clip">Delete audio clip</string>
+    <string name="video_audio_trim_clip">Trim audio clip</string>
+    <string name="video_audio_clip_accessible">%1$s, %2$s</string>
+    <string name="video_audio_clip_missing">File missing</string>
+    <string name="video_audio_clip_volume">Clip volume</string>
+    <string name="video_audio_track_volume">Track volume</string>
+    <string name="video_audio_master_volume">Master volume</string>
+    <string name="video_audio_preparing">Preparing audio…</string>
+    <string name="video_audio_preview_unavailable">Sound preview is not available on this device; export still includes audio.</string>
+    <string name="video_audio_permission_denied">Microphone permission is required to record. You can still import audio.</string>
+    <string name="video_audio_unsupported_codec">Audio codec %1$s is not supported.</string>
+    <string name="video_audio_channels">%1$s has %2$d channels; only mono and stereo are supported.</string>
+    <string name="video_audio_no_track">The selected file has no audio track.</string>
+    <string name="video_audio_unreadable">The selected audio file cannot be read.</string>
+    <string name="video_audio_import_failed">Audio import failed: %1$s</string>
+    <string name="video_audio_record_failed">Recording could not start. Check the microphone.</string>
+    <string name="video_audio_missing_file">Audio file missing: %1$s</string>
+    <string name="video_audio_mix_failed">Audio mix failed: %1$s</string>
+    <string name="video_export_include_audio">Include audio</string>
+    <string name="video_export_audio_none">No audio clips to include.</string>
+    <string name="video_export_audio_muted">The audio track is muted.</string>
+    <string name="video_export_audio_missing">An audio file is missing; replace or delete the clip before exporting.</string>
+    <string name="video_export_audio_warning">Audio beyond the video end is cut.</string>
 </resources>

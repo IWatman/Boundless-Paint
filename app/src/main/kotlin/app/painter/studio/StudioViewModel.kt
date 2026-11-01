@@ -1,17 +1,26 @@
 package app.painter.studio
 
 import android.app.ActivityManager
+import android.Manifest
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.SystemClock
 import android.app.Application
 import android.graphics.Bitmap
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import app.painter.R
+import app.painter.audio.AudioImportFailure
+import app.painter.audio.AudioMixFailure
+import app.painter.audio.AudioMixer
+import app.painter.audio.AudioPreviewPlayer
+import app.painter.audio.AudioRecorder
+import app.painter.audio.ProjectAudio
 import app.painter.core.blend.BlendMode
 import app.painter.core.canvas.CanvasOp
 import app.painter.core.canvas.canvasCommand
@@ -23,7 +32,9 @@ import app.painter.core.color.Rgba
 import app.painter.core.doc.Animation
 import app.painter.core.doc.AnimationMeta
 import app.painter.core.doc.AnimationPlayback
+import app.painter.core.doc.AudioClip
 import app.painter.core.doc.Document
+import app.painter.core.doc.VIDEO_TICKS_PER_SECOND
 import app.painter.core.doc.AdjustmentLayer
 import app.painter.core.doc.FilterLayer
 import app.painter.core.doc.ColorTag
@@ -146,6 +157,8 @@ import app.painter.core.transform.TransformSession
 import app.painter.core.vector.VectorPoint
 import app.painter.core.vector.VectorStroke
 import app.painter.core.video.VideoExportPlan
+import app.painter.core.video.AudioMix
+import app.painter.core.video.AudioTimeline
 import app.painter.core.select.EllipseShape
 import app.painter.core.select.MaskOps
 import app.painter.core.select.PolyShape
@@ -365,6 +378,26 @@ class StudioViewModel(
     private var videoExportCancelRequested = false
     /** Strokes, undo/redo and leaving the studio are blocked while this is true. */
     private var videoExportBusy = false
+
+    // ---- video audio (S4) ----
+
+    /** Offline mix preparation of the current audio revision; cancelled by the next edit. */
+    private var audioMixJob: Job? = null
+    /** Bumped on every mix request so a stale result is never published. */
+    private var audioMixToken = 0
+    /** Cached mixed M4A used by both preview and export; null until preparation finishes. */
+    private var audioMixFile: File? = null
+    /** Cache key of [audioMixFile]; a different key means a stale mix. */
+    private var audioMixKey: String? = null
+    /** Player of the same mix file; created lazily on the first play. */
+    private val audioPreview = AudioPreviewPlayer { onAudioPreviewUnavailable() }
+    /** Microphone recorder of the video track; null while not recording. */
+    private var audioRecorder: AudioRecorder? = null
+    /** Ticker of the recording duration shown by the panel. */
+    private var audioRecordJob: Job? = null
+    /** Playhead at the record tap; the finished clip is inserted there. */
+    private var audioRecordStartTick = 0L
+    private var audioRecordStartMs = 0L
     /** Descriptor of the device of the running stylus stroke; saved when the stroke ends, null otherwise. */
     private var strokeDevice: String? = null
     /** In-flight marching-ants contour computation of the selection mask. */
@@ -434,6 +467,12 @@ class StudioViewModel(
     /** Set by the export dialog; the activity launches `CreateDocument("video/mp4")`. */
     val videoExportRequest = MutableStateFlow(false)
 
+    /** Set by Import audio; the activity launches an `OpenDocument` picker for audio files. */
+    val audioImportRequest = MutableStateFlow(false)
+
+    /** Set when recording needs `RECORD_AUDIO`; the activity requests it and reports back. */
+    val recordPermissionRequest = MutableStateFlow(false)
+
     /** Options of the confirmed video export, waiting for the SAF URI from the activity. */
     var pendingVideoExport: VideoExportOptions? = null
         private set
@@ -495,6 +534,8 @@ class StudioViewModel(
         finishTransform(apply = false)
         finishGradient(apply = false)
         finishLiquify(commit = false)
+        // A recording belongs to the document that is being left; never insert it into the next one.
+        abandonAudioRecording()
         // Leaving the studio is a preview exit: restore the frame the user was editing before saving.
         stopVideoPlayback(restoreEditingFrame = true)
         save(refreshList = false) // flush pending changes of the previous document
@@ -511,6 +552,12 @@ class StudioViewModel(
         videoPlayJob = null
         videoPreviewActive = false
         videoEditingActiveId = null
+        audioMixToken++
+        audioMixJob?.cancel()
+        audioMixJob = null
+        audioMixFile = null
+        audioMixKey = null
+        audioPreview.release()
         onionSignature = null
         onionCache = emptyList()
         // The saved state belongs to the document that was just flushed, not to the new one.
@@ -2705,7 +2752,10 @@ class StudioViewModel(
     override fun toggleAnimationPanel() {
         val open = !_state.value.animationPanelOpen
         // One bottom timeline at a time: opening the animation leaves the video preview first.
-        if (open) leaveVideoPreview()
+        if (open) {
+            if (_state.value.video?.recordingAudio == true) stopAudioRecording()
+            leaveVideoPreview()
+        }
         _state.update {
             it.copy(
                 animationPanelOpen = open,
@@ -2745,6 +2795,7 @@ class StudioViewModel(
             refreshVideo()
             enterVideoPreview()
         } else {
+            if (_state.value.video?.recordingAudio == true) stopAudioRecording()
             leaveVideoPreview()
             _state.update { it.copy(videoPanelOpen = false) }
         }
@@ -2760,6 +2811,7 @@ class StudioViewModel(
         }
         // Scrubbing is preview-only: no history entry, no timelapse frame and no dirty flag.
         if (videoPreviewActive) showVideoFrame(clamped)
+        if (_state.value.video?.playing != true) audioPreview.seekTo(previewMilliseconds(clamped))
     }
 
     override fun selectVideoClip(id: String?) {
@@ -2767,6 +2819,7 @@ class StudioViewModel(
     }
 
     override fun setVideoPlaying(playing: Boolean) {
+        if (playing && _state.value.video?.recordingAudio == true) return
         if (playing) startVideoPlayback() else stopVideoPlayback(restoreEditingFrame = false)
     }
 
@@ -2774,11 +2827,14 @@ class StudioViewModel(
         if (_state.value.video == null) return
         stopVideoPlayback(restoreEditingFrame = false)
         _state.update { it.copy(video = it.video?.copy(playheadTick = 0L)) }
+        audioPreview.pause()
+        audioPreview.seekTo(0)
         if (videoPreviewActive) showVideoFrame(0L)
     }
 
     override fun setVideoLoopsPreview(on: Boolean) {
         _state.update { it.copy(video = it.video?.copy(loopPreview = on)) }
+        audioPreview.setLooping(on)
     }
 
     override fun setVideoSnap(on: Boolean) {
@@ -2817,6 +2873,8 @@ class StudioViewModel(
         doc.video = updated
         markDirty()
         refreshVideo()
+        invalidateAudioMix()
+        prepareAudioMix()
         val start = updated.tracks.firstOrNull { it.id == track.id }
             ?.clips?.firstOrNull { it.id == id }?.startTick ?: 0L
         _state.update { it.copy(video = it.video?.copy(selectedClipId = id, playheadTick = start)) }
@@ -2833,6 +2891,8 @@ class StudioViewModel(
         doc.video = updated
         markDirty()
         refreshVideo()
+        invalidateAudioMix()
+        prepareAudioMix()
         if (videoPreviewActive) showVideoFrame(_state.value.video?.playheadTick ?: 0L)
     }
 
@@ -2846,6 +2906,8 @@ class StudioViewModel(
         doc.video = updated
         markDirty()
         refreshVideo()
+        invalidateAudioMix()
+        prepareAudioMix()
         if (videoPreviewActive) showVideoFrame(_state.value.video?.playheadTick ?: 0L)
     }
 
@@ -2859,6 +2921,8 @@ class StudioViewModel(
         doc.video = updated
         markDirty()
         refreshVideo()
+        invalidateAudioMix()
+        prepareAudioMix()
         if (videoPreviewActive) showVideoFrame(_state.value.video?.playheadTick ?: 0L)
     }
 
@@ -2874,9 +2938,353 @@ class StudioViewModel(
         if (videoPreviewActive) showVideoFrame(_state.value.video?.playheadTick ?: 0L)
     }
 
-    // ---- video export (S3) ----
+    // ---- video audio (S4) ----
+
+    override fun importAudio() {
+        if (doc.video == null) return
+        _state.update { it.copy(video = it.video?.copy(audioMessage = null)) }
+        audioImportRequest.value = true
+    }
+
+    /** Copies the picked file into the project and inserts a clip at the playhead. Runs on an IO thread. */
+    fun importAudio(uri: Uri) {
+        val targetId = doc.id
+        val projectDir = store.dirFor(targetId)
+        viewModelScope.launch {
+            val result = withContext(Dispatchers.IO) {
+                ioLock.withLock {
+                    runCatching { ProjectAudio.import(getApplication<Application>().contentResolver, uri, projectDir) }
+                }
+            }
+            if (doc.id != targetId) {
+                // The project changed while the picker was open: remove the copy instead of leaking it.
+                result.getOrNull()?.let { File(projectDir, it.relativePath).delete() }
+                return@launch
+            }
+            result.onSuccess { imported ->
+                insertAudioClip(
+                    file = imported.relativePath,
+                    name = imported.name,
+                    durationTicks = imported.info.durationTicks,
+                )
+            }.onFailure { t ->
+                _state.update { it.copy(video = it.video?.copy(audioMessage = audioFailureMessage(t))) }
+            }
+        }
+    }
+
+    override fun startAudioRecording() {
+        if (doc.video == null) return
+        if (_state.value.video?.recordingAudio == true) {
+            stopAudioRecording()
+            return
+        }
+        if (!hasRecordPermission()) {
+            recordPermissionRequest.value = true
+            return
+        }
+        beginAudioRecording()
+    }
+
+    /** Result of the activity permission dialog; a denial explains the state and keeps import available. */
+    fun onRecordPermissionResult(granted: Boolean) {
+        recordPermissionRequest.value = false
+        if (!granted) {
+            setAudioMessage(uiString(R.string.video_audio_permission_denied))
+            return
+        }
+        beginAudioRecording()
+    }
+
+    override fun stopAudioRecording() {
+        val recorder = audioRecorder ?: return
+        audioRecordJob?.cancel()
+        audioRecordJob = null
+        val file = recorder.stop()
+        audioRecorder = null
+        _state.update { it.copy(video = it.video?.copy(recordingAudio = false, recordingMs = 0L)) }
+        if (file == null) {
+            setAudioMessage(uiString(R.string.video_audio_record_failed))
+            return
+        }
+        val info = runCatching { ProjectAudio.probe(file) }.getOrElse { t ->
+            file.delete()
+            setAudioMessage(audioFailureMessage(t))
+            return
+        }
+        insertAudioClip(
+            file = ProjectAudio.relativePath(store.dirFor(doc.id), file),
+            name = uiString(R.string.video_audio_recording_name),
+            durationTicks = info.durationTicks,
+            startTick = audioRecordStartTick,
+        )
+    }
+
+    override fun deleteAudioClip(id: String) {
+        applyAudioEdit { AudioTimeline.delete(it, id) }
+    }
+
+    override fun setAudioClipVolume(id: String, volume: Float) {
+        applyAudioEdit { AudioTimeline.setClipVolume(it, id, volume) }
+    }
+
+    override fun moveAudioClip(id: String, startTick: Long) {
+        applyAudioEdit { AudioTimeline.move(it, id, startTick) }
+    }
+
+    override fun setAudioClipDuration(id: String, ticks: Long) {
+        applyAudioEdit { AudioTimeline.trim(it, id, ticks) }
+    }
+
+    override fun setAudioTrackVolume(volume: Float) {
+        applyAudioEdit { AudioTimeline.setTrackVolume(it, volume) }
+    }
+
+    override fun setAudioMasterVolume(volume: Float) {
+        applyAudioEdit { AudioTimeline.setMasterVolume(it, volume) }
+    }
+
+    override fun setAudioMuted(muted: Boolean) {
+        val meta = doc.video ?: return
+        val updated = AudioTimeline.setMuted(meta, muted)
+        if (updated == meta) return
+        doc.video = updated
+        markDirty()
+        // The mute switch is applied to the player immediately; the mix key includes it, so the cached file
+        // of the other mute state is never reused.
+        audioPreview.setMuted(muted)
+        refreshVideo()
+        _state.update { it.copy(video = it.video?.copy(audioMessage = null)) }
+        invalidateAudioMix()
+        prepareAudioMix()
+    }
+
+    /** Applies one copy-on-write audio edit, persists it and rebuilds the preview mix. */
+    private fun applyAudioEdit(edit: (VideoMeta) -> VideoMeta) {
+        val meta = doc.video ?: return
+        val updated = edit(meta)
+        if (updated == meta) return
+        stopVideoPlayback(restoreEditingFrame = false)
+        doc.video = AudioTimeline.normalize(updated)
+        markDirty()
+        refreshVideo()
+        _state.update { it.copy(video = it.video?.copy(audioMessage = null)) }
+        invalidateAudioMix()
+        prepareAudioMix()
+        if (videoPreviewActive) showVideoFrame(_state.value.video?.playheadTick ?: 0L)
+    }
+
+    /** Inserts a project audio file as a clip at [startTick] (default: the playhead) and prepares the mix. */
+    private fun insertAudioClip(
+        file: String,
+        name: String,
+        durationTicks: Long,
+        startTick: Long = _state.value.video?.playheadTick ?: 0L,
+    ) {
+        val meta = doc.video ?: return
+        val clip = AudioClip(
+            id = newNodeId(),
+            file = file,
+            name = name,
+            startTick = startTick.coerceAtLeast(0L),
+            durationTicks = durationTicks.coerceAtLeast(1L),
+            volume = 1f,
+        )
+        val updated = AudioTimeline.insert(meta, clip)
+        if (updated == meta) return
+        stopVideoPlayback(restoreEditingFrame = false)
+        doc.video = updated
+        markDirty()
+        refreshVideo()
+        _state.update {
+            it.copy(video = it.video?.copy(selectedClipId = clip.id, audioMessage = null))
+        }
+        invalidateAudioMix()
+        prepareAudioMix()
+        if (videoPreviewActive) showVideoFrame(_state.value.video?.playheadTick ?: 0L)
+    }
+
+    private fun beginAudioRecording() {
+        if (audioRecorder != null || doc.video == null) return
+        stopVideoPlayback(restoreEditingFrame = false)
+        val projectDir = store.dirFor(doc.id)
+        val file = ProjectAudio.recordingFile(projectDir)
+        val recorder = AudioRecorder(getApplication())
+        if (!recorder.start(file)) {
+            setAudioMessage(uiString(R.string.video_audio_record_failed))
+            return
+        }
+        audioRecorder = recorder
+        audioRecordStartTick = _state.value.video?.playheadTick ?: 0L
+        audioRecordStartMs = SystemClock.elapsedRealtime()
+        _state.update {
+            it.copy(video = it.video?.copy(recordingAudio = true, recordingMs = 0L, audioMessage = null))
+        }
+        audioRecordJob?.cancel()
+        audioRecordJob = viewModelScope.launch {
+            while (isActive) {
+                delay(200L)
+                val elapsed = SystemClock.elapsedRealtime() - audioRecordStartMs
+                val ticks = elapsed * VIDEO_TICKS_PER_SECOND / 1000L
+                _state.update { it.copy(video = it.video?.copy(recordingMs = ticks)) }
+            }
+        }
+    }
+
+    /** Drops a recording without inserting it; used when the document is replaced or the studio is left. */
+    private fun abandonAudioRecording() {
+        val recorder = audioRecorder ?: return
+        audioRecordJob?.cancel()
+        audioRecordJob = null
+        recorder.discard()
+        audioRecorder = null
+        _state.update { it.copy(video = it.video?.copy(recordingAudio = false, recordingMs = 0L)) }
+    }
+
+    private fun hasRecordPermission(): Boolean =
+        ContextCompat.checkSelfPermission(
+            getApplication(),
+            Manifest.permission.RECORD_AUDIO,
+        ) == PackageManager.PERMISSION_GRANTED
+
+    private fun setAudioMessage(message: String?) {
+        _state.update { it.copy(video = it.video?.copy(audioMessage = message)) }
+    }
+
+    private fun audioFailureMessage(t: Throwable): String = when (t) {
+        is AudioImportFailure.UnsupportedCodec -> uiString(R.string.video_audio_unsupported_codec, t.codec)
+        is AudioImportFailure.TooManyChannels ->
+            uiString(R.string.video_audio_channels, t.codec, t.channels)
+        is AudioImportFailure.NoAudioTrack -> uiString(R.string.video_audio_no_track)
+        is AudioImportFailure.Unreadable -> uiString(R.string.video_audio_unreadable)
+        is AudioMixFailure -> when (t.kind) {
+            AudioMixFailure.Kind.MISSING_FILE ->
+                uiString(R.string.video_audio_missing_file, t.clipName ?: t.detail.orEmpty())
+            AudioMixFailure.Kind.UNSUPPORTED_CODEC ->
+                uiString(R.string.video_audio_unsupported_codec, t.detail.orEmpty())
+            AudioMixFailure.Kind.NO_CLIPS -> uiString(R.string.video_export_audio_none)
+            else -> uiString(R.string.video_audio_mix_failed, t.detail ?: t.kind.name)
+        }
+        else -> uiString(R.string.video_audio_import_failed, t.message ?: uiString(R.string.unknown_error))
+    }
+
+    /** Cancels a running mix and drops the prepared file; the next [prepareAudioMix] rebuilds it. */
+    private fun invalidateAudioMix() {
+        audioMixToken++
+        audioMixJob?.cancel()
+        audioMixJob = null
+        audioMixFile = null
+        audioMixKey = null
+        audioPreview.release()
+    }
+
+    /**
+     * Prepares the offline mix used by preview and export. The cache key covers every clip, gain and file fact,
+     * so an edit always produces a new file; an unchanged timeline reuses the cached one.
+     */
+    private fun prepareAudioMix() {
+        val meta = doc.video ?: return
+        val audio = meta.audio
+        val duration = Video.durationTicks(meta)
+        if (audio == null || audio.clips.isEmpty() || duration <= 0L) {
+            invalidateAudioMix()
+            _state.update {
+                it.copy(video = it.video?.copy(audioPreparing = false, audioPreviewUnavailable = false))
+            }
+            return
+        }
+        val projectDir = store.dirFor(doc.id)
+        val facts = audio.clips.map { it.file }.distinct().associateWith { relative ->
+            val file = File(projectDir, relative)
+            AudioMix.FileFacts(
+                size = if (file.isFile) file.length() else -1L,
+                modified = if (file.isFile) file.lastModified() else -1L,
+            )
+        }
+        val key = AudioMix.cacheKey(audio, duration, facts)
+        if (key == audioMixKey && audioMixFile?.isFile == true) return
+        audioMixToken++
+        val token = audioMixToken
+        audioMixJob?.cancel()
+        audioMixJob = null
+        audioMixFile = null
+        audioMixKey = key
+        audioPreview.release()
+        _state.update {
+            it.copy(video = it.video?.copy(audioPreparing = true, audioPreviewUnavailable = false))
+        }
+        audioMixJob = viewModelScope.launch {
+            try {
+                val file = withContext(Dispatchers.IO) {
+                    val scope = this
+                    AudioMixer.prepare(
+                        projectDir = projectDir,
+                        audio = audio,
+                        durationTicks = duration,
+                        cacheDir = getApplication<Application>().cacheDir,
+                        checkCancelled = {
+                            if (!scope.isActive) throw CancellationException("audio mix cancelled")
+                        },
+                    )
+                }
+                if (token != audioMixToken) return@launch
+                audioMixFile = file
+                _state.update { it.copy(video = it.video?.copy(audioPreparing = false)) }
+                if (_state.value.video?.playing == true) startAudioPreview()
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (t: Throwable) {
+                if (token == audioMixToken) {
+                    _state.update {
+                        it.copy(
+                            video = it.video?.copy(
+                                audioPreparing = false,
+                                audioMessage = audioFailureMessage(t),
+                            ),
+                        )
+                    }
+                }
+            } finally {
+                if (token == audioMixToken) audioMixJob = null
+            }
+        }
+    }
+
+    /** Starts the preview from the current playhead when the mix is ready. */
+    private fun startAudioPreview() {
+        val video = _state.value.video ?: return
+        val audio = doc.video?.audio ?: return
+        if (audio.clips.isEmpty() || audio.muted) return
+        val file = audioMixFile?.takeIf { it.isFile } ?: run {
+            if (_state.value.video?.audioPreparing != true) prepareAudioMix()
+            return
+        }
+        val ok = audioPreview.play(
+            file = file,
+            startMs = previewMilliseconds(video.playheadTick),
+            muted = false,
+            looping = video.loopPreview,
+        )
+        if (ok) {
+            if (video.audioPreviewUnavailable) {
+                _state.update { it.copy(video = it.video?.copy(audioPreviewUnavailable = false)) }
+            }
+        } else {
+            onAudioPreviewUnavailable()
+        }
+    }
+
+    private fun onAudioPreviewUnavailable() {
+        _state.update { it.copy(video = it.video?.copy(audioPreviewUnavailable = true)) }
+    }
+
+    private fun previewMilliseconds(tick: Long): Int =
+        (tick.coerceAtLeast(0L) * 1000L / VIDEO_TICKS_PER_SECOND).toInt()
+
+    // ---- video export (S3/S4) ----
 
     override fun exportVideo(options: VideoExportOptions) {
+        if (_state.value.video?.recordingAudio == true) stopAudioRecording()
         val meta = doc.video ?: return
         if (videoExportBusy || Video.durationTicks(meta) <= 0L) return
         pendingVideoExport = options
@@ -2921,8 +3329,21 @@ class StudioViewModel(
             publishVideoExportFailure(uiString(R.string.video_export_no_frames))
             return
         }
+        val audio = meta.audio
+        val includeAudio = options.includeAudio && audio != null && audio.clips.isNotEmpty() && !audio.muted
+        val projectDir = store.dirFor(doc.id)
+        if (includeAudio) {
+            val missing = AudioTimeline.missingClips(audio!!) { File(projectDir, it).isFile }
+            if (missing.isNotEmpty()) {
+                publishVideoExportFailure(
+                    uiString(R.string.video_audio_missing_file, missing.first().name),
+                )
+                return
+            }
+        }
         if (_state.value.video?.playing == true) stopVideoPlayback(restoreEditingFrame = false)
         if (_state.value.animation?.playing == true) stopAnimationPlayback()
+        audioPreview.release()
         videoExportCancelRequested = false
         videoExportBusy = true
         val startedAt = SystemClock.elapsedRealtime()
@@ -2940,6 +3361,24 @@ class StudioViewModel(
             val temp = File(getApplication<Application>().cacheDir, "video-export-${docRef.id}-${System.nanoTime()}.mp4")
             try {
                 withContext(Dispatchers.IO) { deleteStaleVideoExports() }
+                val mixedAudio = if (includeAudio) {
+                    withContext(Dispatchers.IO) {
+                        AudioMixer.prepare(
+                            projectDir = projectDir,
+                            audio = audio!!,
+                            durationTicks = durationTicks,
+                            cacheDir = getApplication<Application>().cacheDir,
+                            checkCancelled = {
+                                if (videoExportCancelRequested || exportJob?.isActive == false) {
+                                    throw VideoExportCancelled()
+                                }
+                            },
+                        )
+                    }
+                } else {
+                    null
+                }
+                if (videoExportCancelRequested || exportJob?.isActive == false) throw VideoExportCancelled()
                 withContext(Dispatchers.Default) {
                     VideoExporter.encode(
                         doc = docRef,
@@ -2947,6 +3386,7 @@ class StudioViewModel(
                         plan = plan,
                         encoder = encoder,
                         output = temp,
+                        audio = mixedAudio,
                         onProgress = { done, total ->
                             val elapsed = SystemClock.elapsedRealtime() - startedAt
                             _state.update { s ->
@@ -3004,7 +3444,11 @@ class StudioViewModel(
                 throw cancelled
             } catch (t: Throwable) {
                 runCatching { getApplication<Application>().contentResolver.delete(uri, null, null) }
-                val reason = t.message?.takeIf { it.isNotBlank() } ?: uiString(R.string.unknown_error)
+                val reason = when (t) {
+                    is AudioMixFailure -> audioFailureMessage(t)
+                    is AudioImportFailure -> audioFailureMessage(t)
+                    else -> t.message?.takeIf { it.isNotBlank() } ?: uiString(R.string.unknown_error)
+                }
                 _state.update { s ->
                     s.copy(
                         videoExport = s.videoExport?.copy(
@@ -3096,6 +3540,7 @@ class StudioViewModel(
         val startElapsed = SystemClock.elapsedRealtime()
         _state.update { it.copy(video = it.video?.copy(playing = true, playheadTick = start)) }
         showVideoFrame(start)
+        startAudioPreview()
         val token = ++videoPlayToken
         videoPlayJob = viewModelScope.launch {
             try {
@@ -3113,6 +3558,7 @@ class StudioViewModel(
                 }
             } finally {
                 if (token == videoPlayToken) {
+                    audioPreview.pause()
                     videoPlayJob = null
                     _state.update { s -> s.copy(video = s.video?.copy(playing = false)) }
                     refreshLayerRowsAfterPreview()
@@ -3129,6 +3575,7 @@ class StudioViewModel(
      */
     private fun stopVideoPlayback(restoreEditingFrame: Boolean) {
         val wasPlaying = videoPlayJob != null || _state.value.video?.playing == true
+        audioPreview.pause()
         videoPlayToken++
         videoPlayJob?.cancel()
         videoPlayJob = null
@@ -3184,14 +3631,27 @@ class StudioViewModel(
             videoPreviewActive = true
         }
         showVideoFrame(video.playheadTick)
+        prepareAudioMix()
     }
 
     /** Stops the preview and restores the frame that was active before the panel opened. */
     private fun leaveVideoPreview() {
-        if (!videoPreviewActive && videoPlayJob == null && _state.value.video?.playing != true) return
+        if (!videoPreviewActive && videoPlayJob == null && _state.value.video?.playing != true) {
+            cancelAudioPreparation()
+            return
+        }
         stopVideoPlayback(restoreEditingFrame = true)
+        cancelAudioPreparation()
         videoPreviewActive = false
         videoEditingActiveId = null
+    }
+
+    /** Cancels a mix that is still being prepared and releases the player; the cached file stays for a reopen. */
+    private fun cancelAudioPreparation() {
+        audioMixToken++
+        audioMixJob?.cancel()
+        audioMixJob = null
+        audioPreview.release()
     }
 
     /**
@@ -3522,7 +3982,8 @@ class StudioViewModel(
         val previous = _state.value.video
         val playhead = (previous?.playheadTick ?: 0L).coerceIn(0L, duration)
         val selected = previous?.selectedClipId?.takeIf { id ->
-            meta.tracks.any { track -> track.clips.any { it.id == id } }
+            meta.tracks.any { track -> track.clips.any { it.id == id } } ||
+                meta.audio?.clips?.any { it.id == id } == true
         }
         val tracks = meta.tracks.map { track ->
             val frames = Video.frames(doc, track)
@@ -3548,20 +4009,20 @@ class StudioViewModel(
                 },
             )
         }
+        val projectDir = store.dirFor(doc.id)
         val audio = meta.audio?.let { track ->
             VideoAudioUi(
                 muted = track.muted,
                 volume = track.volume,
                 masterVolume = track.masterVolume,
                 clips = track.clips.map { clip ->
-                    // The file lives in the project directory; probing it arrives with the audio slice (S4).
                     AudioClipUi(
                         id = clip.id,
                         name = clip.name,
                         startTick = clip.startTick,
                         durationTicks = clip.durationTicks,
                         volume = clip.volume,
-                        missing = false,
+                        missing = !File(projectDir, clip.file).isFile,
                     )
                 },
             )
@@ -3577,6 +4038,11 @@ class StudioViewModel(
                     playing = previous?.playing == true && videoPlayJob != null,
                     loopPreview = previous?.loopPreview ?: false,
                     snapEnabled = previous?.snapEnabled ?: true,
+                    audioPreparing = previous?.audioPreparing ?: false,
+                    audioPreviewUnavailable = previous?.audioPreviewUnavailable ?: false,
+                    audioMessage = previous?.audioMessage,
+                    recordingAudio = previous?.recordingAudio ?: false,
+                    recordingMs = previous?.recordingMs ?: 0L,
                 ),
             )
         }
@@ -3589,6 +4055,12 @@ class StudioViewModel(
         videoPlayJob = null
         videoPreviewActive = false
         videoEditingActiveId = null
+        audioMixToken++
+        audioMixJob?.cancel()
+        audioMixJob = null
+        audioMixFile = null
+        audioMixKey = null
+        audioPreview.release()
     }
 
     /** Previous and next onion frames with their bitmaps; returns the cache when the pixels did not change. */
@@ -3908,6 +4380,8 @@ class StudioViewModel(
 
     override fun openHome() {
         if (videoExportBusy) return
+        // A running recording is finalized into the document before the project is written.
+        if (_state.value.video?.recordingAudio == true) stopAudioRecording()
         // Leaving the studio restores the editing frame before the project is written.
         leaveVideoPreview()
         _state.update { it.copy(videoPanelOpen = false) }
@@ -3916,6 +4390,8 @@ class StudioViewModel(
     }
 
     override fun save() {
+        // The app is going to the background: finalize a running microphone recording now (no background capture).
+        if (_state.value.video?.recordingAudio == true) stopAudioRecording()
         commitDocumentEdits()
         save(refreshList = true, autoSync = true)
     }
@@ -3940,6 +4416,8 @@ class StudioViewModel(
      * the previous `thumb.png` during autosave; a project without one still gets it rendered.
      */
     private fun save(refreshList: Boolean, withThumbnail: Boolean = true, autoSync: Boolean = false) {
+        // A running MediaRecorder owns a file under audio/; moving the project tree now would break it.
+        if (_state.value.video?.recordingAudio == true) return
         autosaveJob?.cancel()
         autosaveJob = null
         commitPendingOpacity()
@@ -4335,6 +4813,7 @@ class StudioViewModel(
 
     override fun driveSyncCurrent() = driveOperation {
         val repo = drive ?: throw DriveException(0, uiString(R.string.drive_unavailable))
+        if (_state.value.video?.recordingAudio == true) stopAudioRecording()
         commitDocumentEdits()
         save(refreshList = true)
         saveJob?.join()
@@ -4346,6 +4825,7 @@ class StudioViewModel(
 
     override fun driveSyncAll() = driveOperation {
         val repo = drive ?: throw DriveException(0, uiString(R.string.drive_unavailable))
+        if (_state.value.video?.recordingAudio == true) stopAudioRecording()
         commitDocumentEdits()
         save(refreshList = true)
         saveJob?.join()
@@ -4944,6 +5424,18 @@ class StudioViewModel(
         val grid = Compositor.flatten(d, includePaper = true)
         val bmp = gridToBitmap(grid, d.width, d.height, maxSide = 512)
         return ByteArrayOutputStream().use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it); it.toByteArray() }
+    }
+
+    /** Releases the microphone and the audio player so a finishing ViewModel leaves no device handle open. */
+    override fun onCleared() {
+        audioRecordJob?.cancel()
+        audioRecordJob = null
+        audioRecorder?.release()
+        audioRecorder = null
+        audioMixJob?.cancel()
+        audioMixJob = null
+        audioPreview.release()
+        super.onCleared()
     }
 }
 

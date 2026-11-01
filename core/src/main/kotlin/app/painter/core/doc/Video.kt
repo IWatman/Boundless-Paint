@@ -1,5 +1,7 @@
 package app.painter.core.doc
 
+import app.painter.core.video.AudioTimeline
+
 /**
  * Video timeline is always 60 ticks per second; in a 60 fps export one tick is one output frame.
  * See spec/VIDEO-MODE.md §4.
@@ -173,28 +175,7 @@ object Video {
             tracks += track.copy(clips = clips)
         }
         if (tracks.isEmpty()) return null
-        val audio = meta.audio?.let { track ->
-            val clips = track.clips.mapNotNull { clip ->
-                val start = maxOf(0L, clip.startTick)
-                val end = maxOf(0L, clip.startTick + clip.durationTicks)
-                val duration = end - start
-                if (duration <= 0L) {
-                    null
-                } else {
-                    clip.copy(
-                        startTick = start,
-                        durationTicks = duration,
-                        sourceOffsetTicks = maxOf(0L, clip.sourceOffsetTicks),
-                        volume = clip.volume.coerceIn(0f, 1f),
-                    )
-                }
-            }.sortedBy { it.startTick }
-            track.copy(
-                clips = clips,
-                volume = track.volume.coerceIn(0f, 1f),
-                masterVolume = track.masterVolume.coerceIn(0f, 1f),
-            )
-        }
+        val audio = meta.audio?.let(AudioTimeline::normalize)
         return VideoMeta(tracks, audio)
     }
 

@@ -202,7 +202,7 @@ data class VideoTrackUi(
     val clips: List<VideoClipUi>,
 )
 
-/** One audio clip of the video timeline (S1 only carries the persisted data; audio ships in S4). */
+/** One audio clip of the video timeline; [missing] marks a clip whose project file is gone. */
 @Immutable
 data class AudioClipUi(
     val id: String,
@@ -225,7 +225,9 @@ data class VideoAudioUi(
 /**
  * Video timeline state of the open document. [durationTicks] is the last tick covered by a drawing clip and
  * [playheadTick] is clamped to it. [playing], [loopPreview] and [snapEnabled] are preview-only switches: they
- * are not persisted in the manifest.
+ * are not persisted in the manifest. [audioPreparing] is the offline mix of the audio track; while it runs the
+ * preview plays frames silently and the panel says so. [recordingAudio]/[recordingMs] belong to the microphone
+ * recording, [audioMessage] is a short localized import/record failure.
  */
 @Immutable
 data class VideoUi(
@@ -237,6 +239,11 @@ data class VideoUi(
     val playing: Boolean = false,
     val loopPreview: Boolean = false,
     val snapEnabled: Boolean = true,
+    val audioPreparing: Boolean = false,
+    val audioPreviewUnavailable: Boolean = false,
+    val audioMessage: String? = null,
+    val recordingAudio: Boolean = false,
+    val recordingMs: Long = 0,
 )
 
 /** Phase of a running video export; the dialog reports it as text. */
@@ -711,10 +718,43 @@ interface StudioActions {
     /** Shows or hides one drawing track; a hidden track renders nothing. */
     fun setVideoTrackVisible(id: String, visible: Boolean) {}
 
+    /** Opens the system audio picker; the chosen file is copied to `audio/` and inserted at the playhead. */
+    fun importAudio() {}
+
+    /**
+     * Requests `RECORD_AUDIO` when needed and starts recording to `audio/rec-<uuid>.m4a`. A second call stops
+     * the recording and inserts a clip at the playhead; a denial is reported and import stays available.
+     */
+    fun startAudioRecording() {}
+
+    /** Stops the running recording and inserts the measured clip at the playhead. */
+    fun stopAudioRecording() {}
+
+    /** Deletes one audio clip; the audio track and its volumes stay. */
+    fun deleteAudioClip(id: String) {}
+
+    /** Clip gain 0..1; the final gain is clip × track × master. */
+    fun setAudioClipVolume(id: String, volume: Float) {}
+
+    /** Moves an audio clip freely; audio clips may overlap. */
+    fun moveAudioClip(id: String, startTick: Long) {}
+
+    /** Right-edge duration of an audio clip; zero deletes it. */
+    fun setAudioClipDuration(id: String, ticks: Long) {}
+
+    /** Track volume 0..1, applied after every clip gain. */
+    fun setAudioTrackVolume(volume: Float) {}
+
+    /** Master volume 0..1, applied after the track volume. */
+    fun setAudioMasterVolume(volume: Float) {}
+
+    /** Mutes the audio track for preview and export; muting is instant and persisted. */
+    fun setAudioMuted(muted: Boolean) {}
+
     /**
      * Opens the system file picker for the MP4 export with [options]. The ViewModel keeps the options and starts
      * the job once the activity reports the picked URI; capability failures are checked by the dialog before this
-     * is called. No audio is written in S3.
+     * is called.
      */
     fun exportVideo(options: VideoExportOptions) {}
 

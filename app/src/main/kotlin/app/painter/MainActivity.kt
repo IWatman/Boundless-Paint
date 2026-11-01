@@ -1,5 +1,7 @@
 package app.painter
 
+import android.Manifest
+import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.os.Bundle
 import android.view.KeyEvent
@@ -22,6 +24,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.content.ContextCompat
 import app.painter.drive.DriveAuthController
 import app.painter.render.CanvasView
 import app.painter.share.ImageShare
@@ -228,6 +231,8 @@ private fun Studio(vm: StudioViewModel, drive: DriveUiState) {
     val shareRequest by vm.shareRequest.collectAsState()
     val exportOptions by vm.exportOptions.collectAsState()
     val videoExportRequest by vm.videoExportRequest.collectAsState()
+    val audioImportRequest by vm.audioImportRequest.collectAsState()
+    val recordPermissionRequest by vm.recordPermissionRequest.collectAsState()
     val psdRequest by vm.psdRequest.collectAsState()
     val scope = rememberCoroutineScope()
     val context = androidx.compose.ui.platform.LocalContext.current
@@ -287,6 +292,37 @@ private fun Studio(vm: StudioViewModel, drive: DriveUiState) {
         if (videoExportRequest) {
             vm.videoExportRequest.value = false
             videoLauncher.launch("${vm.documentName}-video.mp4")
+        }
+    }
+
+    // Audio import copies the picked file into the project; validation happens on an IO thread in the ViewModel.
+    val audioLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) vm.importAudio(uri)
+    }
+
+    LaunchedEffect(audioImportRequest) {
+        if (audioImportRequest) {
+            vm.audioImportRequest.value = false
+            audioLauncher.launch(arrayOf("audio/*"))
+        }
+    }
+
+    // RECORD_AUDIO is requested on the first record tap; a denial leaves import available.
+    val recordPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { granted -> vm.onRecordPermissionResult(granted) }
+
+    LaunchedEffect(recordPermissionRequest) {
+        if (!recordPermissionRequest) return@LaunchedEffect
+        vm.recordPermissionRequest.value = false
+        val granted = ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.RECORD_AUDIO,
+        ) == PackageManager.PERMISSION_GRANTED
+        if (granted) {
+            vm.onRecordPermissionResult(true)
+        } else {
+            recordPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
         }
     }
 

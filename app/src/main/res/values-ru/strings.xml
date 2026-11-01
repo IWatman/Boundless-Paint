@@ -739,8 +739,8 @@
     <string name="video_export_title">Экспорт видео</string>
     <string name="video_export_duration">Длительность: %1$s</string>
     <string name="video_export_frames">%1$d кадров при %2$d кадрах/с</string>
-    <string name="video_export_format">Формат: MP4 · H.264</string>
-    <string name="video_export_no_audio_note">Только видео: эта версия не экспортирует звук.</string>
+    <string name="video_export_format">Формат: MP4 · H.264 + AAC</string>
+    <string name="video_export_audio_note">Звук сводится в стерео 48 кГц; общая громкость учитывается. Звук после конца видео обрезается.</string>
     <string name="video_export_quality">Разрешение</string>
     <string name="video_export_estimate">Примерный размер: %1$s (оценка, не гарантия)</string>
     <string name="video_export_unsupported_item">%1$s: %2$s</string>
@@ -874,4 +874,38 @@
     <string name="both">С обеих</string>
     <string name="black">Чёрный</string>
     <string name="gray">Серый</string>
+
+    <!-- Video audio (S4) -->
+    <string name="video_audio_track">Звук</string>
+    <string name="video_audio_empty">Импортируйте или запишите звук.</string>
+    <string name="video_audio_import">Импорт звука</string>
+    <string name="video_audio_record">Запись звука</string>
+    <string name="video_audio_stop">Остановить запись</string>
+    <string name="video_audio_recording">Запись %1$s</string>
+    <string name="video_audio_recording_name">Запись</string>
+    <string name="video_audio_mute">Выключить звук</string>
+    <string name="video_audio_unmute">Включить звук</string>
+    <string name="video_audio_delete_clip">Удалить аудиоклип</string>
+    <string name="video_audio_trim_clip">Изменить длительность аудиоклипа</string>
+    <string name="video_audio_clip_accessible">%1$s, %2$s</string>
+    <string name="video_audio_clip_missing">Файл отсутствует</string>
+    <string name="video_audio_clip_volume">Громкость клипа</string>
+    <string name="video_audio_track_volume">Громкость дорожки</string>
+    <string name="video_audio_master_volume">Общая громкость</string>
+    <string name="video_audio_preparing">Подготовка звука…</string>
+    <string name="video_audio_preview_unavailable">Предпрослушивание звука недоступно на этом устройстве; звук всё равно попадёт в экспорт.</string>
+    <string name="video_audio_permission_denied">Для записи нужно разрешение на микрофон. Импорт звука доступен без него.</string>
+    <string name="video_audio_unsupported_codec">Аудиокодек %1$s не поддерживается.</string>
+    <string name="video_audio_channels">%1$s: каналов — %2$d; поддерживаются только моно и стерео.</string>
+    <string name="video_audio_no_track">В выбранном файле нет звуковой дорожки.</string>
+    <string name="video_audio_unreadable">Не удалось прочитать выбранный аудиофайл.</string>
+    <string name="video_audio_import_failed">Не удалось импортировать звук: %1$s</string>
+    <string name="video_audio_record_failed">Не удалось начать запись. Проверьте микрофон.</string>
+    <string name="video_audio_missing_file">Аудиофайл отсутствует: %1$s</string>
+    <string name="video_audio_mix_failed">Не удалось свести звук: %1$s</string>
+    <string name="video_export_include_audio">Включить звук</string>
+    <string name="video_export_audio_none">Нет аудиоклипов для включения.</string>
+    <string name="video_export_audio_muted">Звуковая дорожка выключена.</string>
+    <string name="video_export_audio_missing">Аудиофайл отсутствует; замените или удалите клип перед экспортом.</string>
+    <string name="video_export_audio_warning">Звук после конца видео обрезается.</string>
 </resources>
