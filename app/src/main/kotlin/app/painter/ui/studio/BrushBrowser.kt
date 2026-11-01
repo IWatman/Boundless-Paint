@@ -101,11 +101,12 @@ internal fun BrushBrowser(state: StudioUiState, actions: StudioActions, modifier
                 Toast.makeText(context, it.message ?: context.getString(R.string.brush_import_failed), Toast.LENGTH_LONG).show()
                 return@launch
             }
-            Toast.makeText(
-                context,
-                if (count > 0) context.getString(R.string.brush_imported, count) else context.getString(R.string.brush_import_empty),
-                Toast.LENGTH_LONG,
-            ).show()
+            val message = if (count > 0) {
+                context.resources.getQuantityString(R.plurals.brush_imported, count, count)
+            } else {
+                context.getString(R.string.brush_import_empty)
+            }
+            Toast.makeText(context, message, Toast.LENGTH_LONG).show()
         }
     }
     val exportBrush = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { uri ->

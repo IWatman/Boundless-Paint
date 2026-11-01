@@ -132,7 +132,8 @@ private fun App(vm: StudioViewModel, updateVm: UpdateViewModel) {
                 Toast.makeText(context, R.string.psd_import_failed, Toast.LENGTH_LONG).show()
                 return@launch
             }
-            val name = uri.lastPathSegment?.substringAfterLast('/') ?: "Imported.psd"
+            val fallbackName = "${context.getString(R.string.imported_psd_name)}.psd"
+            val name = uri.lastPathSegment?.substringAfterLast('/') ?: fallbackName
             runCatching { vm.importPsd(name, bytes) }
                 .onSuccess { id ->
                     Toast.makeText(context, R.string.psd_imported, Toast.LENGTH_SHORT).show()
@@ -159,7 +160,10 @@ private fun App(vm: StudioViewModel, updateVm: UpdateViewModel) {
         scope.launch {
             runCatching { vm.openDocument(id) }
                 .onSuccess { screen = Screen.STUDIO }
-                .onFailure { Toast.makeText(context, "Cannot open project: ${it.message}", Toast.LENGTH_LONG).show() }
+                .onFailure {
+                    val reason = it.message ?: context.getString(R.string.unknown_error)
+                    Toast.makeText(context, context.getString(R.string.open_project_failed, reason), Toast.LENGTH_LONG).show()
+                }
         }
     }
 
@@ -243,7 +247,7 @@ private fun Studio(vm: StudioViewModel, drive: DriveUiState) {
                 }
                 context.contentResolver.openOutputStream(uri)?.use { it.write(bytes) }
             }.isSuccess
-            Toast.makeText(context, if (ok) "Exported" else "Export failed", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, if (ok) R.string.export_done else R.string.export_failed, Toast.LENGTH_SHORT).show()
         }
     }
     val pngLauncher = rememberLauncherForActivityResult(
@@ -297,7 +301,12 @@ private fun Studio(vm: StudioViewModel, drive: DriveUiState) {
             // does not turn into white-on-transparent in the receiving app.
             val bytes = vm.encodeComposite(Bitmap.CompressFormat.PNG, 100, transparent = false)
             val file = withContext(Dispatchers.IO) {
-                ImageShare.write(context.cacheDir, vm.documentName, bytes)
+                ImageShare.write(
+                    context.cacheDir,
+                    vm.documentName,
+                    bytes,
+                    context.getString(R.string.drawing_default_name),
+                )
             }
             ImageShare.send(context, file)
         }.isSuccess

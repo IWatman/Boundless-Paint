@@ -9,7 +9,7 @@
     <string name="blend_screen">Экран</string>
     <string name="blend_overlay">Перекрытие</string>
     <string name="blend_darken">Затемнение</string>
-    <string name="blend_lighten">Замена светлым</string>
+    <string name="blend_lighten">Осветление</string>
     <string name="blend_color_dodge">Осветление основы</string>
     <string name="blend_color_burn">Затемнение основы</string>
     <string name="blend_soft_light">Мягкий свет</string>
@@ -34,7 +34,7 @@
     <string name="blend_hue">Цветовой тон</string>
     <string name="blend_saturation">Насыщенность</string>
     <string name="blend_color">Цветность</string>
-    <string name="blend_luminosity">Яркость</string>
+    <string name="blend_luminosity">Светимость</string>
     <string name="blend_erase">Стирание</string>
     <string name="blend_mask">Маска</string>
     <string name="blend_line_art">Контур</string>
@@ -83,12 +83,22 @@
     <string name="saturation">Насыщенность</string>
     <string name="brightness">Яркость</string>
     <string name="brush_browser">Кисти</string>
+    <string name="brush_category_created">Созданные</string>
+    <string name="brush_category_imported">Импортированные</string>
+    <string name="brush_default_name">Кисть</string>
+    <string name="brush_default_blend_name">Смешивание</string>
+    <string name="imported_brush_name">Импортированная кисть</string>
     <string name="brush_edit">Изменить</string>
     <string name="brush_import">Импортировать кисть…</string>
     <string name="brush_import_texture">Импортировать изображение как текстуру…</string>
     <string name="brush_export">Экспортировать кисть</string>
     <string name="brush_export_pack">Экспортировать набор созданных и импортированных</string>
-    <string name="brush_imported">Импортировано кистей: %1$d</string>
+    <plurals name="brush_imported">
+        <item quantity="one">Импортирована %1$d кисть.</item>
+        <item quantity="few">Импортированы %1$d кисти.</item>
+        <item quantity="many">Импортировано %1$d кистей.</item>
+        <item quantity="other">Импортировано %1$d кистей.</item>
+    </plurals>
     <string name="brush_import_empty">В файле не найдено кистей</string>
     <string name="brush_import_failed">Не удалось прочитать файл кисти</string>
     <string name="brush_exported">Кисть экспортирована</string>
@@ -250,6 +260,11 @@
     <string name="delete_brush_message">«%1$s» будет удалена без возможности восстановления.</string>
     <string name="duplicate">Дублировать</string>
     <string name="export_image">Экспорт изображения</string>
+    <string name="export_done">Экспортировано</string>
+    <string name="export_failed">Ошибка экспорта</string>
+    <string name="export_format_png">PNG</string>
+    <string name="export_format_jpg">JPG</string>
+    <string name="export_format_cmyk_tiff">CMYK TIFF</string>
     <string name="share_image">Поделиться изображением</string>
     <string name="share_via">Поделиться рисунком через</string>
     <string name="share_failed">Не удалось поделиться рисунком</string>
@@ -259,6 +274,7 @@
     <string name="psd_export_failed">Не удалось экспортировать PSD</string>
     <string name="psd_imported">PSD импортирован</string>
     <string name="psd_import_failed">Не удалось импортировать PSD</string>
+    <string name="imported_psd_name">Импортированный PSD</string>
     <string name="light_background">Светлый фон холста</string>
     <string name="double_tap_fit">Двойной тап — вписать</string>
     <string name="gamma_correct">Гамма-корректное смешивание</string>
@@ -273,7 +289,7 @@
     <string name="canvas_straighten">Выровнять</string>
     <string name="canvas_size_hint">Холст: %1$d × %2$d px</string>
     <string name="canvas_bad_rect">Обрезка должна быть внутри холста</string>
-    <string name="canvas_bad_size">Ширина и высота должны быть 1–16384</string>
+    <string name="canvas_bad_size">Ширина и высота должны быть 1–16384 px</string>
     <string name="scale_content">Масштабировать рисунок</string>
     <string name="anchor">Привязка</string>
     <string name="left">Слева</string>
@@ -331,7 +347,8 @@
     <string name="gutter">Промежутки</string>
     <string name="count">Количество</string>
     <string name="thickness">Толщина</string>
-    <string name="inner_radius">Внутренний радиус</string>    <string name="radius">Радиус</string>
+    <string name="inner_radius">Внутренний радиус</string>
+    <string name="radius">Радиус</string>
     <string name="distance">Смещение</string>
     <string name="angle">Угол</string>
     <string name="cell_size">Ячейка</string>
@@ -370,6 +387,7 @@
     <string name="layer_menu">Параметры слоя</string>
     <string name="layers">Слои</string>
     <string name="max_layers">Максимум слоёв для этого размера: %1$d</string>
+    <string name="stroke_out_of_memory">Не хватает памяти для штриха: отмените несколько шагов или закройте слой-фильтр</string>
     <string name="size_range">Ширина и высота: от %1$d до %2$d px</string>
     <string name="merge_down">Объединить с нижним</string>
     <string name="mode_paint">Кисть</string>
@@ -459,6 +477,7 @@
     <string name="recent">Недавние</string>
     <string name="recent_colors">Недавние цвета</string>
     <string name="open">Открыть</string>
+    <string name="open_project_failed">Не удалось открыть проект: %1$s</string>
     <string name="options">Меню</string>
     <string name="palette">Палитра</string>
     <string name="palette_empty">Палитра пуста. Нажмите +, чтобы добавить текущий цвет.</string>
@@ -542,6 +561,7 @@
     <string name="tab_sliders">Слайдеры</string>
     <string name="tab_palette">Палитра</string>
     <string name="untitled">Без названия</string>
+    <string name="drawing_default_name">Рисунок</string>
     <string name="visibility">Видимость</string>
     <string name="update_check">Проверить обновления</string>
     <string name="update_checking">Проверка обновлений…</string>
@@ -557,6 +577,7 @@
     <string name="update_now">Обновить</string>
     <string name="update_retry">Повторить</string>
     <string name="update_up_to_date">У вас последняя версия.</string>
+    <string name="unknown_error">Неизвестная ошибка</string>
     <string name="update_signature_mismatch">Установленная версия подписана другим ключом (тестовая сборка). Удалите приложение и установите Boundless Paint заново с GitHub.</string>
     <string name="update_done">Обновлено до версии %1$s.</string>
     <string name="updates">Обновления</string>
@@ -636,7 +657,7 @@
     <string name="fill_outside_selection">Залить вне выделения</string>
     <string name="tool_lasso_fill">Заливка лассо</string>
     <string name="tool_lasso_erase">Стирание лассо</string>
-    <string name="filter_screentone">Тон</string>
+    <string name="filter_screentone">Растр</string>
     <string name="dots">Точки</string>
     <string name="lines">Линии</string>
     <string name="cross">Крест</string>

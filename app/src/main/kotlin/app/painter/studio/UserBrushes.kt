@@ -70,7 +70,11 @@ class UserBrushes(private val dir: File) {
      * the refs to them become `asset:user/<id>/<file>` and the brush gets a fresh `imported.<uuid>` id.
      * Returns the stored brush, or null when nothing could be written.
      */
-    fun saveImported(fileName: String, imported: BrushImport.Imported): Brush? = synchronized(lock) {
+    fun saveImported(
+        fileName: String,
+        imported: BrushImport.Imported,
+        fallbackName: String = "Imported brush",
+    ): Brush? = synchronized(lock) {
         val id = UserBrushCodec.newImportedId()
         val assetFiles = LinkedHashMap<String, String>()
         for ((source, bytes) in imported.files) {
@@ -95,7 +99,7 @@ class UserBrushes(private val dir: File) {
         }
         val base = imported.brush
         val name = base.name.text.trim().take(UserBrushCodec.MAX_NAME)
-            .ifBlank { fileName.substringBeforeLast('.').ifBlank { "Imported brush" } }
+            .ifBlank { fileName.substringBeforeLast('.').ifBlank { fallbackName } }
         val brush = base.copy(
             id = id,
             parentId = base.parentId,

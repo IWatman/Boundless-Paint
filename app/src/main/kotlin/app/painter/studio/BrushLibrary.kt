@@ -27,21 +27,26 @@ import java.util.Locale
  * The user brushes of [userBrushes] are published as a first "Created" category (§4.2) once they exist and are
  * in the same [find] index; they keep `asset:` references, so [resources] decodes them like any preset.
  */
-class BrushLibrary(private val assets: AssetManager, private val userBrushes: UserBrushes? = null) {
+class BrushLibrary(
+    private val assets: AssetManager,
+    private val userBrushes: UserBrushes? = null,
+    private val createdName: String = "Created",
+    private val importedName: String = "Imported",
+) {
 
     /** One catalog category with its localized [name] and its presets in index order. */
     class Category(val id: String, val name: String, val brushes: List<Brush>)
 
     private val lock = Any()
     private var loaded = false
-    /** Language of the last [load]; the "Created" category name follows it. */
+    /** Language of the last [load], used for the built-in preset categories. */
     private var lang = "en"
     /** Built-in categories of the index, in index order; user brushes are published in front of them. */
     private var presetCategories: List<Category> = emptyList()
     /** The "Created" category: the user brushes of [userBrushes], empty when there are none. */
-    private var createdCategory = Category(UserBrushCodec.CATEGORY, "Created", emptyList())
+    private var createdCategory = Category(UserBrushCodec.CATEGORY, createdName, emptyList())
     /** The "Imported" category (spec/tools/brush-import.md), empty when nothing was imported. */
-    private var importedCategory = Category(UserBrushCodec.CATEGORY_IMPORTED, "Imported", emptyList())
+    private var importedCategory = Category(UserBrushCodec.CATEGORY_IMPORTED, importedName, emptyList())
     /** Categories made from [userBrushes], in display order. */
     private val userCategories: List<Category>
         get() = listOfNotNull(
@@ -124,12 +129,8 @@ class BrushLibrary(private val assets: AssetManager, private val userBrushes: Us
             importedCategory.brushes.forEach { byId.remove(it.id) }
             val created = brushes.filter { !UserBrushCodec.isImported(it.id) }
             val imported = brushes.filter { UserBrushCodec.isImported(it.id) }
-            createdCategory = Category(UserBrushCodec.CATEGORY, if (lang == "ru") "Созданные" else "Created", created)
-            importedCategory = Category(
-                UserBrushCodec.CATEGORY_IMPORTED,
-                if (lang == "ru") "Импортированные" else "Imported",
-                imported,
-            )
+            createdCategory = Category(UserBrushCodec.CATEGORY, createdName, created)
+            importedCategory = Category(UserBrushCodec.CATEGORY_IMPORTED, importedName, imported)
             brushes.forEach { byId[it.id] = it }
         }
     }

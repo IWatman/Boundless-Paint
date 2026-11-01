@@ -34,7 +34,7 @@ fun ExportDialog(
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     ExportFormat.entries.forEach { format ->
                         ToggleChip(
-                            label = format.name,
+                            label = stringResource(format.labelRes()),
                             checked = options.format == format,
                             onToggle = { onChange(options.copy(format = format)) },
                         )
@@ -64,4 +64,11 @@ fun ExportDialog(
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
     )
+}
+
+/** The format chips show a readable label, not the enum constant (`CMYK_TIFF`). */
+private fun ExportFormat.labelRes(): Int = when (this) {
+    ExportFormat.PNG -> R.string.export_format_png
+    ExportFormat.JPG -> R.string.export_format_jpg
+    ExportFormat.CMYK_TIFF -> R.string.export_format_cmyk_tiff
 }

@@ -349,7 +349,12 @@ class StudioViewModel(
     private val userBrushes = UserBrushes(app.filesDir.resolve("brushes").resolve(UserBrushCodec.CATEGORY))
 
     /** Built-in preset catalog; read off the main thread once at start-up. */
-    private val brushes = BrushLibrary(app.assets, userBrushes)
+    private val brushes = BrushLibrary(
+        app.assets,
+        userBrushes,
+        app.getString(R.string.brush_category_created),
+        app.getString(R.string.brush_category_imported),
+    )
 
     /** Preset the PAINT and ERASE modes paint with, null until the library has picked its favourites. */
     private var paintBrush: Brush? = null
@@ -424,7 +429,7 @@ class StudioViewModel(
     }
 
     fun newDocument(name: String, width: Int, height: Int) {
-        val d = Document.create(width, height, name.ifBlank { "Untitled" }, defaultLayerName(1))
+        val d = Document.create(width, height, name.ifBlank { uiString(R.string.untitled) }, defaultLayerName(1))
         // The first layer already carries the localized default name; the layers panel opens collapsed.
         setDocument(d, onDisk = false)
         _state.update { it.copy(layerPanelOpen = false) }
@@ -726,7 +731,7 @@ class StudioViewModel(
         }
         android.widget.Toast.makeText(
             getApplication(),
-            "Not enough memory for this stroke; undo some steps or close a filter layer",
+            uiString(R.string.stroke_out_of_memory),
             android.widget.Toast.LENGTH_LONG,
         ).show()
     }
@@ -947,7 +952,9 @@ class StudioViewModel(
     override suspend fun importBrush(fileName: String, bytes: ByteArray, asTexture: Boolean): Int {
         val parsed = withContext(Dispatchers.IO) { BrushImport.parse(fileName, bytes, asTexture) }
         val stored = withContext(Dispatchers.IO) {
-            parsed.brushes.mapNotNull { userBrushes.saveImported(fileName, it) }
+            parsed.brushes.mapNotNull {
+                userBrushes.saveImported(fileName, it, uiString(R.string.imported_brush_name))
+            }
         }
         if (stored.isEmpty()) return 0
         brushes.setCreated(userBrushes.brushes)
@@ -968,14 +975,19 @@ class StudioViewModel(
 
     override fun exportBrushName(): String {
         val brush = currentBrush
-        val base = brush?.name?.text?.ifBlank { null } ?: if (_state.value.mode == BrushModeUi.BLEND) "Blend" else "Brush"
+        val fallback = if (_state.value.mode == BrushModeUi.BLEND) {
+            uiString(R.string.brush_default_blend_name)
+        } else {
+            uiString(R.string.brush_default_name)
+        }
+        val base = brush?.name?.text?.ifBlank { null } ?: fallback
         return base.replace(Regex("[\\\\/:*?\"<>|]"), "_").take(64)
     }
 
     override fun exportBrushBytes(): ByteArray? {
         val brush = currentBrush ?: Brush(
             id = "export.blend",
-            name = BrushName(if (Locale.getDefault().language == "ru") "Смешивание" else "Blend"),
+            name = BrushName(uiString(R.string.brush_default_blend_name)),
             params = blendParams,
         )
         return runCatching {
@@ -2271,23 +2283,23 @@ class StudioViewModel(
         saveBrushPrefs()
         val p = currentParams()
         val zoom = _state.value.viewZoom
-        showHud(HudUi("Size", "${p.size.toInt()} px", p.size * zoom, p.sizeMax * zoom))
+        showHud(HudUi(uiString(R.string.size), "${p.size.toInt()} px", p.size * zoom, p.sizeMax * zoom))
     }
 
     override fun setOpacity(opacity: Float) {
         updateParams { it.copy(opacity = opacity.coerceIn(0f, 1f)) }
         saveBrushPrefs()
-        showHud(HudUi("Opacity", "${(opacity * 100).toInt()}%"))
+        showHud(HudUi(uiString(R.string.opacity), "${(opacity * 100).toInt()}%"))
     }
 
     override fun setFlow(flow: Float) {
         updateParams { it.copy(flow = flow.coerceIn(0f, 1f)) }
-        showHud(HudUi("Flow", "${(flow * 100).toInt()}%"))
+        showHud(HudUi(uiString(R.string.flow), "${(flow * 100).toInt()}%"))
     }
 
     override fun setHardness(hardness: Float) {
         updateParams { it.copy(hardness = hardness.coerceIn(0f, 1f)) }
-        showHud(HudUi("Hardness", "${(hardness * 100).toInt()}%"))
+        showHud(HudUi(uiString(R.string.hardness), "${(hardness * 100).toInt()}%"))
     }
 
     override fun setColor(color: Rgba, commit: Boolean) {
@@ -3330,7 +3342,7 @@ class StudioViewModel(
      */
     suspend fun importPsd(fileName: String, bytes: ByteArray): String = withContext(Dispatchers.IO) {
         val imported = PsdIO.read(java.io.ByteArrayInputStream(bytes))
-        imported.name = fileName.substringBeforeLast('.').ifBlank { "Imported PSD" }
+        imported.name = fileName.substringBeforeLast('.').ifBlank { uiString(R.string.imported_psd_name) }
         val dir = store.dirFor(imported.id)
         ioLock.withLock { ProjectIO.save(imported, dir, null) }
         refreshProjects()
@@ -3768,7 +3780,7 @@ class StudioViewModel(
 
     /** Keeps a drawing name safe for a Drive file; the timestamp already makes it unique. */
     private fun driveFileName(name: String): String =
-        name.replace(Regex("""[\\/:*?"<>|]"""), "-").trim().ifBlank { "Drawing" }
+        name.replace(Regex("""[\\/:*?"<>|]"""), "-").trim().ifBlank { uiString(R.string.drawing_default_name) }
 
     /** Records a frame after a change, at most twice a second; a newer change replaces a pending capture. */
     private fun scheduleTimelapse(force: Boolean = false) {

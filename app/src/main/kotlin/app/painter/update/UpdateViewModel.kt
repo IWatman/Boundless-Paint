@@ -170,7 +170,9 @@ class UpdateViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private fun Throwable.readableMessage(): String =
-        message?.takeIf { it.isNotBlank() } ?: this::class.simpleName ?: "Unknown error"
+        message?.takeIf { it.isNotBlank() }
+            ?: this::class.simpleName
+            ?: getApplication<Application>().getString(R.string.unknown_error)
 
     private companion object {
         /** An install with no answer for this long is considered lost. */

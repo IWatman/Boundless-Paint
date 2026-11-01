@@ -17,24 +17,29 @@ import java.io.File
 object ImageShare {
 
     /** Writes [bytes] as the only file in the share cache and returns it, ready for [send]. */
-    fun write(cacheDir: File, name: String, bytes: ByteArray): File {
+    fun write(
+        cacheDir: File,
+        name: String,
+        bytes: ByteArray,
+        fallbackName: String = "Drawing",
+    ): File {
         val dir = File(cacheDir, DIR).apply { mkdirs() }
         dir.listFiles()?.forEach { it.delete() }
-        val file = File(dir, fileName(name))
+        val file = File(dir, fileName(name, fallbackName))
         file.writeBytes(bytes)
         return file
     }
 
     /**
      * A name every Android filesystem and receiving app accepts: path separators, reserved characters and
-     * control characters become `_`, a blank name falls back to `Drawing`, and the whole base stays short
+     * control characters become `_`, a blank name falls back to [fallbackName], and the whole base stays short
      * enough for apps that copy the attachment into their own storage.
      */
-    fun fileName(name: String): String {
+    fun fileName(name: String, fallbackName: String = "Drawing"): String {
         val base = name.trim()
             .replace(Regex("[\\\\/:*?\"<>|\\p{Cntrl}]"), "_")
             .trim('.', ' ')
-            .ifBlank { "Drawing" }
+            .ifBlank { fallbackName }
             .take(MAX_NAME)
         return "$base.png"
     }

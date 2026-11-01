@@ -10,6 +10,15 @@
   `IWatman/Boundless-Paint` repository.
 
 ## M5: in progress (2026-11-01)
+### Localization cleanup (2026-11-01)
+- The static UI strings in `app/src/main/kotlin` now come from resources: export toasts, HUD labels, default
+  project and brush names, brush-import counts, the stroke out-of-memory error and the CMYK TIFF label. The
+  Russian wording was fixed for Lighten, Luminosity and Screentone, and brush-import counts use a proper
+  plural.
+- `tools/check_localization.py` compares `values/strings.xml` with `values-ru/strings.xml`: missing and extra
+  names, empty translations, format placeholders and Russian plural categories. It exits non-zero on a
+  mismatch. Current sets: **707 EN resources, 706 RU**; the only difference is the non-translatable `app_name`.
+
 ### Pattern fill (2026-11-01)
 - Core: `core/fill/PatternFill.kt` generates six seamless procedural patterns (checks, dots, diagonal stripes,
   brick, herringbone, canvas grain) and fills a layer through the selection with alpha lock, reusing

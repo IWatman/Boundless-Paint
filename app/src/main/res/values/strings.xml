@@ -84,12 +84,20 @@
     <string name="saturation">Saturation</string>
     <string name="brightness">Brightness</string>
     <string name="brush_browser">Brushes</string>
+    <string name="brush_category_created">Created</string>
+    <string name="brush_category_imported">Imported</string>
+    <string name="brush_default_name">Brush</string>
+    <string name="brush_default_blend_name">Blend</string>
+    <string name="imported_brush_name">Imported brush</string>
     <string name="brush_edit">Edit</string>
     <string name="brush_import">Import brush…</string>
     <string name="brush_import_texture">Import image as texture…</string>
     <string name="brush_export">Export brush</string>
     <string name="brush_export_pack">Export imported + created pack</string>
-    <string name="brush_imported">Imported %1$d brush(es)</string>
+    <plurals name="brush_imported">
+        <item quantity="one">Imported %1$d brush.</item>
+        <item quantity="other">Imported %1$d brushes.</item>
+    </plurals>
     <string name="brush_import_empty">No brushes found in the file</string>
     <string name="brush_import_failed">Cannot read this brush file</string>
     <string name="brush_exported">Brush exported</string>
@@ -251,6 +259,11 @@
     <string name="delete_brush_message">“%1$s” will be deleted permanently.</string>
     <string name="duplicate">Duplicate</string>
     <string name="export_image">Export image</string>
+    <string name="export_done">Exported</string>
+    <string name="export_failed">Export failed</string>
+    <string name="export_format_png">PNG</string>
+    <string name="export_format_jpg">JPG</string>
+    <string name="export_format_cmyk_tiff">CMYK TIFF</string>
     <string name="share_image">Share image</string>
     <string name="share_via">Share drawing via</string>
     <string name="share_failed">Could not share the drawing</string>
@@ -260,6 +273,7 @@
     <string name="psd_export_failed">Could not export the PSD</string>
     <string name="psd_imported">PSD imported</string>
     <string name="psd_import_failed">Could not import the PSD</string>
+    <string name="imported_psd_name">Imported PSD</string>
     <string name="light_background">Light canvas background</string>
     <string name="double_tap_fit">Double tap to fit</string>
     <string name="gamma_correct">Gamma-correct blending</string>
@@ -274,14 +288,15 @@
     <string name="canvas_straighten">Straighten</string>
     <string name="canvas_size_hint">Canvas: %1$d × %2$d px</string>
     <string name="canvas_bad_rect">The crop must be inside the canvas</string>
-    <string name="canvas_bad_size">Width and height must be 1–16384</string>
+    <string name="canvas_bad_size">Width and height must be 1–16384 px</string>
     <string name="scale_content">Scale the artwork</string>
     <string name="anchor">Anchor</string>
     <string name="left">Left</string>
     <string name="top">Top</string>
     <string name="right">Right</string>
     <string name="bottom">Bottom</string>
-    <string name="text_hint">Text</string>    <string name="filter_blur">Blur</string>
+    <string name="text_hint">Text</string>
+    <string name="filter_blur">Blur</string>
     <string name="filter_motion">Motion blur</string>
     <string name="filter_pixelate">Pixelate</string>
     <string name="filter_sharpen">Sharpen</string>
@@ -331,7 +346,8 @@
     <string name="gutter">Gutter</string>
     <string name="count">Count</string>
     <string name="thickness">Thickness</string>
-    <string name="inner_radius">Inner radius</string>    <string name="radius">Radius</string>
+    <string name="inner_radius">Inner radius</string>
+    <string name="radius">Radius</string>
     <string name="distance">Distance</string>
     <string name="angle">Angle</string>
     <string name="cell_size">Cell</string>
@@ -370,6 +386,7 @@
     <string name="layer_menu">Layer options</string>
     <string name="layers">Layers</string>
     <string name="max_layers">Max layers for this size: %1$d</string>
+    <string name="stroke_out_of_memory">Not enough memory for this stroke; undo some steps or close a filter layer</string>
     <string name="size_range">Width and height must be %1$d to %2$d px</string>
     <string name="merge_down">Merge down</string>
     <string name="mode_paint">Paint</string>
@@ -460,6 +477,7 @@
     <string name="recent">Recent</string>
     <string name="recent_colors">Recent colors</string>
     <string name="open">Open</string>
+    <string name="open_project_failed">Cannot open project: %1$s</string>
     <string name="options">Options</string>
     <string name="palette">Palette</string>
     <string name="palette_empty">Palette is empty. Tap + to add the current color.</string>
@@ -485,7 +503,7 @@
     <string name="close">Close</string>
     <string name="stylus_settings">Pen and touch settings…</string>
     <string name="settings_appearance">Appearance</string>
-    <string name="settings_color">Colour</string>
+    <string name="settings_color">Color</string>
     <string name="settings_stylus">Stylus and touch</string>
     <string name="settings_timelapse">Timelapse</string>
     <string name="timelapse_record">Record a frame after each change</string>
@@ -543,6 +561,7 @@
     <string name="tab_sliders">Sliders</string>
     <string name="tab_palette">Palette</string>
     <string name="untitled">Untitled</string>
+    <string name="drawing_default_name">Drawing</string>
     <string name="visibility">Visibility</string>
     <string name="update_signature_mismatch">The installed app is signed with a different key (a test build). Uninstall it and install Boundless Paint again from GitHub.</string>
     <string name="update_done">Updated to version %1$s.</string>
@@ -561,6 +580,7 @@
     <string name="update_now">Update</string>
     <string name="update_retry">Retry</string>
     <string name="update_up_to_date">You have the latest version.</string>
+    <string name="unknown_error">Unknown error</string>
     <!-- Vector layers -->
     <string name="add_vector_layer">Add vector layer</string>
     <string name="vector_layer_default_name">Vector %1$d</string>
