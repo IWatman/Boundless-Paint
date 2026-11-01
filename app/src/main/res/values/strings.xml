@@ -251,6 +251,9 @@
     <string name="delete_brush_message">“%1$s” will be deleted permanently.</string>
     <string name="duplicate">Duplicate</string>
     <string name="export_image">Export image</string>
+    <string name="share_image">Share image</string>
+    <string name="share_via">Share drawing via</string>
+    <string name="share_failed">Could not share the drawing</string>
     <string name="export_psd">Export PSD…</string>
     <string name="import_psd">Import PSD…</string>
     <string name="psd_exported">PSD exported</string>

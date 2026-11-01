@@ -970,6 +970,10 @@ private fun StudioTopBar(
                             onClick = { menuOpen = false; actions.exportImage() },
                         )
                         DropdownMenuItem(
+                            text = { Text(stringResource(R.string.share_image)) },
+                            onClick = { menuOpen = false; actions.shareImage() },
+                        )
+                        DropdownMenuItem(
                             text = { Text(stringResource(R.string.export_psd)) },
                             onClick = { menuOpen = false; actions.exportPsd() },
                         )

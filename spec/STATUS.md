@@ -123,12 +123,16 @@
   `DriveSettings` independently of the account) backs the open project up after an explicit Save or leaving the
   studio. Autosave, undo and project switches do not upload; an upload in flight is not duplicated, and disconnect
   cancels a pending one.
+- **Share image**: Options → Share image flattens the current frame onto the paper, writes a PNG to
+  `cacheDir/share` and opens the Android share sheet with a read-only `FileProvider` URI. The receiving app needs
+  no storage permission; the share name is sanitized, and the cache keeps only the current image.
 - Drive was exercised end to end on `painter_tab` with the test Google account: Play services account chooser and
   consent, visible `Boundless Paint/Projects` and `Drawings` folders, back up all/current, PNG save, restore as
   `Untitled (Drive)`, disconnect/reconnect, and the cancelled-sign-in path. A rejected cached token is cleared
   with `GoogleAuthUtil.clearToken` and re-authorized; disconnect clears only the local link. A reconnect found
-  the existing folder ids unchanged (`1vp-…`, `1viK…`, `15Hh…`) and created nothing. M4 tests:
-  **606 JVM tests** (511 core, 95 app).
+  the existing folder ids unchanged (`1vp-…`, `1viK…`, `15Hh…`) and created nothing. **Share image** was checked
+  on `painter_tab`: the system chooser listed Drive, Print, Messages, Nearby Share and Maps, and the print
+  spooler rendered the 2560×1432 opaque PNG from the cache. M4 tests: **611 JVM tests** (511 core, 100 app).
 
 ## M2: done (2026-10-31)
 - Build: `. .\tools\env.ps1; .\gradlew.bat :core:test :app:testDebugUnitTest :app:assembleDebug`.

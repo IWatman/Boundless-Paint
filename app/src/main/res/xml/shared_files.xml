@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The share cache (cacheDir/share); FileProvider hands these files to the app the user picks. -->
+<paths>
+    <cache-path name="share" path="share/" />
+</paths>

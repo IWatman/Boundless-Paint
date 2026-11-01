@@ -727,6 +727,8 @@ interface StudioActions {
     fun openHome()
     fun save()
     fun exportImage()
+    /** Sends the flattened drawing to another app through the Android share sheet. */
+    fun shareImage() {}
     /** Asks the activity for a PSD destination and writes the layered document there. */
     fun exportPsd() {}
     /** Starts the export with the options of the dialog; the activity opens the system file picker. */

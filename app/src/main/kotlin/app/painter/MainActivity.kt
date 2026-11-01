@@ -24,6 +24,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.viewinterop.AndroidView
 import app.painter.drive.DriveAuthController
 import app.painter.render.CanvasView
+import app.painter.share.ImageShare
 import app.painter.studio.ExportFormat
 import app.painter.studio.ExportOptions
 import app.painter.studio.StudioViewModel
@@ -220,6 +221,7 @@ private fun App(vm: StudioViewModel, updateVm: UpdateViewModel) {
 private fun Studio(vm: StudioViewModel, drive: DriveUiState) {
     val state by vm.state.collectAsState()
     val exportRequest by vm.exportRequest.collectAsState()
+    val shareRequest by vm.shareRequest.collectAsState()
     val exportOptions by vm.exportOptions.collectAsState()
     val psdRequest by vm.psdRequest.collectAsState()
     val scope = rememberCoroutineScope()
@@ -286,6 +288,22 @@ private fun Studio(vm: StudioViewModel, drive: DriveUiState) {
                 ExportFormat.PNG -> pngLauncher.launch(name)
             }
         }
+    }
+
+    LaunchedEffect(shareRequest) {
+        if (!shareRequest) return@LaunchedEffect
+        val ok = runCatching {
+            // Share what the studio shows: the paper belongs to the image, so a drawing on a light canvas
+            // does not turn into white-on-transparent in the receiving app.
+            val bytes = vm.encodeComposite(Bitmap.CompressFormat.PNG, 100, transparent = false)
+            val file = withContext(Dispatchers.IO) {
+                ImageShare.write(context.cacheDir, vm.documentName, bytes)
+            }
+            ImageShare.send(context, file)
+        }.isSuccess
+        if (!ok) Toast.makeText(context, R.string.share_failed, Toast.LENGTH_SHORT).show()
+        // Reset last: clearing the flag restarts this effect, which would cancel the encode still in flight.
+        vm.shareRequest.value = false
     }
 
     StudioScreen(state = state, actions = vm, drive = drive) {

@@ -250,6 +250,9 @@
     <string name="delete_brush_message">«%1$s» будет удалена без возможности восстановления.</string>
     <string name="duplicate">Дублировать</string>
     <string name="export_image">Экспорт изображения</string>
+    <string name="share_image">Поделиться изображением</string>
+    <string name="share_via">Поделиться рисунком через</string>
+    <string name="share_failed">Не удалось поделиться рисунком</string>
     <string name="export_psd">Экспорт PSD…</string>
     <string name="import_psd">Импорт PSD…</string>
     <string name="psd_exported">PSD экспортирован</string>

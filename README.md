@@ -47,6 +47,7 @@ The app is completely free: no subscriptions, ads, watermarks or paid features.
 - Google Drive backup: in-app Google sign-in, one archive per project in `Boundless Paint/Projects`, PNG saves in `Boundless Paint/Drawings`, optional auto-sync after every save, restore from Home or Settings; setup in [docs/google-drive.md](docs/google-drive.md) (M4)
 - Unfinished brush-editor controls are disabled and marked with a small construction icon (M3.7)
 - Autosave 2 seconds after a change, PNG/JPG export with quality and transparency options
+- Share the finished drawing to any app through the Android share sheet
 - In-app update from GitHub Releases
 
 **Next (M5)**

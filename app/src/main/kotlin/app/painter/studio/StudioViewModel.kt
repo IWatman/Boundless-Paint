@@ -375,6 +375,9 @@ class StudioViewModel(
     /** Set by the UI when the user picks Export; the activity launches the system file picker. */
     val exportRequest = MutableStateFlow(false)
 
+    /** Set by Share image; the activity encodes a PNG into the share cache and opens the chooser. */
+    val shareRequest = MutableStateFlow(false)
+
     /** Set by Export as PSD; the activity launches the PSD file picker. */
     val psdRequest = MutableStateFlow(false)
 
@@ -3265,6 +3268,12 @@ class StudioViewModel(
     override fun exportImage() {
         // The dialog picks the format, the JPG quality and the transparent background (spec T10).
         exportOptions.value = pendingExport ?: ExportOptions()
+    }
+
+    override fun shareImage() {
+        // A shape, transform, gradient or liquify in progress is part of the drawing the user sees.
+        commitDocumentEdits()
+        shareRequest.value = true
     }
 
     override fun exportPsd() {
