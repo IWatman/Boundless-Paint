@@ -8,6 +8,7 @@ import app.painter.core.doc.GroupNode
 import app.painter.core.doc.Video
 import app.painter.core.doc.VideoAudio
 import java.io.File
+import java.util.zip.ZipFile
 import kotlin.io.path.createTempDirectory
 import kotlin.test.AfterTest
 import kotlin.test.Test
@@ -191,5 +192,29 @@ class VideoProjectIOTest {
         assertEquals("Renamed track", loaded.video!!.tracks.single().name)
         assertFalse(loaded.video!!.tracks.single().visible)
         assertEquals(2, loaded.video!!.audio!!.clips.size)
+    }
+
+    @Test
+    fun audioDirectorySurvivesSaveDeltaAndPntExport() {
+        val doc = withAudio(videoDoc())
+        val dir = File(root, "audio-files")
+        ProjectIO.save(doc, dir, null)
+        val audioFile = File(dir, "audio/voice.m4a")
+        audioFile.parentFile.mkdirs()
+        audioFile.writeBytes(byteArrayOf(1, 2, 3, 4))
+
+        // An autosave writes a new manifest and carries the non-owned audio directory to the new tree.
+        val tracker = SaveTracker()
+        tracker.commitAll(doc)
+        doc.video = doc.video!!.copy(audio = doc.video!!.audio!!.copy(masterVolume = 0.5f))
+        ProjectIO.saveDelta(doc, dir, tracker.collect(doc))
+        assertTrue(File(dir, "audio/voice.m4a").isFile, "saveDelta dropped audio/")
+        assertEquals(0.5f, ProjectIO.load(dir).video!!.audio!!.masterVolume)
+
+        val archive = File(root, "audio.pnt")
+        archive.outputStream().use { ProjectIO.exportPnt(dir, it) }
+        ZipFile(archive).use { zip ->
+            assertNotNull(zip.getEntry("audio/voice.m4a"), ".pnt has no audio entry")
+        }
     }
 }

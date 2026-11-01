@@ -10,6 +10,7 @@ import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -22,14 +23,19 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.VolumeOff
+import androidx.compose.material.icons.automirrored.outlined.VolumeUp
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.FileDownload
+import androidx.compose.material.icons.outlined.LibraryMusic
 import androidx.compose.material.icons.outlined.Loop
+import androidx.compose.material.icons.outlined.Mic
 import androidx.compose.material.icons.outlined.Movie
 import androidx.compose.material.icons.outlined.Pause
 import androidx.compose.material.icons.outlined.PlayArrow
@@ -38,6 +44,7 @@ import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -72,6 +79,7 @@ import app.painter.ui.components.PainterIconButton
 import app.painter.ui.components.PanelSurface
 import java.util.Locale
 import kotlin.math.ceil
+import kotlin.math.roundToInt
 import kotlin.math.roundToLong
 
 private val VIDEO_RULER_HEIGHT = 28.dp
@@ -98,6 +106,7 @@ internal fun VideoPanel(
             VideoHeader(video, actions, onExport)
             VideoTransport(video, actions)
             VideoEditBar(video, actions)
+            VideoAudioBar(video, actions)
             Row(Modifier.fillMaxWidth().padding(top = 2.dp)) {
                 Column(Modifier.width(VIDEO_TRACK_HEADER_WIDTH)) {
                     Spacer(Modifier.height(VIDEO_RULER_HEIGHT))
@@ -108,6 +117,11 @@ internal fun VideoPanel(
                             modifier = Modifier.fillMaxWidth().height(VIDEO_LANE_HEIGHT),
                         )
                     }
+                    VideoAudioHeader(
+                        audio = video.audio,
+                        actions = actions,
+                        modifier = Modifier.fillMaxWidth().height(VIDEO_LANE_HEIGHT),
+                    )
                 }
                 Box(Modifier.weight(1f)) {
                     Column {
@@ -127,6 +141,11 @@ internal fun VideoPanel(
                                 modifier = Modifier.fillMaxWidth().height(VIDEO_LANE_HEIGHT),
                             )
                         }
+                        VideoAudioLane(
+                            video = video,
+                            actions = actions,
+                            modifier = Modifier.fillMaxWidth().height(VIDEO_LANE_HEIGHT),
+                        )
                     }
                     PlayheadOverlay(video, Modifier.matchParentSize())
                 }
@@ -165,7 +184,7 @@ private fun VideoHeader(video: VideoUi, actions: StudioActions, onExport: () -> 
             stringResource(R.string.video_export_action),
             onClick = onExport,
             modifier = Modifier.size(36.dp),
-            enabled = video.durationTicks > 0L,
+            enabled = video.durationTicks > 0L && !video.recordingAudio,
         )
         PainterIconButton(
             Icons.Outlined.Close,
@@ -180,7 +199,7 @@ private fun VideoHeader(video: VideoUi, actions: StudioActions, onExport: () -> 
 @Composable
 private fun VideoTransport(video: VideoUi, actions: StudioActions) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        val enabled = video.durationTicks > 0L
+        val enabled = video.durationTicks > 0L && !video.recordingAudio
         PainterIconButton(
             Icons.Outlined.Stop,
             stringResource(R.string.video_stop),
@@ -258,6 +277,383 @@ private fun VideoEditBar(video: VideoUi, actions: StudioActions) {
             label = stringResource(R.string.video_snap),
             checked = video.snapEnabled,
             onToggle = { actions.setVideoSnap(!video.snapEnabled) },
+        )
+    }
+}
+
+/** Import/record, audio clip actions and the three real gain controls of the audio track. */
+@Composable
+private fun VideoAudioBar(video: VideoUi, actions: StudioActions) {
+    val audio = video.audio
+    val clips = audio?.clips ?: emptyList()
+    val hasClips = clips.isNotEmpty()
+    val selected = clips.firstOrNull { it.id == video.selectedClipId }
+    val muted = audio?.muted ?: false
+    Column(Modifier.fillMaxWidth().padding(top = 2.dp)) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            PainterIconButton(
+                Icons.Outlined.LibraryMusic,
+                stringResource(R.string.video_audio_import),
+                onClick = actions::importAudio,
+                modifier = Modifier.size(36.dp),
+                enabled = !video.recordingAudio,
+            )
+            PainterIconButton(
+                if (video.recordingAudio) Icons.Outlined.Stop else Icons.Outlined.Mic,
+                stringResource(
+                    if (video.recordingAudio) R.string.video_audio_stop else R.string.video_audio_record,
+                ),
+                onClick = {
+                    if (video.recordingAudio) actions.stopAudioRecording() else actions.startAudioRecording()
+                },
+                modifier = Modifier.size(36.dp),
+                tint = if (video.recordingAudio) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
+            )
+            PainterIconButton(
+                Icons.Outlined.Delete,
+                stringResource(R.string.video_audio_delete_clip),
+                onClick = { selected?.let { actions.deleteAudioClip(it.id) } },
+                modifier = Modifier.size(36.dp),
+                enabled = selected != null && !video.recordingAudio,
+            )
+            IconToggle(
+                if (muted) Icons.AutoMirrored.Outlined.VolumeOff else Icons.AutoMirrored.Outlined.VolumeUp,
+                stringResource(if (muted) R.string.video_audio_unmute else R.string.video_audio_mute),
+                checked = muted,
+                onCheckedChange = actions::setAudioMuted,
+                modifier = Modifier.size(36.dp),
+                enabled = hasClips,
+            )
+            if (video.recordingAudio) {
+                Text(
+                    stringResource(R.string.video_audio_recording, formatVideoTime(video.recordingMs)),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.padding(start = 4.dp),
+                )
+            }
+            Spacer(Modifier.weight(1f))
+            if (video.audioPreparing) {
+                Text(
+                    stringResource(R.string.video_audio_preparing),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+        if (hasClips) {
+            Row(
+                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                if (selected != null) {
+                    AudioVolumeSlider(
+                        label = stringResource(R.string.video_audio_clip_volume),
+                        value = selected.volume,
+                        onChange = { actions.setAudioClipVolume(selected.id, it) },
+                    )
+                }
+                AudioVolumeSlider(
+                    label = stringResource(R.string.video_audio_track_volume),
+                    value = audio?.volume ?: 1f,
+                    onChange = actions::setAudioTrackVolume,
+                )
+                AudioVolumeSlider(
+                    label = stringResource(R.string.video_audio_master_volume),
+                    value = audio?.masterVolume ?: 1f,
+                    onChange = actions::setAudioMasterVolume,
+                )
+            }
+        }
+        if (video.audioPreviewUnavailable) {
+            Text(
+                stringResource(R.string.video_audio_preview_unavailable),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        video.audioMessage?.let { message ->
+            Text(
+                message,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.error,
+            )
+        }
+    }
+}
+
+/** One 0..1 gain slider with a local drag value; the model is updated once, on release. */
+@Composable
+private fun AudioVolumeSlider(label: String, value: Float, onChange: (Float) -> Unit) {
+    var local by remember(label, value) { mutableStateOf(value.coerceIn(0f, 1f)) }
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(end = 8.dp)) {
+        Text(
+            label,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Slider(
+            value = local,
+            onValueChange = { local = it },
+            onValueChangeFinished = { onChange(local) },
+            valueRange = 0f..1f,
+            modifier = Modifier.width(96.dp).padding(horizontal = 4.dp),
+        )
+        Text(
+            "${(local * 100f).roundToInt()}%",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.width(34.dp),
+        )
+    }
+}
+
+/** Speaker, name and end time of the audio track. */
+@Composable
+private fun VideoAudioHeader(
+    audio: VideoAudioUi?,
+    actions: StudioActions,
+    modifier: Modifier = Modifier,
+) {
+    val clips = audio?.clips ?: emptyList()
+    val muted = audio?.muted ?: false
+    Row(modifier.padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+        Box(
+            Modifier
+                .size(28.dp)
+                .clip(CircleShape)
+                .clickable(enabled = clips.isNotEmpty()) { actions.setAudioMuted(!muted) },
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                if (muted) Icons.AutoMirrored.Outlined.VolumeOff else Icons.AutoMirrored.Outlined.VolumeUp,
+                contentDescription = stringResource(
+                    if (muted) R.string.video_audio_unmute else R.string.video_audio_mute,
+                ),
+                modifier = Modifier.size(18.dp),
+                tint = if (clips.isEmpty() || muted) {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                } else {
+                    MaterialTheme.colorScheme.onSurface
+                },
+            )
+        }
+        Column(Modifier.padding(start = 4.dp)) {
+            Text(
+                stringResource(R.string.video_audio_track),
+                style = MaterialTheme.typography.labelMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                formatVideoTime(clips.maxOfOrNull { it.startTick + it.durationTicks } ?: 0L),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+/** Lane of the audio track: overlapping clips share the lane, the hint invites the first import. */
+@Composable
+private fun VideoAudioLane(
+    video: VideoUi,
+    actions: StudioActions,
+    modifier: Modifier = Modifier,
+) {
+    val shape = RoundedCornerShape(4.dp)
+    val audio = video.audio
+    val clips = audio?.clips ?: emptyList()
+    BoxWithConstraints(
+        modifier
+            .padding(vertical = 2.dp)
+            .clip(shape)
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f))
+            .clickable { actions.selectVideoClip(null) },
+    ) {
+        if (clips.isEmpty()) {
+            Text(
+                stringResource(R.string.video_audio_empty),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.align(Alignment.Center).padding(horizontal = 8.dp),
+            )
+        } else {
+            val total = maxOf(1L, video.durationTicks)
+            val totalFloat = total.toFloat()
+            val laneWidthPx = with(LocalDensity.current) { maxWidth.toPx() }.coerceAtLeast(1f)
+            val threshold = VideoTimeline.deltaTicks(
+                with(LocalDensity.current) { VIDEO_SNAP_TOUCH_DP.toPx() },
+                laneWidthPx,
+                total,
+            )
+            for (clip in clips) {
+                val start = maxWidth * (clip.startTick.coerceIn(0L, total) / totalFloat)
+                val clipWidth = maxOf(
+                    2.dp,
+                    maxWidth * (clip.durationTicks.coerceIn(0L, total) / totalFloat),
+                )
+                val targets = ArrayList<Long>(clips.size * 2 + 1)
+                targets += video.playheadTick
+                for (other in clips) {
+                    if (other.id == clip.id) continue
+                    targets += other.startTick
+                    targets += other.startTick + other.durationTicks
+                }
+                AudioClipBox(
+                    clip = clip,
+                    selected = clip.id == video.selectedClipId,
+                    dimmed = audio?.muted == true,
+                    snapEnabled = video.snapEnabled,
+                    snapTargets = targets,
+                    snapThresholdTicks = threshold,
+                    totalTicks = total,
+                    laneWidthPx = laneWidthPx,
+                    actions = actions,
+                    modifier = Modifier
+                        .offset(x = start)
+                        .width(clipWidth)
+                        .fillMaxHeight()
+                        .padding(vertical = 2.dp),
+                )
+            }
+        }
+    }
+}
+
+/** One audio clip rectangle: tap selects, long-press drags freely, the right edge trims (no ripple). */
+@Composable
+private fun AudioClipBox(
+    clip: AudioClipUi,
+    selected: Boolean,
+    dimmed: Boolean,
+    snapEnabled: Boolean,
+    snapTargets: List<Long>,
+    snapThresholdTicks: Long,
+    totalTicks: Long,
+    laneWidthPx: Float,
+    actions: StudioActions,
+    modifier: Modifier = Modifier,
+) {
+    var dragOffsetPx by remember(clip.id) { mutableStateOf(0f) }
+    var trimStartDuration by remember(clip.id) { mutableStateOf(clip.durationTicks) }
+    var trimDragPx by remember(clip.id) { mutableStateOf(0f) }
+    val currentClip by rememberUpdatedState(clip)
+    val currentSnapEnabled by rememberUpdatedState(snapEnabled)
+    val currentSnapTargets by rememberUpdatedState(snapTargets)
+    val currentSnapThreshold by rememberUpdatedState(snapThresholdTicks)
+    val currentTotalTicks by rememberUpdatedState(totalTicks)
+    val currentLaneWidth by rememberUpdatedState(laneWidthPx)
+    val shape = RoundedCornerShape(4.dp)
+    val background = if (clip.missing) {
+        MaterialTheme.colorScheme.errorContainer
+    } else {
+        MaterialTheme.colorScheme.tertiaryContainer
+    }
+    val content = if (clip.missing) {
+        MaterialTheme.colorScheme.onErrorContainer
+    } else {
+        MaterialTheme.colorScheme.onTertiaryContainer
+    }
+    val description = stringResource(
+        R.string.video_audio_clip_accessible,
+        clip.name,
+        formatVideoTime(clip.durationTicks),
+    )
+    val trimDescription = stringResource(R.string.video_audio_trim_clip)
+    Row(
+        modifier
+            .graphicsLayer { translationX = dragOffsetPx }
+            .alpha(if (dimmed) 0.5f else 1f)
+            .clip(shape)
+            .background(background)
+            .border(
+                if (selected) 2.dp else 1.dp,
+                if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,
+                shape,
+            )
+            .pointerInput(clip.id) {
+                detectDragGesturesAfterLongPress(
+                    onDragStart = {
+                        actions.setVideoPlaying(false)
+                        actions.selectVideoClip(clip.id)
+                        dragOffsetPx = 0f
+                    },
+                    onDrag = { change, amount ->
+                        change.consume()
+                        dragOffsetPx += amount.x
+                    },
+                    onDragEnd = {
+                        val target = VideoTimeline.movedStart(
+                            startTick = currentClip.startTick,
+                            deltaPx = dragOffsetPx,
+                            widthPx = currentLaneWidth,
+                            durationTicks = currentTotalTicks,
+                            snap = currentSnapEnabled,
+                            targets = currentSnapTargets,
+                            thresholdTicks = currentSnapThreshold,
+                        )
+                        dragOffsetPx = 0f
+                        actions.moveAudioClip(currentClip.id, target)
+                    },
+                    onDragCancel = { dragOffsetPx = 0f },
+                )
+            }
+            .clickable { actions.selectVideoClip(clip.id) }
+            .semantics { contentDescription = description }
+            .padding(start = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            if (clip.missing) Icons.AutoMirrored.Outlined.VolumeOff else Icons.Outlined.LibraryMusic,
+            contentDescription = null,
+            modifier = Modifier.size(14.dp),
+            tint = content,
+        )
+        Spacer(Modifier.width(3.dp))
+        Text(
+            if (clip.missing) stringResource(R.string.video_audio_clip_missing) else clip.name,
+            style = MaterialTheme.typography.labelSmall,
+            color = content,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
+        )
+        Box(
+            Modifier
+                .width(VIDEO_TRIM_HANDLE_WIDTH)
+                .fillMaxHeight()
+                .background(MaterialTheme.colorScheme.primary.copy(alpha = if (selected) 0.45f else 0.18f))
+                .pointerInput(clip.id) {
+                    detectHorizontalDragGestures(
+                        onDragStart = {
+                            actions.setVideoPlaying(false)
+                            actions.selectVideoClip(clip.id)
+                            trimStartDuration = currentClip.durationTicks
+                            trimDragPx = 0f
+                        },
+                        onHorizontalDrag = { change, dragAmount ->
+                            change.consume()
+                            trimDragPx += dragAmount
+                        },
+                        onDragEnd = {
+                            val ticks = VideoTimeline.trimDuration(
+                                startTick = currentClip.startTick,
+                                currentDurationTicks = trimStartDuration,
+                                deltaPx = trimDragPx,
+                                widthPx = currentLaneWidth,
+                                durationTicks = currentTotalTicks,
+                                snap = currentSnapEnabled,
+                                targets = currentSnapTargets,
+                                thresholdTicks = currentSnapThreshold,
+                            )
+                            trimDragPx = 0f
+                            actions.setAudioClipDuration(currentClip.id, ticks)
+                        },
+                        onDragCancel = { trimDragPx = 0f },
+                    )
+                }
+                .semantics { contentDescription = trimDescription },
         )
     }
 }

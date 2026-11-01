@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -16,6 +17,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.pluralStringResource
@@ -25,6 +27,8 @@ import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import app.painter.R
+import app.painter.core.doc.VIDEO_TICKS_PER_SECOND
+import app.painter.core.video.AudioMix
 import app.painter.core.video.VideoExportPlan
 import app.painter.studio.VideoExportOptions
 import app.painter.studio.videoExportPresetLabel
@@ -57,6 +61,13 @@ internal fun VideoExportDialog(
     val plan = active?.plan
     val frames = VideoExportPlan.frameCount(video.durationTicks, VideoExportPlan.FPS)
     val missingFrames = video.tracks.sumOf { track -> track.clips.count { it.missing } }
+    val audio = video.audio
+    val hasAudioClips = audio != null && audio.clips.isNotEmpty()
+    val audioMuted = audio?.muted == true
+    val audioMissing = audio?.clips?.any { it.missing } == true
+    val canIncludeAudio = hasAudioClips && !audioMuted && !audioMissing
+    var includeAudio by remember(canIncludeAudio) { mutableStateOf(canIncludeAudio) }
+    val audioBeyondEnd = audio?.clips?.any { it.startTick + it.durationTicks > video.durationTicks } == true
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -66,11 +77,48 @@ internal fun VideoExportDialog(
                 Text(stringResource(R.string.video_export_duration, formatVideoTime(video.durationTicks)))
                 Text(stringResource(R.string.video_export_frames, frames, VideoExportPlan.FPS))
                 Text(stringResource(R.string.video_export_format))
-                Text(
-                    stringResource(R.string.video_export_no_audio_note),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                if (hasAudioClips) {
+                    Text(
+                        stringResource(R.string.video_export_audio_note),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Switch(
+                            checked = includeAudio,
+                            onCheckedChange = { includeAudio = it },
+                            enabled = canIncludeAudio,
+                        )
+                        Text(
+                            stringResource(R.string.video_export_include_audio),
+                            modifier = Modifier.padding(start = 8.dp),
+                        )
+                    }
+                    if (!canIncludeAudio) {
+                        Text(
+                            stringResource(
+                                when {
+                                    audioMuted -> R.string.video_export_audio_muted
+                                    audioMissing -> R.string.video_export_audio_missing
+                                    else -> R.string.video_export_audio_none
+                                },
+                            ),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (audioMissing) {
+                                MaterialTheme.colorScheme.error
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            },
+                        )
+                    }
+                    if (audioBeyondEnd) {
+                        Text(
+                            stringResource(R.string.video_export_audio_warning),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
                 if (choices.isNotEmpty()) {
                     Text(stringResource(R.string.video_export_quality), Modifier.padding(top = 4.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -113,12 +161,17 @@ internal fun VideoExportDialog(
                     }
                 }
                 plan?.let {
+                    val audioBytes = if (includeAudio) {
+                        AudioMix.BIT_RATE.toLong() * video.durationTicks / (8L * VIDEO_TICKS_PER_SECOND)
+                    } else {
+                        0L
+                    }
                     Text(
                         stringResource(
                             R.string.video_export_estimate,
                             Formatter.formatShortFileSize(
                                 context,
-                                VideoExportPlan.estimateBytes(it, video.durationTicks),
+                                VideoExportPlan.estimateBytes(it, video.durationTicks) + audioBytes,
                             ),
                         ),
                         style = MaterialTheme.typography.bodySmall,
@@ -149,7 +202,15 @@ internal fun VideoExportDialog(
             TextButton(
                 enabled = plan != null && video.durationTicks > 0L,
                 onClick = {
-                    plan?.let { onConfirm(VideoExportOptions(it.longSide, it.fps)) }
+                    plan?.let {
+                        onConfirm(
+                            VideoExportOptions(
+                                longSide = it.longSide,
+                                outputFps = it.fps,
+                                includeAudio = includeAudio,
+                            ),
+                        )
+                    }
                 },
             ) {
                 Text(stringResource(R.string.video_export_start))
