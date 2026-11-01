@@ -41,7 +41,7 @@ The app is completely free: no subscriptions, ads, watermarks or paid features.
 - Stylization and material filters: gloom, sketch edges, trace, bevel, emboss, relief, satin, wet edge, waterdrop, extrude and clouds (M5)
 - Artistic and generative filters: palette posterize, QR code, stained glass, dots, 1-bit stamp, glitch, retro game, chrome, sheer, impressionist, swirl painting and pop art (M5)
 - Final M5 filters: manga and manga background tones, anime background, pencil sketch, oil paint, blur frame, table frame and rain (M5)
-- Video timeline: converts frame animation to a 60 fps project with clip editing, playback, MP4 export at 720p/1080p/1440p/4K where the encoder allows, and an audio track with import, record, volume and AAC muxing (M5, slices 3–5)
+- Video timeline: converts frame animation to a 60 fps project with clip editing, playback, up to two drawing tracks, MP4 export at 720p/1080p/1440p/4K where the encoder allows, and an audio track with import, record, volume and AAC muxing (M5, slices 3–5)
 - Pattern fill with twelve seamless procedural patterns (checks, dots, stripes, brick, herringbone, grain, zigzag, waves, triangles, stars, hexagons, wood grain), two colours, tile size, rotation, phase offset, contrast, invert and opacity (M5)
 - Materials: eight procedural stamps - balloon, fabric, wood, metal, stone, foliage, sparkle and paper - with size, rotation and opacity, stamped or painted along a stroke, with favourites, recents and persisted settings (M5)
 - Liquify and text stamp tools, hardware-keyboard shortcuts (M3)
