@@ -7,7 +7,7 @@ plugins {
 }
 
 // Single version source; CI passes -PappVersion=<tag without v>.
-val appVersion = (findProperty("appVersion") as String?) ?: "0.5.4"
+val appVersion = (findProperty("appVersion") as String?) ?: "0.5.5"
 val appVersionCode = appVersion.split(".").map { it.toInt() }.let { (major, minor, patch) ->
     major * 10000 + minor * 100 + patch
 }

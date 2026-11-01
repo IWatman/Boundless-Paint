@@ -66,7 +66,20 @@
 - Tests: `FiltersM5StyleTest` (15) — determinism, visible change, live/history thread independence, selection,
   alpha lock, premultiplied invariant, tile boundaries, cross-tile reads, 34 control-pair effects and codec
   round trips.
-- M5 so far: **662 JVM tests** (562 core, 100 app).
+
+### Fourth filter batch (2026-11-01)
+- Core: twelve artistic and generative filters — palette posterization, QR code (dependency-free encoder),
+  stained glass, dots, 1-bit stamp, glitch, retro-game palettes with dither, chrome, sheer, impressionist,
+  swirl painting and pop art. Palette sampling uses a full-content LUT; the QR generator covers the canvas and
+  is centred with a quiet zone.
+- UI: a chip and only the relevant controls for each filter, including QR text, palettes, colours, seeds and
+  dot scales; the common strength stays.
+- Tests: `FiltersM5ArtisticTest` (15) — determinism, visible change, live/history thread independence, selection,
+  alpha lock, premultiplied output, tile boundaries, QR module alignment across tiles, palette/dot/retro limits,
+  1-bit stamp output, every control and codec round trips.
+- M5 so far: **677 JVM tests** (577 core, 100 app).
+- Video mode design: [VIDEO-MODE.md](VIDEO-MODE.md) — data model, UI, export/audio pipeline and five-slice plan;
+  S1 is model + persistence + read-only timeline.
 - Performance baseline: [PERFORMANCE-M5.md](PERFORMANCE-M5.md) — desktop JVM A–E numbers, 4K/filter probes and
   open risks; device measurements are still missing.
 
