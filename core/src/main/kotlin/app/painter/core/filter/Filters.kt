@@ -415,6 +415,34 @@ object Filters {
         is ImpressionistParams -> mix(src, impressionist(src, w, h, ox, oy, params), params.strength)
         is SwirlPaintingParams -> mix(src, swirlPainting(src, w, h, ox, oy), params.strength)
         is PopArtParams -> mix(src, popArt(src, w, h, ox, oy, params), params.strength)
+        is MangaParams -> mix(
+            src,
+            mangaTone(
+                src, w, h, ox, oy, params.toneSize,
+                brightness = params.brightness.coerceIn(-100f, 100f) / 100f,
+                contrast = 0f,
+                edge = params.edge / 100f,
+                background = false,
+            ),
+            params.strength,
+        )
+        is MangaBackgroundParams -> mix(
+            src,
+            mangaTone(
+                src, w, h, ox, oy, params.toneSize,
+                brightness = 0f,
+                contrast = params.contrast / 100f,
+                edge = params.edgeDarkness.coerceIn(0f, 1f),
+                background = true,
+            ),
+            params.strength,
+        )
+        is AnimeBackgroundParams -> mix(src, animeBackground(src, params), params.strength)
+        is PencilSketchParams -> mix(src, pencilSketch(src, w, h, ox, oy, params), params.strength)
+        is OilPaintParams -> mix(src, oilPaint(src, w, h, params), params.strength)
+        is BlurFrameParams -> mix(src, blurFrame(src, w, h, ox, oy, geometry, params), params.strength)
+        is TableFrameParams -> mix(src, tableFrame(src, w, h, ox, oy, geometry, params), params.strength)
+        is RainParams -> mix(src, rain(src, w, h, ox, oy, params), params.strength)
         is SphereLensParams, is WaveParams, is RippleParams, is TwirlParams, is PolarCoordinatesParams,
         is ExpansionParams, is KaleidoscopeParams, is WaterdropParams, is PaletteParams ->
             throw IllegalArgumentException("${params.kind} is processed from the full content snapshot")
@@ -2646,6 +2674,436 @@ object Filters {
             }
         }
         return out
+    }
+
+    // ---------------------------------------------------------------- final M5 batch
+
+    /**
+     * A manga tone: the alpha-weighted luminance of each [cellPx] cell is flattened to four levels and painted
+     * as a dot screen, with the luminance edges over it as ink. The lattice and the edges are evaluated at
+     * canvas coordinates, so tiles agree on every dot and outline that they share.
+     */
+    private fun mangaTone(
+        src: FloatArray,
+        w: Int,
+        h: Int,
+        ox: Int,
+        oy: Int,
+        cellPx: Int,
+        brightness: Float,
+        contrast: Float,
+        edge: Float,
+        background: Boolean,
+    ): FloatArray {
+        val cell = cellPx.coerceIn(2, 32)
+        val lum = luminance(src)
+        val out = FloatArray(src.size)
+        val tone = FloatArray(w * h)
+        val startX = floor(ox.toFloat() / cell).toInt() * cell
+        val startY = floor(oy.toFloat() / cell).toInt() * cell
+        for (cy in startY until oy + h step cell) {
+            for (cx in startX until ox + w step cell) {
+                val xa = max(cx, ox)
+                val xb = min(cx + cell, ox + w)
+                val ya = max(cy, oy)
+                val yb = min(cy + cell, oy + h)
+                if (xb <= xa || yb <= ya) continue
+                var sum = 0f
+                var weight = 0f
+                for (y in ya until yb) for (x in xa until xb) {
+                    val i = (y - oy) * w + (x - ox)
+                    val a = src[i * 4 + 3]
+                    if (a <= 0.002f) continue
+                    sum += lum[i]
+                    weight += a
+                }
+                if (weight <= 0.002f) continue
+                var value = (sum / weight).coerceIn(0f, 1f)
+                value = if (background) {
+                    ((value - 0.5f) * (1f + contrast * 2f) + 0.5f).coerceIn(0f, 1f)
+                } else {
+                    (value + brightness).coerceIn(0f, 1f)
+                }
+                // Four flat steps keep the dot size readable at small cell sizes.
+                val flat = (value * 3f).roundToInt() / 3f
+                for (y in ya until yb) for (x in xa until xb) tone[(y - oy) * w + (x - ox)] = flat
+            }
+        }
+        for (y in 0 until h) for (x in 0 until w) {
+            val i = y * w + x
+            val j = i * 4
+            val a = src[j + 3]
+            if (a <= 0.002f) continue
+            val gx = x + ox
+            val gy = y + oy
+            val ccx = floor(gx.toFloat() / cell).toInt() * cell + cell * 0.5f
+            val ccy = floor(gy.toFloat() / cell).toInt() * cell + cell * 0.5f
+            val radius = cell * 0.72f * sqrt((1f - tone[i]).coerceIn(0f, 1f))
+            val d = hypot(gx + 0.5f - ccx, gy + 0.5f - ccy)
+            val paper = 1f - (radius + 0.5f - d).coerceIn(0f, 1f)
+            val e = sobel(lum, w, h, x, y)
+            val ink = ((e - 0.04f) / 0.32f).coerceIn(0f, 1f) * edge.coerceIn(0f, 1f)
+            val value = min(paper, 1f - ink)
+            out[j] = value * a
+            out[j + 1] = value * a
+            out[j + 2] = value * a
+            out[j + 3] = a
+        }
+        return out
+    }
+
+    /** Anime background: bright saturated colours posterized to [AnimeBackgroundParams.posterize] levels. */
+    private fun animeBackground(src: FloatArray, p: AnimeBackgroundParams): FloatArray {
+        val brightness = p.brightness.coerceIn(-100f, 100f) / 100f * 0.5f
+        val contrast = 1f + p.contrast.coerceIn(-100f, 100f) / 100f
+        val saturation = (1f + p.saturation.coerceIn(-100f, 100f) / 100f).coerceIn(0f, 2f)
+        val step = (p.posterize.coerceIn(2, 16) - 1).toFloat()
+        val out = FloatArray(src.size)
+        for (i in src.indices step 4) {
+            val a = src[i + 3]
+            if (a <= 0f) continue
+            var r = (src[i] / a).coerceIn(0f, 1f)
+            var g = (src[i + 1] / a).coerceIn(0f, 1f)
+            var b = (src[i + 2] / a).coerceIn(0f, 1f)
+            val lum = 0.3f * r + 0.59f * g + 0.11f * b
+            r = lum + (r - lum) * saturation
+            g = lum + (g - lum) * saturation
+            b = lum + (b - lum) * saturation
+            r = ((r - 0.5f) * contrast + 0.5f + brightness).coerceIn(0f, 1f)
+            g = ((g - 0.5f) * contrast + 0.5f + brightness).coerceIn(0f, 1f)
+            b = ((b - 0.5f) * contrast + 0.5f + brightness).coerceIn(0f, 1f)
+            // Flat posterized bands are what makes a painted anime background.
+            r = (r * step).roundToInt() / step
+            g = (g * step).roundToInt() / step
+            b = (b * step).roundToInt() / step
+            out[i] = r * a
+            out[i + 1] = g * a
+            out[i + 2] = b * a
+            out[i + 3] = a
+        }
+        return out
+    }
+
+    /** Pencil sketch: graphite hatching of [PencilSketchParams.lineLength] px plus darker contours on paper. */
+    private fun pencilSketch(
+        src: FloatArray,
+        w: Int,
+        h: Int,
+        ox: Int,
+        oy: Int,
+        p: PencilSketchParams,
+    ): FloatArray {
+        val length = p.lineLength.coerceIn(2f, 48f)
+        val spacing = (length * 0.65f).coerceAtLeast(2f)
+        val period = (length * 1.6f).coerceAtLeast(3f)
+        val lum = luminance(src)
+        val out = FloatArray(src.size)
+        for (y in 0 until h) for (x in 0 until w) {
+            val i = y * w + x
+            val j = i * 4
+            val a = src[j + 3]
+            if (a <= 0.002f) continue
+            val gx = x + ox + 0.5f
+            val gy = y + oy + 0.5f
+            val shade = (1f - lum[i] / a).coerceIn(0f, 1f)
+            var ink = hatchInk(gx, gy, 1f, spacing, period, length, (shade - 0.05f) / 0.75f)
+            if (shade > 0.5f) {
+                ink = max(ink, hatchInk(gx, gy, -1f, spacing, period, length, (shade - 0.5f) / 0.5f))
+            }
+            val e = sobel(lum, w, h, x, y)
+            ink = max(ink, ((e - 0.04f) / 0.32f).coerceIn(0f, 1f) * (0.35f + 0.65f * shade))
+            // Sparse graphite grain breaks up the stroke edges like paper tooth.
+            val grain = (hash(x + ox, y + oy, 0x2C1B3C6DL) + 1f) * 0.5f
+            val value = (1f - ink * 0.9f - grain * 0.06f * shade).coerceIn(0f, 1f)
+            out[j] = value * a
+            out[j + 1] = value * a
+            out[j + 2] = value * a
+            out[j + 3] = a
+        }
+        return out
+    }
+
+    /**
+     * One family of pencil dashes: rows of [spacing] px across the stroke direction, each row a run of [length]
+     * px repeated every [period] px. [amount] is the maximum ink of the family, 0 when the tone is too light.
+     */
+    private fun hatchInk(
+        gx: Float,
+        gy: Float,
+        dir: Float,
+        spacing: Float,
+        period: Float,
+        length: Float,
+        amount: Float,
+    ): Float {
+        if (amount <= 0f) return 0f
+        val s = 0.70710677f
+        val along = (gx * dir + gy) * s
+        val across = (gy - gx * dir) * s
+        val row = floor(across / spacing).toInt()
+        val jitter = hash(row, dir.toInt(), 0x51ED2701L) * spacing * 0.25f
+        val centre = (row + 0.5f) * spacing + jitter
+        val acrossCov = (1f - abs(across - centre)).coerceIn(0f, 1f)
+        if (acrossCov <= 0f) return 0f
+        val offset = hash(row, dir.toInt() + 11, 0x7F4A7C15L) * period
+        var phase = (along + offset) % period
+        if (phase < 0f) phase += period
+        val alongCov = (min(phase, length - phase) * 2f).coerceIn(0f, 1f)
+        return min(acrossCov, alongCov) * amount.coerceIn(0f, 1f)
+    }
+
+    /**
+     * Oil paint: the classic Kuwahara filter. Of the four [OilPaintParams.radius] quadrants around a pixel the
+     * flattest one supplies its mean colour, which keeps edges sharp while flattening the paint into
+     * [OilPaintParams.levels] bands. Summed-area tables make each quadrant O(1), so a large radius stays cheap.
+     */
+    private fun oilPaint(src: FloatArray, w: Int, h: Int, p: OilPaintParams): FloatArray {
+        val radius = p.radius.coerceIn(1, 12)
+        val step = (p.levels.coerceIn(2, 32) - 1).toFloat()
+        val stride = w + 1
+        val size = stride * (h + 1)
+        val sa = FloatArray(size)
+        val sr = FloatArray(size)
+        val sg = FloatArray(size)
+        val sb = FloatArray(size)
+        val sl = FloatArray(size)
+        val sl2 = FloatArray(size)
+        for (y in 0 until h) {
+            var ra = 0f
+            var rr = 0f
+            var rg = 0f
+            var rb = 0f
+            var rl = 0f
+            var rl2 = 0f
+            val row = (y + 1) * stride
+            val prev = y * stride
+            for (x in 0 until w) {
+                val i = (y * w + x) * 4
+                val a = src[i + 3]
+                val r = src[i]
+                val g = src[i + 1]
+                val b = src[i + 2]
+                ra += a
+                rr += r
+                rg += g
+                rb += b
+                if (a > 0.002f) {
+                    val l = (0.3f * r + 0.59f * g + 0.11f * b) / a
+                    rl += l * a
+                    rl2 += l * l * a
+                }
+                sa[row + x + 1] = sa[prev + x + 1] + ra
+                sr[row + x + 1] = sr[prev + x + 1] + rr
+                sg[row + x + 1] = sg[prev + x + 1] + rg
+                sb[row + x + 1] = sb[prev + x + 1] + rb
+                sl[row + x + 1] = sl[prev + x + 1] + rl
+                sl2[row + x + 1] = sl2[prev + x + 1] + rl2
+            }
+        }
+        val out = FloatArray(src.size)
+        for (y in 0 until h) for (x in 0 until w) {
+            val j = (y * w + x) * 4
+            val a = src[j + 3]
+            if (a <= 0.002f) continue
+            var best = Float.MAX_VALUE
+            var mr = 0f
+            var mg = 0f
+            var mb = 0f
+            var found = false
+            for (qy in 0..1) for (qx in 0..1) {
+                val x0 = if (qx == 0) max(0, x - radius) else x
+                val x1 = if (qx == 0) x + 1 else min(w, x + radius + 1)
+                val y0 = if (qy == 0) max(0, y - radius) else y
+                val y1 = if (qy == 0) y + 1 else min(h, y + radius + 1)
+                val bottom = y1 * stride
+                val top = y0 * stride
+                val alpha = sa[bottom + x1] - sa[top + x1] - sa[bottom + x0] + sa[top + x0]
+                if (alpha <= 0.002f) continue
+                val lSum = sl[bottom + x1] - sl[top + x1] - sl[bottom + x0] + sl[top + x0]
+                val l2Sum = sl2[bottom + x1] - sl2[top + x1] - sl2[bottom + x0] + sl2[top + x0]
+                val mean = lSum / alpha
+                val variance = (l2Sum / alpha - mean * mean).coerceAtLeast(0f)
+                if (!found || variance < best) {
+                    found = true
+                    best = variance
+                    mr = (sr[bottom + x1] - sr[top + x1] - sr[bottom + x0] + sr[top + x0]) / alpha
+                    mg = (sg[bottom + x1] - sg[top + x1] - sg[bottom + x0] + sg[top + x0]) / alpha
+                    mb = (sb[bottom + x1] - sb[top + x1] - sb[bottom + x0] + sb[top + x0]) / alpha
+                }
+            }
+            if (!found) continue
+            val r = (mr.coerceIn(0f, 1f) * step).roundToInt() / step
+            val g = (mg.coerceIn(0f, 1f) * step).roundToInt() / step
+            val b = (mb.coerceIn(0f, 1f) * step).roundToInt() / step
+            out[j] = r * a
+            out[j + 1] = g * a
+            out[j + 2] = b * a
+            out[j + 3] = a
+        }
+        return out
+    }
+
+    /**
+     * Blur frame: the last [BlurFrameParams.width] px inside the content edge are replaced by a blur of
+     * [BlurFrameParams.blur] px with a smooth falloff, so the artwork fades into an unfocused vignette.
+     */
+    private fun blurFrame(
+        src: FloatArray,
+        w: Int,
+        h: Int,
+        ox: Int,
+        oy: Int,
+        g: Geometry,
+        p: BlurFrameParams,
+    ): FloatArray {
+        val width = p.width.coerceIn(1f, 400f)
+        val radius = ceil(p.blur.coerceIn(1f, 32f)).toInt()
+        val blurred = localBlur(src, w, h, radius)
+        val out = src.copyOf()
+        val content = g.content
+        for (y in 0 until h) for (x in 0 until w) {
+            val gx = x + ox
+            val gy = y + oy
+            val d = minOf(
+                gx - content.x0,
+                content.x1 - 1 - gx,
+                gy - content.y0,
+                content.y1 - 1 - gy,
+            ).toFloat()
+            if (d >= width) continue
+            val t = (d / width).coerceIn(0f, 1f)
+            val k = 1f - t * t * (3f - 2f * t)
+            val i = (y * w + x) * 4
+            out[i] = src[i] + (blurred[i] - src[i]) * k
+            out[i + 1] = src[i + 1] + (blurred[i + 1] - src[i + 1]) * k
+            out[i + 2] = src[i + 2] + (blurred[i + 2] - src[i + 2]) * k
+            out[i + 3] = src[i + 3] + (blurred[i + 3] - src[i + 3]) * k
+        }
+        return out
+    }
+
+    /** Table frame: a [TableFrameParams.width] px border in [TableFrameParams.color] around the content. */
+    private fun tableFrame(
+        src: FloatArray,
+        w: Int,
+        h: Int,
+        ox: Int,
+        oy: Int,
+        g: Geometry,
+        p: TableFrameParams,
+    ): FloatArray {
+        val width = p.width.coerceIn(1f, 400f)
+        val ink = ink(p.color)
+        val out = src.copyOf()
+        val content = g.content
+        val halfW = content.width / 2f
+        val halfH = content.height / 2f
+        if (halfW <= 0f || halfH <= 0f) return out
+        val cx = content.x0 + halfW
+        val cy = content.y0 + halfH
+        val radius = p.cornerRadius.coerceIn(0f, 400f)
+        val innerW = halfW - width
+        val innerH = halfH - width
+        for (y in 0 until h) for (x in 0 until w) {
+            val px = x + ox + 0.5f - cx
+            val py = y + oy + 0.5f - cy
+            val outer = roundRectDistance(px, py, halfW, halfH, radius)
+            if (outer >= 0.5f) continue
+            var cov = (0.5f - outer).coerceIn(0f, 1f)
+            if (innerW > 0.5f && innerH > 0.5f) {
+                val inner = roundRectDistance(px, py, innerW, innerH, (radius - width).coerceAtLeast(0f))
+                cov *= 1f - (0.5f - inner).coerceIn(0f, 1f)
+            }
+            if (cov > 0.002f) overInk(out, (y * w + x) * 4, ink, cov)
+        }
+        return out
+    }
+
+    /** Signed distance to the rounded rectangle of half extents [halfW],[halfH]; negative inside. */
+    private fun roundRectDistance(px: Float, py: Float, halfW: Float, halfH: Float, radius: Float): Float {
+        val r = radius.coerceIn(0f, min(halfW, halfH))
+        val qx = abs(px) - halfW + r
+        val qy = abs(py) - halfH + r
+        return hypot(max(qx, 0f), max(qy, 0f)) + min(max(qx, qy), 0f) - r
+    }
+
+    /**
+     * Rain: one white streak per occupied cell of a 14 px canvas-anchored lattice. The cell hash also supplies
+     * the drop position, its length and its presence at [RainParams.density], so no tile needs a neighbour.
+     */
+    private fun rain(src: FloatArray, w: Int, h: Int, ox: Int, oy: Int, p: RainParams): FloatArray {
+        val out = src.copyOf()
+        val density = p.density.coerceIn(0f, 1f)
+        val opacity = p.opacity.coerceIn(0f, 1f)
+        if (density <= 0.001f || opacity <= 0.001f) return out
+        val pitch = 14f
+        val length = p.length.coerceIn(4f, 200f)
+        val angle = Math.toRadians(p.angleDeg.toDouble()).toFloat()
+        val dx = cos(angle)
+        val dy = sin(angle)
+        val margin = length + 4f
+        val minRow = floor((oy - margin) / pitch).toInt() - 2
+        val maxRow = floor((oy + h + margin) / pitch).toInt() + 2
+        val minCol = floor((ox - margin) / pitch).toInt() - 2
+        val maxCol = floor((ox + w + margin) / pitch).toInt() + 2
+        for (row in minRow..maxRow) {
+            for (col in minCol..maxCol) {
+                val present = (hash(col, row, p.seed) + 1f) * 0.5f
+                if (present >= density) continue
+                val jx = hash(col, row, p.seed + 1)
+                val jy = hash(col, row, p.seed + 2)
+                val cx = (col + 0.5f + jx * 0.4f) * pitch
+                val cy = (row + 0.5f + jy * 0.4f) * pitch
+                val len = length * (0.55f + 0.45f * abs(hash(col, row, p.seed + 3)))
+                drawRainStreak(
+                    out, w, h, ox, oy,
+                    cx - dx * len, cy - dy * len, cx, cy, opacity,
+                )
+            }
+        }
+        return out
+    }
+
+    /** One anti-aliased rain streak, brighter toward its leading end, painted white over the patch. */
+    private fun drawRainStreak(
+        out: FloatArray,
+        w: Int,
+        h: Int,
+        ox: Int,
+        oy: Int,
+        x0: Float,
+        y0: Float,
+        x1: Float,
+        y1: Float,
+        opacity: Float,
+    ) {
+        val dx = x1 - x0
+        val dy = y1 - y0
+        val len = hypot(dx, dy)
+        if (len < 0.01f) return
+        val steps = ceil(len / 0.5f).toInt().coerceIn(1, 2048)
+        val radius = 0.7f
+        for (s in 0..steps) {
+            val t = s / steps.toFloat()
+            val px = x0 + dx * t
+            val py = y0 + dy * t
+            val fade = opacity * (0.35f + 0.65f * t)
+            val xa = max((px - radius).toInt(), ox)
+            val xb = min((px + radius).toInt() + 1, ox + w)
+            val ya = max((py - radius).toInt(), oy)
+            val yb = min((py + radius).toInt() + 1, oy + h)
+            if (xb <= xa || yb <= ya) continue
+            for (y in ya until yb) for (x in xa until xb) {
+                val d = hypot(x + 0.5f - px, y + 0.5f - py)
+                val cov = (radius + 0.5f - d).coerceIn(0f, 1f) * fade
+                if (cov <= 0f) continue
+                val i = ((y - oy) * w + (x - ox)) * 4
+                out[i] = cov + out[i] * (1f - cov)
+                out[i + 1] = cov + out[i + 1] * (1f - cov)
+                out[i + 2] = cov + out[i + 2] * (1f - cov)
+                out[i + 3] = cov + out[i + 3] * (1f - cov)
+            }
+        }
     }
 
     private val BAYER = floatArrayOf(

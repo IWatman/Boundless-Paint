@@ -17,7 +17,7 @@
   plural.
 - `tools/check_localization.py` compares `values/strings.xml` with `values-ru/strings.xml`: missing and extra
   names, empty translations, format placeholders and Russian plural categories. It exits non-zero on a
-  mismatch. Current sets: **707 EN resources, 706 RU**; the only difference is the non-translatable `app_name`.
+  mismatch. Current sets: **771 EN resources, 770 RU**; the only difference is the non-translatable `app_name`.
 
 ### Pattern fill (2026-11-01)
 - Core: `core/fill/PatternFill.kt` generates six seamless procedural patterns (checks, dots, diagonal stripes,
@@ -82,6 +82,21 @@
   S1 is model + persistence + read-only timeline.
 - Performance baseline: [PERFORMANCE-M5.md](PERFORMANCE-M5.md) — desktop JVM A–E numbers, 4K/filter probes and
   open risks; device measurements are still missing.
+
+### Fifth filter batch (2026-11-01)
+- Core: the last eight filters — manga tone from the image, manga background, anime background, pencil sketch,
+  oil paint (Kuwahara), blur frame, table frame and rain. The manga tones average a canvas-aligned cell and draw a
+  dot screen with Sobel ink; pencil sketch draws two canvas-anchored hatch families plus contours; the frames use
+  the content bounds; rain is a canvas-coordinate generator that covers the canvas or the selection.
+- Tiling: cell, neighbourhood and blur filters declare a stable pre-filter source, canvas-anchored phases and a
+  reach that covers every read, so history and live filter layers are seam-free and frame-rate independent.
+- UI: a chip and only the relevant controls for each filter (brightness/edge/tone size, contrast/edge darkness,
+  anime colour controls and posterize, line length, oil radius/levels, frame width/blur/corner radius/colour,
+  rain density/angle/length/opacity/seed) plus the common strength.
+- Tests: `FiltersM5FinalTest` (16) — determinism, visible change, history and live thread independence, selection,
+  alpha lock, premultiplied output, seams on both tile axes, greyscale ink/paper, posterize and oil level limits,
+  frame behaviour, sparse rain, every control and codec round trips.
+- M5 now: **693 JVM tests** (593 core, 100 app). All filters in [filters.md](filters.md) are implemented.
 
 ## M3: done (2026-10-31)
 ### Filters (2026-10-31)
