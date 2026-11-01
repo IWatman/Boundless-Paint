@@ -36,7 +36,17 @@
   strength. Every control changes the result.
 - Tests: `FiltersM5Test` (8) — determinism and visible change, every control, cross-tile reads, boundary
   continuity probe, selection and alpha lock, grain variants and `FilterCodec` round trips.
-- M5 so far: **636 JVM tests** (536 core, 100 app).
+
+### Second filter batch (2026-11-01)
+- Core: eleven geometric and stylization filters — sphere lens, wave, ripple, twirl, polar coordinates,
+  expansion, kaleidoscope, crystallize, hexagon pixelate, triangle pixelate and pointillize. Global warps read
+  one immutable full-content snapshot (`needsFullSource`/`needsStableSource`), and cell filters use canvas-aligned
+  cell ids with padded reads, so output does not depend on tile ownership or thread scheduling.
+- UI: a chip and relevant controls for each new filter, plus the common strength; `FilterCodec` still serializes
+  every parameter class.
+- Tests: `FiltersM5GeometryTest` (11) — determinism, visible change, thread independence, selection, alpha lock,
+  tile seams, cross-tile shape reads, control effects, pointillize background and codec round trips.
+- M5 so far: **647 JVM tests** (547 core, 100 app).
 
 ## M3: done (2026-10-31)
 ### Filters (2026-10-31)
