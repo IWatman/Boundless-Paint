@@ -19,18 +19,28 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import app.painter.R
 import app.painter.core.filter.BlurParams
+import app.painter.core.filter.BokehParams
 import app.painter.core.filter.ChromaticParams
+import app.painter.core.filter.CrossFilterParams
 import app.painter.core.filter.DilateParams
 import app.painter.core.filter.EdgesParams
 import app.painter.core.filter.ErodeParams
 import app.painter.core.filter.FilterParams
 import app.painter.core.filter.FisheyeParams
 import app.painter.core.filter.GlowParams
+import app.painter.core.filter.GodRaysParams
+import app.painter.core.filter.GrainParams
+import app.painter.core.filter.HighPassParams
+import app.painter.core.filter.LensBlurParams
+import app.painter.core.filter.LensFlareParams
+import app.painter.core.filter.LocalContrastParams
 import app.painter.core.filter.MotionBlurParams
 import app.painter.core.filter.NoiseParams
 import app.painter.core.filter.PixelateParams
 import app.painter.core.filter.RadialLinesParams
+import app.painter.core.filter.ScatterParams
 import app.painter.core.filter.SharpenParams
+import app.painter.core.filter.SmoothParams
 import app.painter.core.filter.SpeedLinesParams
 import app.painter.core.filter.DropShadowParams
 import app.painter.core.filter.HalftoneParams
@@ -67,10 +77,20 @@ private enum class FilterKindUi(val label: Int) {
     LAYER_GLOW(R.string.filter_layer_glow),
     PANELS(R.string.filter_panels),
     SCREENTONE(R.string.filter_screentone),
+    SMOOTH(R.string.filter_smooth),
+    LENS_BLUR(R.string.filter_lens_blur),
+    HIGH_PASS(R.string.filter_high_pass),
+    SCATTER(R.string.filter_scatter),
+    GRAIN(R.string.filter_grain),
+    LOCAL_CONTRAST(R.string.filter_local_contrast),
+    BOKEH(R.string.filter_bokeh),
+    LENS_FLARE(R.string.filter_lens_flare),
+    GOD_RAYS(R.string.filter_god_rays),
+    CROSS(R.string.filter_cross),
 }
 
 /**
- * Filter picker and parameters (spec/filters.md, M3): a chip per filter and only the sliders that filter
+ * Filter picker and parameters (spec/filters.md, M3 and M5): a chip per filter and only the sliders that filter
  * needs, plus a common strength. Apply closes the dialog and runs the filter on the active layer.
  */
 @Composable
@@ -95,6 +115,17 @@ fun FilterDialog(ink: Rgba, onDismiss: () -> Unit, onApply: (FilterParams) -> Un
     var margin by remember { mutableStateOf(40f) }
     var gutter by remember { mutableStateOf(24f) }
     var toneShape by remember { mutableStateOf("dot") }
+    var highlightBoost by remember { mutableStateOf(0.4f) }
+    var bladeAngle by remember { mutableStateOf(0f) }
+    var grainVariant by remember { mutableStateOf("mono") }
+    var grainSize by remember { mutableStateOf(2f) }
+    var bokehSize by remember { mutableStateOf(12f) }
+    var flareSize by remember { mutableStateOf(40f) }
+    var rayLength by remember { mutableStateOf(64f) }
+    var crossLength by remember { mutableStateOf(24f) }
+    var centerX by remember { mutableStateOf(0.5f) }
+    var centerY by remember { mutableStateOf(0.5f) }
+    var crossRays by remember { mutableStateOf(4f) }
     val inkHex = remember(ink) {
         "#%02X%02X%02X".format(
             (ink.r.coerceIn(0f, 1f) * 255).roundToInt(),
@@ -106,6 +137,8 @@ fun FilterDialog(ink: Rgba, onDismiss: () -> Unit, onApply: (FilterParams) -> Un
     val params = kind.params(
         radius, amount, distance, angle, cell, threshold, mono, scale, strength,
         count, thickness, inner, inkHex, strokeInner, strokeOuter, rows, cols, margin, gutter, toneShape,
+        highlightBoost, bladeAngle, grainVariant, grainSize, bokehSize, flareSize, rayLength, crossLength,
+        centerX, centerY, crossRays,
     )
     val percent = { v: Float -> "${(v * 100).roundToInt()}%" }
 
@@ -327,6 +360,107 @@ fun FilterDialog(ink: Rgba, onDismiss: () -> Unit, onApply: (FilterParams) -> Un
                             ToggleChip(stringResource(R.string.cross), toneShape == "cross") { toneShape = "cross" }
                         }
                     }
+                    FilterKindUi.SMOOTH -> ParamSlider(
+                        stringResource(R.string.radius), radius, 1f..32f, { it.roundToInt().toString() },
+                        { radius = it }, step = 1f, unit = "px",
+                    )
+                    FilterKindUi.LENS_BLUR -> {
+                        ParamSlider(
+                            stringResource(R.string.radius), radius, 1f..100f, { it.roundToInt().toString() },
+                            { radius = it }, step = 1f, unit = "px",
+                        )
+                        ParamSlider(
+                            stringResource(R.string.highlight_boost), highlightBoost, 0f..1f, percent,
+                            { highlightBoost = it }, step = 0.01f,
+                        )
+                        ParamSlider(
+                            stringResource(R.string.blade_angle), bladeAngle, 0f..360f,
+                            { it.roundToInt().toString() }, { bladeAngle = it }, step = 1f, unit = "°",
+                        )
+                    }
+                    FilterKindUi.HIGH_PASS -> ParamSlider(
+                        stringResource(R.string.radius), radius, 0.5f..32f, { "%.1f".format(it) },
+                        { radius = it }, step = 0.1f, unit = "px",
+                    )
+                    FilterKindUi.SCATTER -> ParamSlider(
+                        stringResource(R.string.distance), distance, 1f..50f, { it.roundToInt().toString() },
+                        { distance = it }, step = 1f, unit = "px",
+                    )
+                    FilterKindUi.GRAIN -> {
+                        ParamSlider(
+                            stringResource(R.string.size), grainSize, 1f..16f, { it.roundToInt().toString() },
+                            { grainSize = it }, step = 1f, unit = "px",
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            ToggleChip(
+                                stringResource(R.string.monochrome), grainVariant == "mono",
+                            ) { grainVariant = "mono" }
+                            ToggleChip(
+                                stringResource(R.string.rgb), grainVariant == "rgb",
+                            ) { grainVariant = "rgb" }
+                            ToggleChip(
+                                stringResource(R.string.alpha), grainVariant == "alpha",
+                            ) { grainVariant = "alpha" }
+                        }
+                    }
+                    FilterKindUi.LOCAL_CONTRAST -> ParamSlider(
+                        stringResource(R.string.radius), radius, 1f..32f, { it.roundToInt().toString() },
+                        { radius = it }, step = 1f, unit = "px",
+                    )
+                    FilterKindUi.BOKEH -> ParamSlider(
+                        stringResource(R.string.size), bokehSize, 1f..64f, { it.roundToInt().toString() },
+                        { bokehSize = it }, step = 1f, unit = "px",
+                    )
+                    FilterKindUi.LENS_FLARE -> {
+                        ParamSlider(
+                            stringResource(R.string.center_x), centerX, 0f..1f, percent,
+                            { centerX = it }, step = 0.01f,
+                        )
+                        ParamSlider(
+                            stringResource(R.string.center_y), centerY, 0f..1f, percent,
+                            { centerY = it }, step = 0.01f,
+                        )
+                        ParamSlider(
+                            stringResource(R.string.size), flareSize, 1f..80f, { it.roundToInt().toString() },
+                            { flareSize = it }, step = 1f, unit = "px",
+                        )
+                    }
+                    FilterKindUi.GOD_RAYS -> {
+                        ParamSlider(
+                            stringResource(R.string.center_x), centerX, 0f..1f, percent,
+                            { centerX = it }, step = 0.01f,
+                        )
+                        ParamSlider(
+                            stringResource(R.string.center_y), centerY, 0f..1f, percent,
+                            { centerY = it }, step = 0.01f,
+                        )
+                        ParamSlider(
+                            stringResource(R.string.length), rayLength, 1f..160f, { it.roundToInt().toString() },
+                            { rayLength = it }, step = 1f, unit = "px",
+                        )
+                        ParamSlider(
+                            stringResource(R.string.threshold), threshold, 0f..1f, percent,
+                            { threshold = it }, step = 0.01f,
+                        )
+                    }
+                    FilterKindUi.CROSS -> {
+                        ParamSlider(
+                            stringResource(R.string.threshold), threshold, 0f..1f, percent,
+                            { threshold = it }, step = 0.01f,
+                        )
+                        ParamSlider(
+                            stringResource(R.string.length), crossLength, 1f..80f, { it.roundToInt().toString() },
+                            { crossLength = it }, step = 1f, unit = "px",
+                        )
+                        ParamSlider(
+                            stringResource(R.string.angle), angle, 0f..360f, { it.roundToInt().toString() },
+                            { angle = it }, step = 1f, unit = "°",
+                        )
+                        ParamSlider(
+                            stringResource(R.string.rays), crossRays, 2f..8f, { it.roundToInt().toString() },
+                            { crossRays = it }, step = 1f,
+                        )
+                    }
                 }
                 ParamSlider(
                     stringResource(R.string.strength), strength, 0f..1f, percent,
@@ -363,6 +497,17 @@ private fun FilterKindUi.params(
     margin: Float,
     gutter: Float,
     toneShape: String,
+    highlightBoost: Float,
+    bladeAngle: Float,
+    grainVariant: String,
+    grainSize: Float,
+    bokehSize: Float,
+    flareSize: Float,
+    rayLength: Float,
+    crossLength: Float,
+    centerX: Float,
+    centerY: Float,
+    crossRays: Float,
 ): FilterParams = when (this) {
     FilterKindUi.BLUR -> BlurParams(radius, strength)
     FilterKindUi.MOTION -> MotionBlurParams(distance, angle, strength)
@@ -397,5 +542,26 @@ private fun FilterKindUi.params(
     )
     FilterKindUi.SCREENTONE -> ScreentoneParams(
         cell = cell.roundToInt(), angleDeg = angle, shape = toneShape, color = ink, strength = strength,
+    )
+    FilterKindUi.SMOOTH -> SmoothParams(radius = radius, strength = strength)
+    FilterKindUi.LENS_BLUR -> LensBlurParams(
+        radius = radius, highlightBoost = highlightBoost, bladeAngleDeg = bladeAngle, strength = strength,
+    )
+    FilterKindUi.HIGH_PASS -> HighPassParams(radius = radius, strength = strength)
+    FilterKindUi.SCATTER -> ScatterParams(distance = distance, strength = strength)
+    FilterKindUi.GRAIN -> GrainParams(
+        variant = grainVariant, size = grainSize.roundToInt(), strength = strength,
+    )
+    FilterKindUi.LOCAL_CONTRAST -> LocalContrastParams(radius = radius, strength = strength)
+    FilterKindUi.BOKEH -> BokehParams(size = bokehSize, strength = strength)
+    FilterKindUi.LENS_FLARE -> LensFlareParams(
+        centerX = centerX, centerY = centerY, size = flareSize, strength = strength,
+    )
+    FilterKindUi.GOD_RAYS -> GodRaysParams(
+        centerX = centerX, centerY = centerY, length = rayLength, threshold = threshold, strength = strength,
+    )
+    FilterKindUi.CROSS -> CrossFilterParams(
+        threshold = threshold, length = crossLength, angleDeg = angle, rays = crossRays.roundToInt(),
+        strength = strength,
     )
 }

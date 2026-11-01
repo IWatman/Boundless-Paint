@@ -22,9 +22,10 @@ import kotlin.math.sin
 import kotlin.math.sqrt
 
 /**
- * Destructive filters of spec/filters.md (M3 set). A filter runs over the painted area of one layer, tile by
- * tile: each tile is processed with a patch padded by [FilterParams.reach], so neighbouring tiles never show a
- * seam. Pixels outside [out] (the content expanded by the reach, clipped by the selection) are left alone.
+ * Destructive filters of spec/filters.md (M3 and the first M5 batch). A filter runs over the painted area of one
+ * layer, tile by tile: each tile is processed with a patch padded by [FilterParams.reach], so neighbouring tiles
+ * never show a seam. Pixels outside [out] (the content expanded by the reach, clipped by the selection) are left
+ * alone.
  *
  * All arithmetic is on premultiplied RGBA floats, like the rest of the raster code.
  */
@@ -239,6 +240,16 @@ object Filters {
         is ErodeParams -> mix(src, morph(src, w, h, params.radius, dilate = false), params.strength)
         is ZoomBlurParams -> mix(src, zoomBlur(src, w, h, ox, oy, geometry, params), params.strength)
         is SpinBlurParams -> mix(src, spinBlur(src, w, h, ox, oy, geometry, params), params.strength)
+        is SmoothParams -> mix(src, smooth(src, w, h, params), params.strength)
+        is LensBlurParams -> mix(src, lensBlur(src, w, h, params), params.strength)
+        is HighPassParams -> mix(src, highPass(src, w, h, params), params.strength)
+        is ScatterParams -> mix(src, scatter(src, w, h, ox, oy, params), params.strength)
+        is GrainParams -> mix(src, grain(src, w, h, ox, oy, params), params.strength)
+        is LocalContrastParams -> mix(src, localContrast(src, w, h, params), params.strength)
+        is BokehParams -> mix(src, bokeh(src, w, h, params), params.strength)
+        is LensFlareParams -> mix(src, lensFlare(src, w, h, ox, oy, geometry, params), params.strength)
+        is GodRaysParams -> mix(src, godRays(src, w, h, ox, oy, geometry, params), params.strength)
+        is CrossFilterParams -> mix(src, crossFilter(src, w, h, params), params.strength)
         is RadialLinesParams -> mix(src, radialLines(src, w, h, ox, oy, geometry, params), params.strength)
         is SpeedLinesParams -> mix(src, speedLines(src, w, h, ox, oy, geometry, params), params.strength)
         is HalftoneParams -> mix(src, halftone(src, w, h, ox, oy, params), params.strength)
@@ -266,6 +277,22 @@ object Filters {
         val a = src.copyOf()
         val temp = FloatArray(src.size)
         repeat(3) {
+            boxH(a, temp, w, h, r)
+            boxV(temp, a, w, h, r)
+        }
+        return a
+    }
+
+    /**
+     * Two box passes. Unlike the three-pass [gaussian], its support is exactly `2r`, which lets the M5
+     * filters keep a reach that covers every pixel they read.
+     */
+    private fun localBlur(src: FloatArray, w: Int, h: Int, radius: Int): FloatArray {
+        val r = radius.coerceIn(0, 32)
+        if (r == 0) return src.copyOf()
+        val a = src.copyOf()
+        val temp = FloatArray(src.size)
+        repeat(2) {
             boxH(a, temp, w, h, r)
             boxV(temp, a, w, h, r)
         }
@@ -618,6 +645,415 @@ object Filters {
             }
             val i = (y * w + x) * 4
             out[i] = r / samples; out[i + 1] = g / samples; out[i + 2] = b / samples; out[i + 3] = a / samples
+        }
+        return out
+    }
+
+    // ---------------------------------------------------------------- M5 blur, light and texture
+
+    /**
+     * Edge-preserving smoothing: blend toward a Gaussian only where the pixel is close to its blurred
+     * neighbourhood, so flat areas and noise are smoothed while outlines stay crisp.
+     */
+    private fun smooth(src: FloatArray, w: Int, h: Int, p: SmoothParams): FloatArray {
+        val radius = ceil(p.radius.coerceIn(1f, 32f)).toInt()
+        val blurred = localBlur(src, w, h, radius)
+        val out = FloatArray(src.size)
+        for (i in src.indices step 4) {
+            val a = src[i + 3]
+            if (a <= 0f) continue
+            var d = abs(src[i] - blurred[i])
+            d = max(d, abs(src[i + 1] - blurred[i + 1]))
+            d = max(d, abs(src[i + 2] - blurred[i + 2]))
+            // A large difference is an outline (or a hole), so it keeps the sharper source pixel.
+            val keep = ((d / a) / 0.16f).coerceIn(0f, 1f)
+            val k = 1f - keep
+            out[i] = src[i] + (blurred[i] - src[i]) * k
+            out[i + 1] = src[i + 1] + (blurred[i + 1] - src[i + 1]) * k
+            out[i + 2] = src[i + 2] + (blurred[i + 2] - src[i + 2]) * k
+            out[i + 3] = a
+        }
+        return out
+    }
+
+    /** Aperture blur with a hexagonal opening; [LensBlurParams.highlightBoost] favours bright samples. */
+    private fun lensBlur(src: FloatArray, w: Int, h: Int, p: LensBlurParams): FloatArray = apertureBlur(
+        src, w, h,
+        radius = p.radius.coerceIn(0f, 100f),
+        angle = Math.toRadians(p.bladeAngleDeg.toDouble()).toFloat(),
+        highlightBoost = p.highlightBoost.coerceIn(0f, 1f),
+        polygon = true,
+        directions = 24,
+    )
+
+    /**
+     * Shared disc/hexagon gather. Every sample is taken from the padded patch, so the result is identical
+     * on both sides of a tile boundary.
+     */
+    private fun apertureBlur(
+        src: FloatArray,
+        w: Int,
+        h: Int,
+        radius: Float,
+        angle: Float,
+        highlightBoost: Float,
+        polygon: Boolean,
+        directions: Int,
+    ): FloatArray {
+        if (radius < 0.75f) return src.copyOf()
+        val rings = 3
+        val count = directions * rings
+        val sx = FloatArray(count)
+        val sy = FloatArray(count)
+        val sector = (Math.PI / 3.0).toFloat()
+        val cosHalf = cos(sector / 2f)
+        var n = 0
+        for (d in 0 until directions) {
+            val theta = (Math.PI * 2.0 * d / directions).toFloat() + angle
+            val extent = if (polygon) {
+                var local = (theta - angle) % sector
+                if (local < 0f) local += sector
+                radius * cosHalf / cos(local - sector / 2f).coerceAtLeast(0.5f)
+            } else {
+                radius
+            }
+            for (ring in 1..rings) {
+                val f = ring / rings.toFloat() * extent
+                sx[n] = cos(theta) * f
+                sy[n] = sin(theta) * f
+                n++
+            }
+        }
+        val out = FloatArray(src.size)
+        val s = FloatArray(4)
+        for (y in 0 until h) for (x in 0 until w) {
+            var r = 0f
+            var g = 0f
+            var b = 0f
+            var a = 0f
+            var total = 0f
+            for (k in 0 until count) {
+                sample(src, w, h, x + sx[k], y + sy[k], s)
+                var weight = 1f
+                if (highlightBoost > 0f && s[3] > 0f) {
+                    val lum = (0.3f * s[0] + 0.59f * s[1] + 0.11f * s[2]) / s[3]
+                    weight += highlightBoost * 3f * lum * lum
+                }
+                r += s[0] * weight
+                g += s[1] * weight
+                b += s[2] * weight
+                a += s[3] * weight
+                total += weight
+            }
+            val i = (y * w + x) * 4
+            out[i] = r / total
+            out[i + 1] = g / total
+            out[i + 2] = b / total
+            out[i + 3] = a / total
+        }
+        return out
+    }
+
+    /** Grey high-pass image: `0.5 + (source - blur)` per pixel, over the source alpha. */
+    private fun highPass(src: FloatArray, w: Int, h: Int, p: HighPassParams): FloatArray {
+        val radius = ceil(p.radius.coerceIn(0.5f, 32f)).toInt()
+        val blurred = localBlur(src, w, h, radius)
+        val out = FloatArray(src.size)
+        for (i in src.indices step 4) {
+            val a = src[i + 3]
+            if (a <= 0f) continue
+            val sourceLum = (0.3f * src[i] + 0.59f * src[i + 1] + 0.11f * src[i + 2]) / a
+            val ba = blurred[i + 3]
+            val blurLum = if (ba > 0f) {
+                (0.3f * blurred[i] + 0.59f * blurred[i + 1] + 0.11f * blurred[i + 2]) / ba
+            } else {
+                sourceLum
+            }
+            val v = (0.5f + (sourceLum - blurLum) * 2f).coerceIn(0f, 1f)
+            out[i] = v * a
+            out[i + 1] = v * a
+            out[i + 2] = v * a
+            out[i + 3] = a
+        }
+        return out
+    }
+
+    /** Frosted glass: smooth, deterministic noise displaces the source by up to [distance] px. */
+    private fun scatter(src: FloatArray, w: Int, h: Int, ox: Int, oy: Int, p: ScatterParams): FloatArray {
+        val distance = p.distance.coerceIn(1f, 50f)
+        val out = FloatArray(src.size)
+        val s = FloatArray(4)
+        for (y in 0 until h) for (x in 0 until w) {
+            val gx = x + ox
+            val gy = y + oy
+            val dx = valueNoise(gx, gy, 3f, 0x51ED2701L) * distance
+            val dy = valueNoise(gx, gy, 3f, 0x7F4A7C15L) * distance
+            sample(src, w, h, x + dx, y + dy, s)
+            val i = (y * w + x) * 4
+            out[i] = s[0]
+            out[i + 1] = s[1]
+            out[i + 2] = s[2]
+            out[i + 3] = s[3]
+        }
+        return out
+    }
+
+    /** Smooth value noise on a [cell]-px lattice, in -1..1, aligned to the canvas. */
+    private fun valueNoise(x: Int, y: Int, cell: Float, seed: Long): Float {
+        val fx = x / cell
+        val fy = y / cell
+        val x0 = floor(fx).toInt()
+        val y0 = floor(fy).toInt()
+        val tx = fade(fx - x0)
+        val ty = fade(fy - y0)
+        val n00 = hash(x0, y0, seed)
+        val n10 = hash(x0 + 1, y0, seed)
+        val n01 = hash(x0, y0 + 1, seed)
+        val n11 = hash(x0 + 1, y0 + 1, seed)
+        val top = n00 + (n10 - n00) * tx
+        val bottom = n01 + (n11 - n01) * tx
+        return top + (bottom - top) * ty
+    }
+
+    private fun fade(t: Float): Float = t * t * (3f - 2f * t)
+
+    /** Deterministic grain on a [GrainParams.size]-px grid; alpha grain keeps the straight colour. */
+    private fun grain(src: FloatArray, w: Int, h: Int, ox: Int, oy: Int, p: GrainParams): FloatArray {
+        val size = p.size.coerceIn(1, 16)
+        val variant = p.variant.lowercase()
+        val out = src.copyOf()
+        for (y in 0 until h) for (x in 0 until w) {
+            val i = (y * w + x) * 4
+            val a = src[i + 3]
+            if (a <= 0f) continue
+            val gx = (x + ox) / size
+            val gy = (y + oy) / size
+            if (variant == "alpha") {
+                val na = (a + hash(gx, gy, 0x2C1B3C6DL) * 0.45f).coerceIn(0f, 1f)
+                val k = na / a
+                out[i] = (src[i] * k).coerceIn(0f, na)
+                out[i + 1] = (src[i + 1] * k).coerceIn(0f, na)
+                out[i + 2] = (src[i + 2] * k).coerceIn(0f, na)
+                out[i + 3] = na
+                continue
+            }
+            val nr = hash(gx, gy, 0x1B873593L) * 0.3f
+            val ng = if (variant == "rgb") hash(gx, gy, 0x1B873594L) * 0.3f else nr
+            val nb = if (variant == "rgb") hash(gx, gy, 0x1B873595L) * 0.3f else nr
+            val sr = (src[i] / a).coerceIn(0f, 1f) + nr
+            val sg = (src[i + 1] / a).coerceIn(0f, 1f) + ng
+            val sb = (src[i + 2] / a).coerceIn(0f, 1f) + nb
+            out[i] = sr.coerceIn(0f, 1f) * a
+            out[i + 1] = sg.coerceIn(0f, 1f) * a
+            out[i + 2] = sb.coerceIn(0f, 1f) * a
+        }
+        return out
+    }
+
+    /** Local contrast: the luminance difference from the blurred source added back to every channel. */
+    private fun localContrast(src: FloatArray, w: Int, h: Int, p: LocalContrastParams): FloatArray {
+        val radius = ceil(p.radius.coerceIn(1f, 32f)).toInt()
+        val blurred = localBlur(src, w, h, radius)
+        val out = FloatArray(src.size)
+        for (i in src.indices step 4) {
+            val a = src[i + 3]
+            if (a <= 0f) continue
+            val lum = (0.3f * src[i] + 0.59f * src[i + 1] + 0.11f * src[i + 2]) / a
+            val ba = blurred[i + 3]
+            val blurLum = if (ba > 0f) {
+                (0.3f * blurred[i] + 0.59f * blurred[i + 1] + 0.11f * blurred[i + 2]) / ba
+            } else {
+                lum
+            }
+            val add = (lum - blurLum) * a * 2f
+            out[i] = (src[i] + add).coerceIn(0f, a)
+            out[i + 1] = (src[i + 1] + add).coerceIn(0f, a)
+            out[i + 2] = (src[i + 2] + add).coerceIn(0f, a)
+            out[i + 3] = a
+        }
+        return out
+    }
+
+    /** Bokeh: bright pixels are blurred through a wide disc and screened over the source. */
+    private fun bokeh(src: FloatArray, w: Int, h: Int, p: BokehParams): FloatArray {
+        val size = p.size.coerceIn(1f, 64f)
+        val bright = FloatArray(src.size)
+        for (i in src.indices step 4) {
+            val a = src[i + 3]
+            if (a <= 0f) continue
+            val lum = (0.3f * src[i] + 0.59f * src[i + 1] + 0.11f * src[i + 2]) / a
+            if (lum >= 0.5f) {
+                val k = ((lum - 0.5f) / 0.5f).coerceIn(0f, 1f)
+                bright[i] = src[i] * k
+                bright[i + 1] = src[i + 1] * k
+                bright[i + 2] = src[i + 2] * k
+                bright[i + 3] = a * k
+            }
+        }
+        val halo = apertureBlur(bright, w, h, size, 0f, 0f, polygon = false, directions = 16)
+        val out = src.copyOf()
+        for (i in src.indices step 4) {
+            val a = src[i + 3]
+            val ha = (halo[i + 3] * 2.5f).coerceIn(0f, 1f)
+            val oa = max(a, ha)
+            out[i] = (src[i] + halo[i] * 2.5f).coerceIn(0f, oa)
+            out[i + 1] = (src[i + 1] + halo[i + 1] * 2.5f).coerceIn(0f, oa)
+            out[i + 2] = (src[i + 2] + halo[i + 2] * 2.5f).coerceIn(0f, oa)
+            out[i + 3] = oa
+        }
+        return out
+    }
+
+    /** Additive lens flare: a warm core, an aperture ring and a horizontal anamorphic streak. */
+    private fun lensFlare(
+        src: FloatArray,
+        w: Int,
+        h: Int,
+        ox: Int,
+        oy: Int,
+        geometry: Geometry,
+        p: LensFlareParams,
+    ): FloatArray {
+        val size = p.size.coerceIn(1f, 80f)
+        val cx = geometry.content.x0 + geometry.content.width * p.centerX.coerceIn(0f, 1f)
+        val cy = geometry.content.y0 + geometry.content.height * p.centerY.coerceIn(0f, 1f)
+        val out = src.copyOf()
+        val limit = size * 2.5f
+        for (y in 0 until h) for (x in 0 until w) {
+            val dx = x + ox - cx
+            val dy = y + oy - cy
+            val r = hypot(dx, dy)
+            if (r > limit) continue
+            val t = r / size
+            val core = 1f / (1f + 16f * t * t)
+            val ringOffset = (r - size * 0.82f) / (size * 0.09f)
+            val ring = 1f / (1f + ringOffset * ringOffset) * 0.55f
+            val halo = 1f / (1f + 3f * t * t) * 0.3f
+            val axis = if (r > 0.01f) min(abs(dx), abs(dy)) / r else 0f
+            var star = 1f - axis
+            repeat(7) { star *= (1f - axis) }
+            star *= 1f / (1f + t * 0.8f) * 0.8f
+            val sy2 = (abs(dy) / (size * 0.05f)).let { it * it }
+            val sx2 = (abs(dx) / (size * 1.8f)).let { it * it }
+            val streak = 1f / (1f + sy2) * 1f / (1f + sx2) * 0.6f
+            val light = (core + ring + halo + star + streak).coerceIn(0f, 1f)
+            val i = (y * w + x) * 4
+            out[i] = (out[i] + light).coerceIn(0f, 1f)
+            out[i + 1] = (out[i + 1] + light * 0.96f).coerceIn(0f, 1f)
+            out[i + 2] = (out[i + 2] + light * 0.86f).coerceIn(0f, 1f)
+            out[i + 3] = (out[i + 3] + light).coerceIn(0f, 1f)
+        }
+        return out
+    }
+
+    /** God rays: bright samples marched toward the centre become visible shafts. */
+    private fun godRays(
+        src: FloatArray,
+        w: Int,
+        h: Int,
+        ox: Int,
+        oy: Int,
+        geometry: Geometry,
+        p: GodRaysParams,
+    ): FloatArray {
+        val length = p.length.coerceIn(1f, 160f)
+        val threshold = p.threshold.coerceIn(0f, 1f)
+        val cx = geometry.content.x0 + geometry.content.width * p.centerX.coerceIn(0f, 1f)
+        val cy = geometry.content.y0 + geometry.content.height * p.centerY.coerceIn(0f, 1f)
+        val samples = 20
+        val step = length / samples
+        val range = max(1f - threshold, 1e-4f)
+        val out = src.copyOf()
+        val s = FloatArray(4)
+        for (y in 0 until h) for (x in 0 until w) {
+            val gx = x + ox
+            val gy = y + oy
+            val tx = cx - gx
+            val ty = cy - gy
+            val distance = hypot(tx, ty)
+            if (distance < 0.01f) continue
+            val ux = tx / distance
+            val uy = ty / distance
+            // A narrow fan makes a shaft out of the exact centre line instead of a one-pixel ray.
+            val spreadX = -uy * 0.02f
+            val spreadY = ux * 0.02f
+            var light = 0f
+            for (fan in -1..1) {
+                val dx = ux + spreadX * fan
+                val dy = uy + spreadY * fan
+                for (n in 1..samples) {
+                    val d = step * n
+                    if (d > length) break
+                    sample(src, w, h, gx + dx * d - ox, gy + dy * d - oy, s)
+                    val a = s[3]
+                    if (a <= 0f) continue
+                    val lum = (0.3f * s[0] + 0.59f * s[1] + 0.11f * s[2]) / a
+                    if (lum < threshold) continue
+                    val k = ((lum - threshold) / range).coerceIn(0f, 1f)
+                    val falloff = 1f - (n - 1) / samples.toFloat()
+                    light = max(light, k * falloff)
+                }
+            }
+            if (light <= 0.002f) continue
+            val v = (light * 0.9f).coerceIn(0f, 1f)
+            val i = (y * w + x) * 4
+            out[i] = (out[i] + v).coerceIn(0f, 1f)
+            out[i + 1] = (out[i + 1] + v * 0.95f).coerceIn(0f, 1f)
+            out[i + 2] = (out[i + 2] + v * 0.8f).coerceIn(0f, 1f)
+            out[i + 3] = (out[i + 3] + v).coerceIn(0f, 1f)
+        }
+        return out
+    }
+
+    /** Cross filter: bright pixels leave [CrossFilterParams.rays] star spikes of [length] px. */
+    private fun crossFilter(src: FloatArray, w: Int, h: Int, p: CrossFilterParams): FloatArray {
+        val length = p.length.coerceIn(1f, 80f)
+        val threshold = p.threshold.coerceIn(0f, 1f)
+        val rays = p.rays.coerceIn(2, 8)
+        val base = Math.toRadians(p.angleDeg.toDouble()).toFloat()
+        val samples = 20
+        val step = length / samples
+        val range = max(1f - threshold, 1e-4f)
+        val out = src.copyOf()
+        val s = FloatArray(4)
+        for (y in 0 until h) for (x in 0 until w) {
+            var br = 0f
+            var bg = 0f
+            var bb = 0f
+            var ba = 0f
+            for (ray in 0 until rays) {
+                val angle = base + (Math.PI * 2.0 * ray / rays).toFloat()
+                val dx = cos(angle)
+                val dy = sin(angle)
+                for (n in 1..samples) {
+                    val d = step * n
+                    sample(src, w, h, x + dx * d, y + dy * d, s)
+                    val a = s[3]
+                    if (a <= 0f) continue
+                    val lum = (0.3f * s[0] + 0.59f * s[1] + 0.11f * s[2]) / a
+                    if (lum < threshold) continue
+                    val k = ((lum - threshold) / range).coerceIn(0f, 1f)
+                    val falloff = 1f - (n - 1) / samples.toFloat()
+                    val v = k * falloff * falloff
+                    val sr = s[0] * v
+                    val sg = s[1] * v
+                    val sb = s[2] * v
+                    if (sr + sg + sb > br + bg + bb) {
+                        br = sr
+                        bg = sg
+                        bb = sb
+                        ba = a * v
+                    }
+                }
+            }
+            if (ba <= 0.002f) continue
+            val i = (y * w + x) * 4
+            val a = src[i + 3]
+            val oa = max(a, (a + ba * 0.8f).coerceAtMost(1f))
+            out[i] = (out[i] + br * 0.9f).coerceIn(0f, oa)
+            out[i + 1] = (out[i + 1] + bg * 0.9f).coerceIn(0f, oa)
+            out[i + 2] = (out[i + 2] + bb * 0.9f).coerceIn(0f, oa)
+            out[i + 3] = oa
         }
         return out
     }

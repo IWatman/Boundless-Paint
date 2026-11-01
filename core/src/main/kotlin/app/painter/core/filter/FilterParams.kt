@@ -5,9 +5,9 @@ import kotlinx.serialization.Serializable
 import kotlin.math.ceil
 
 /**
- * Parameters of one destructive filter (spec/filters.md, the M3 set). Serialized by kotlinx with the `kind`
- * discriminator, like the brush specials. [reach] is the largest distance, in pixels, the filter reads outside
- * the pixel it writes: the engine pads every tile patch by it, so tiles never show seams.
+ * Parameters of one destructive filter (spec/filters.md, the M3 and M5 sets). Serialized by kotlinx with the
+ * `kind` discriminator, like the brush specials. [reach] is the largest distance, in pixels, the filter reads
+ * outside the pixel it writes: the engine pads every tile patch by it, so tiles never show seams.
  */
 @Serializable
 sealed class FilterParams {
