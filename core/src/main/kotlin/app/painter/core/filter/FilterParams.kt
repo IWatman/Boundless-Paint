@@ -15,10 +15,31 @@ sealed class FilterParams {
     abstract val reach: Int
 
     /**
+     * How far the filter may write past the painted area. It defaults to [reach], because most filters both
+     * read and write that far; cell filters keep their writes inside the content even though they read a
+     * whole cell for the pixels on its edge.
+     */
+    open val writeReach: Int get() = reach
+
+    /**
      * True for generators that draw over the whole canvas (or selection) instead of filtering the painted
      * pixels: an empty layer is still a valid target for them.
      */
     open val coversCanvas: Boolean get() = false
+
+    /**
+     * True for warps that may read any pixel of the painted area (polar coordinates, twirl, kaleidoscope).
+     * The engine snapshots the content once and samples that snapshot, so such a filter stays seam-free
+     * without a padding large enough for the whole canvas.
+     */
+    open val needsFullSource: Boolean get() = false
+
+    /**
+     * True for cell filters, whose tile patch must be read from one pre-filter snapshot: a worker that saw a
+     * neighbour cell after it was rewritten would average a different colour and leave a seam in a live
+     * filter layer, where no history snapshot exists yet.
+     */
+    open val needsStableSource: Boolean get() = false
 }
 
 /** Gaussian-like blur: three box passes of [radius] px. [strength] mixes the result with the source. */
