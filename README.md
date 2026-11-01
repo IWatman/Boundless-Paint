@@ -40,6 +40,7 @@ The app is completely free: no subscriptions, ads, watermarks or paid features.
 - Geometric filters: sphere lens, wave, ripple, twirl, polar coordinates, expansion, kaleidoscope, crystallize, hexagon and triangle pixelate, pointillize (M5)
 - Stylization and material filters: gloom, sketch edges, trace, bevel, emboss, relief, satin, wet edge, waterdrop, extrude and clouds (M5)
 - Artistic and generative filters: palette posterize, QR code, stained glass, dots, 1-bit stamp, glitch, retro game, chrome, sheer, impressionist, swirl painting and pop art (M5)
+- Final M5 filters: manga and manga background tones, anime background, pencil sketch, oil paint, blur frame, table frame and rain (M5)
 - Pattern fill with six seamless procedural patterns, two colours, tile size, rotation, phase offset, contrast, invert and opacity (M5)
 - Liquify and text stamp tools, hardware-keyboard shortcuts (M3)
 - Canvas crop, canvas size with anchors, straighten; curvilinear 5-point perspective (M3)
@@ -56,7 +57,7 @@ The app is completely free: no subscriptions, ads, watermarks or paid features.
 - In-app update from GitHub Releases
 
 **Next (M5)**
-- Remaining filters, more pattern tools and materials
+- More pattern tools and materials
 - Video mode, localization and performance work
 
 Full plan: [spec/ROADMAP.md](spec/ROADMAP.md), the finished M2 plan: [spec/PLAN-M2.md](spec/PLAN-M2.md), known issues: [spec/STATUS.md](spec/STATUS.md).

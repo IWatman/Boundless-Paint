@@ -20,7 +20,10 @@
 - **Implemented in the fourth M5 batch (2026-11-01):** palette posterization, QR code, stained glass, dots, stamp,
   glitch, retro game, chrome, sheer, impressionist, swirl painting and pop art — `core/filter/FilterParamsM5.kt`,
   `core/filter/Filters.kt` and the self-contained `core/filter/QrCode.kt`, one undo step, selection and alpha lock
-  aware, seam-free across tiles. The rest below is still planned.
+  aware, seam-free across tiles.
+- **Implemented in the final M5 batch (2026-11-01):** manga (tone from an image), manga background, anime
+  background, pencil sketch, oil paint, blur frame, table frame and rain — the same files, one undo step,
+  selection and alpha lock aware, seam-free across tiles. The filter list above is complete.
 
 ## Color and tone (Adjust)
 | Filter | Parameters | live | Milestone |

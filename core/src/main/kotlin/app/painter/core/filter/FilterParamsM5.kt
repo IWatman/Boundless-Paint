@@ -748,3 +748,151 @@ data class PopArtParams(
     override val writeReach: Int get() = 0
     override val needsStableSource: Boolean get() = true
 }
+
+/*
+ * Parameters of the final M5 batch: manga tones, anime background, pencil sketch, oil paint, the two frames
+ * and rain.
+ */
+
+/** Manga tone: [toneSize] px dot screen from the image luminance with ink outlines. */
+@Serializable
+@SerialName("manga")
+data class MangaParams(
+    /** -100..100, lifts or deepens the tone. */
+    val brightness: Float = 0f,
+    /** 0..100, ink strength of the outlines. */
+    val edge: Float = 50f,
+    /** 2..32 px, the tone cell. */
+    val toneSize: Int = 6,
+    val strength: Float = 1f,
+) : FilterParams() {
+    override val kind: String get() = "manga"
+    override val reach: Int get() = toneSize.coerceIn(2, 32) + 2
+    override val writeReach: Int get() = 0
+    override val needsStableSource: Boolean get() = true
+}
+
+/** Manga background: high-contrast tones from the image with heavy ink outlines. */
+@Serializable
+@SerialName("manga-background")
+data class MangaBackgroundParams(
+    /** 0..100, how hard the tones are pushed apart. */
+    val contrast: Float = 40f,
+    /** 0..1, ink strength of the outlines. */
+    val edgeDarkness: Float = 0.7f,
+    /** 2..32 px, the tone cell. */
+    val toneSize: Int = 6,
+    val strength: Float = 1f,
+) : FilterParams() {
+    override val kind: String get() = "manga-background"
+    override val reach: Int get() = toneSize.coerceIn(2, 32) + 2
+    override val writeReach: Int get() = 0
+    override val needsStableSource: Boolean get() = true
+}
+
+/** Anime background: bright saturated colours reduced to [posterize] flat levels. */
+@Serializable
+@SerialName("anime-background")
+data class AnimeBackgroundParams(
+    /** -100..100. */
+    val brightness: Float = 0f,
+    /** -100..100. */
+    val contrast: Float = 0f,
+    /** -100..100. */
+    val saturation: Float = 0f,
+    /** 2..16 levels per colour channel. */
+    val posterize: Int = 6,
+    val strength: Float = 1f,
+) : FilterParams() {
+    override val kind: String get() = "anime-background"
+    override val reach: Int get() = 0
+    override val writeReach: Int get() = 0
+}
+
+/** Pencil sketch: graphite hatching of [lineLength] px with darker contours. */
+@Serializable
+@SerialName("pencil-sketch")
+data class PencilSketchParams(
+    /** 2..48 px, the length and pitch of one hatch stroke. */
+    val lineLength: Float = 12f,
+    val strength: Float = 1f,
+) : FilterParams() {
+    override val kind: String get() = "pencil-sketch"
+    override val reach: Int get() = 1
+    override val writeReach: Int get() = 0
+    override val needsStableSource: Boolean get() = true
+}
+
+/** Oil paint: a Kuwahara filter of [radius] px that flattens colours to [levels]. */
+@Serializable
+@SerialName("oil-paint")
+data class OilPaintParams(
+    /** 1..12 px, the window radius of every quadrant. */
+    val radius: Int = 4,
+    /** 2..32 colour levels per channel. */
+    val levels: Int = 8,
+    val strength: Float = 1f,
+) : FilterParams() {
+    override val kind: String get() = "oil-paint"
+    override val reach: Int get() = radius.coerceIn(1, 12)
+    override val writeReach: Int get() = 0
+    override val needsStableSource: Boolean get() = true
+}
+
+/** Blur frame: a soft vignette that blurs the last [width] px inside the content edge. */
+@Serializable
+@SerialName("blur-frame")
+data class BlurFrameParams(
+    /** 1..400 px, how far the frame reaches into the content. */
+    val width: Float = 40f,
+    /** 1..32 px, the blur radius of the frame. */
+    val blur: Float = 12f,
+    val strength: Float = 1f,
+) : FilterParams() {
+    override val kind: String get() = "blur-frame"
+    override val reach: Int get() = 2 * ceil(blur.coerceIn(1f, 32f)).toInt() + 2
+    override val writeReach: Int get() = 0
+    override val needsStableSource: Boolean get() = true
+}
+
+/** Table frame: a solid [width] px border with rounded corners around the content. */
+@Serializable
+@SerialName("table-frame")
+data class TableFrameParams(
+    /** 1..400 px. */
+    val width: Float = 16f,
+    /** "#RRGGBB" of the border. */
+    val color: String = "#FFFFFF",
+    /** 0..400 px, the outer corner radius. */
+    val cornerRadius: Float = 16f,
+    val strength: Float = 1f,
+) : FilterParams() {
+    override val kind: String get() = "table-frame"
+    override val reach: Int get() = 0
+    override val writeReach: Int get() = 0
+}
+
+/**
+ * Rain generator: [density] of the lattice cells carry a streak of [length] px at [angleDeg], painted white
+ * at [opacity]. It is a Draw generator that covers the canvas (or the selection) and draws its drops from
+ * canvas coordinates, so every tile agrees on the streaks that cross it.
+ */
+@Serializable
+@SerialName("rain")
+data class RainParams(
+    /** 0..1, the share of the lattice cells that carry a drop. */
+    val density: Float = 0.5f,
+    /** 0..360 degrees, the direction the drops fall toward. */
+    val angleDeg: Float = 12f,
+    /** 4..200 px. */
+    val length: Float = 28f,
+    /** 0..1. */
+    val opacity: Float = 0.6f,
+    val seed: Long = 1L,
+    val strength: Float = 1f,
+) : FilterParams() {
+    override val kind: String get() = "rain"
+    override val reach: Int get() = 0
+    override val writeReach: Int get() = 0
+    override val coversCanvas: Boolean get() = true
+}

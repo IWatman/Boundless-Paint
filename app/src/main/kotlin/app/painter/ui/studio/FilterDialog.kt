@@ -86,6 +86,14 @@ import app.painter.core.filter.ChromeParams
 import app.painter.core.filter.DotsParams
 import app.painter.core.filter.GlitchParams
 import app.painter.core.filter.ImpressionistParams
+import app.painter.core.filter.AnimeBackgroundParams
+import app.painter.core.filter.BlurFrameParams
+import app.painter.core.filter.MangaBackgroundParams
+import app.painter.core.filter.MangaParams
+import app.painter.core.filter.OilPaintParams
+import app.painter.core.filter.PencilSketchParams
+import app.painter.core.filter.RainParams
+import app.painter.core.filter.TableFrameParams
 import app.painter.core.color.Rgba
 import app.painter.ui.components.ParamSlider
 import kotlin.math.roundToInt
@@ -158,6 +166,14 @@ private enum class FilterKindUi(val label: Int) {
     IMPRESSIONIST(R.string.filter_impressionist),
     SWIRL_PAINTING(R.string.filter_swirl_painting),
     POP_ART(R.string.filter_pop_art),
+    MANGA(R.string.filter_manga),
+    MANGA_BACKGROUND(R.string.filter_manga_background),
+    ANIME_BACKGROUND(R.string.filter_anime_background),
+    PENCIL_SKETCH(R.string.filter_pencil_sketch),
+    OIL_PAINT(R.string.filter_oil_paint),
+    BLUR_FRAME(R.string.filter_blur_frame),
+    TABLE_FRAME(R.string.filter_table_frame),
+    RAIN(R.string.filter_rain),
 }
 
 /**
@@ -256,6 +272,28 @@ fun FilterDialog(ink: Rgba, onDismiss: () -> Unit, onApply: (FilterParams) -> Un
     var impressionSize by remember { mutableStateOf(8f) }
     var popDot by remember { mutableStateOf(0.8f) }
     var popSaturation by remember { mutableStateOf(1.6f) }
+    var mangaBrightness by remember { mutableStateOf(0f) }
+    var mangaEdge by remember { mutableStateOf(50f) }
+    var mangaTone by remember { mutableStateOf(6f) }
+    var mangaContrast by remember { mutableStateOf(40f) }
+    var mangaEdgeDarkness by remember { mutableStateOf(0.7f) }
+    var animeBrightness by remember { mutableStateOf(0f) }
+    var animeContrast by remember { mutableStateOf(0f) }
+    var animeSaturation by remember { mutableStateOf(0f) }
+    var animePosterize by remember { mutableStateOf(6f) }
+    var pencilLine by remember { mutableStateOf(12f) }
+    var oilRadius by remember { mutableStateOf(4f) }
+    var oilLevels by remember { mutableStateOf(8f) }
+    var frameWidth by remember { mutableStateOf(40f) }
+    var frameBlur by remember { mutableStateOf(12f) }
+    var tableWidth by remember { mutableStateOf(16f) }
+    var tableCorner by remember { mutableStateOf(16f) }
+    var tableInk by remember { mutableStateOf(false) }
+    var rainDensity by remember { mutableStateOf(0.5f) }
+    var rainAngle by remember { mutableStateOf(12f) }
+    var rainLength by remember { mutableStateOf(28f) }
+    var rainOpacity by remember { mutableStateOf(0.6f) }
+    var rainSeed by remember { mutableStateOf(1f) }
     val inkHex = remember(ink) {
         "#%02X%02X%02X".format(
             (ink.r.coerceIn(0f, 1f) * 255).roundToInt(),
@@ -277,6 +315,10 @@ fun FilterDialog(ink: Rgba, onDismiss: () -> Unit, onApply: (FilterParams) -> Un
         glassCell, glassBorder, glassInk, dotsSize, dotsSpacing, dotsHex, dotsInk,
         glitchAmount, glitchSlice, glitchSeed, retroPalette, retroPixel, retroDither,
         chromeSmooth, impressionSize, popDot, popSaturation,
+        mangaBrightness, mangaEdge, mangaTone, mangaContrast, mangaEdgeDarkness,
+        animeBrightness, animeContrast, animeSaturation, animePosterize,
+        pencilLine, oilRadius, oilLevels, frameWidth, frameBlur,
+        tableWidth, tableCorner, tableInk, rainDensity, rainAngle, rainLength, rainOpacity, rainSeed,
     )
     val percent = { v: Float -> "${(v * 100).roundToInt()}%" }
 
@@ -1001,6 +1043,112 @@ fun FilterDialog(ink: Rgba, onDismiss: () -> Unit, onApply: (FilterParams) -> Un
                             { "%.2f".format(it) }, { popSaturation = it }, step = 0.05f,
                         )
                     }
+                    FilterKindUi.MANGA -> {
+                        ParamSlider(
+                            stringResource(R.string.brightness), mangaBrightness, -100f..100f,
+                            { it.roundToInt().toString() }, { mangaBrightness = it }, step = 1f,
+                        )
+                        ParamSlider(
+                            stringResource(R.string.edge), mangaEdge, 0f..100f,
+                            { it.roundToInt().toString() }, { mangaEdge = it }, step = 1f,
+                        )
+                        ParamSlider(
+                            stringResource(R.string.tone_size), mangaTone, 2f..32f,
+                            { it.roundToInt().toString() }, { mangaTone = it }, step = 1f, unit = "px",
+                        )
+                    }
+                    FilterKindUi.MANGA_BACKGROUND -> {
+                        ParamSlider(
+                            stringResource(R.string.adjust_contrast), mangaContrast, 0f..100f,
+                            { it.roundToInt().toString() }, { mangaContrast = it }, step = 1f,
+                        )
+                        ParamSlider(
+                            stringResource(R.string.edge_darkness), mangaEdgeDarkness, 0f..1f, percent,
+                            { mangaEdgeDarkness = it }, step = 0.01f,
+                        )
+                        ParamSlider(
+                            stringResource(R.string.tone_size), mangaTone, 2f..32f,
+                            { it.roundToInt().toString() }, { mangaTone = it }, step = 1f, unit = "px",
+                        )
+                    }
+                    FilterKindUi.ANIME_BACKGROUND -> {
+                        ParamSlider(
+                            stringResource(R.string.adjust_brightness), animeBrightness, -100f..100f,
+                            { it.roundToInt().toString() }, { animeBrightness = it }, step = 1f,
+                        )
+                        ParamSlider(
+                            stringResource(R.string.adjust_contrast), animeContrast, -100f..100f,
+                            { it.roundToInt().toString() }, { animeContrast = it }, step = 1f,
+                        )
+                        ParamSlider(
+                            stringResource(R.string.saturation), animeSaturation, -100f..100f,
+                            { it.roundToInt().toString() }, { animeSaturation = it }, step = 1f,
+                        )
+                        ParamSlider(
+                            stringResource(R.string.posterize), animePosterize, 2f..16f,
+                            { it.roundToInt().toString() }, { animePosterize = it }, step = 1f,
+                        )
+                    }
+                    FilterKindUi.PENCIL_SKETCH -> ParamSlider(
+                        stringResource(R.string.line_length), pencilLine, 2f..48f,
+                        { it.roundToInt().toString() }, { pencilLine = it }, step = 1f, unit = "px",
+                    )
+                    FilterKindUi.OIL_PAINT -> {
+                        ParamSlider(
+                            stringResource(R.string.radius), oilRadius, 1f..12f,
+                            { it.roundToInt().toString() }, { oilRadius = it }, step = 1f, unit = "px",
+                        )
+                        ParamSlider(
+                            stringResource(R.string.levels), oilLevels, 2f..32f,
+                            { it.roundToInt().toString() }, { oilLevels = it }, step = 1f,
+                        )
+                    }
+                    FilterKindUi.BLUR_FRAME -> {
+                        ParamSlider(
+                            stringResource(R.string.width), frameWidth, 1f..400f,
+                            { it.roundToInt().toString() }, { frameWidth = it }, step = 1f, unit = "px",
+                        )
+                        ParamSlider(
+                            stringResource(R.string.blur), frameBlur, 1f..32f,
+                            { it.roundToInt().toString() }, { frameBlur = it }, step = 1f, unit = "px",
+                        )
+                    }
+                    FilterKindUi.TABLE_FRAME -> {
+                        ParamSlider(
+                            stringResource(R.string.width), tableWidth, 1f..100f,
+                            { it.roundToInt().toString() }, { tableWidth = it }, step = 1f, unit = "px",
+                        )
+                        ParamSlider(
+                            stringResource(R.string.corner_radius), tableCorner, 0f..100f,
+                            { it.roundToInt().toString() }, { tableCorner = it }, step = 1f, unit = "px",
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            ToggleChip(stringResource(R.string.white), !tableInk) { tableInk = false }
+                            ToggleChip(stringResource(R.string.color), tableInk) { tableInk = true }
+                        }
+                    }
+                    FilterKindUi.RAIN -> {
+                        ParamSlider(
+                            stringResource(R.string.density), rainDensity, 0f..1f, percent,
+                            { rainDensity = it }, step = 0.01f,
+                        )
+                        ParamSlider(
+                            stringResource(R.string.angle), rainAngle, 0f..360f,
+                            { it.roundToInt().toString() }, { rainAngle = it }, step = 1f, unit = "°",
+                        )
+                        ParamSlider(
+                            stringResource(R.string.length), rainLength, 4f..200f,
+                            { it.roundToInt().toString() }, { rainLength = it }, step = 1f, unit = "px",
+                        )
+                        ParamSlider(
+                            stringResource(R.string.opacity), rainOpacity, 0f..1f, percent,
+                            { rainOpacity = it }, step = 0.01f,
+                        )
+                        ParamSlider(
+                            stringResource(R.string.seed), rainSeed, 1f..64f,
+                            { it.roundToInt().toString() }, { rainSeed = it }, step = 1f,
+                        )
+                    }
                 }
                 ParamSlider(
                     stringResource(R.string.strength), strength, 0f..1f, percent,
@@ -1107,6 +1255,28 @@ private fun FilterKindUi.params(
     impressionSize: Float,
     popDot: Float,
     popSaturation: Float,
+    mangaBrightness: Float,
+    mangaEdge: Float,
+    mangaTone: Float,
+    mangaContrast: Float,
+    mangaEdgeDarkness: Float,
+    animeBrightness: Float,
+    animeContrast: Float,
+    animeSaturation: Float,
+    animePosterize: Float,
+    pencilLine: Float,
+    oilRadius: Float,
+    oilLevels: Float,
+    frameWidth: Float,
+    frameBlur: Float,
+    tableWidth: Float,
+    tableCorner: Float,
+    tableInk: Boolean,
+    rainDensity: Float,
+    rainAngle: Float,
+    rainLength: Float,
+    rainOpacity: Float,
+    rainSeed: Float,
 ): FilterParams = when (this) {
     FilterKindUi.BLUR -> BlurParams(radius, strength)
     FilterKindUi.MOTION -> MotionBlurParams(distance, angle, strength)
@@ -1251,5 +1421,34 @@ private fun FilterKindUi.params(
     FilterKindUi.SWIRL_PAINTING -> SwirlPaintingParams(strength = strength)
     FilterKindUi.POP_ART -> PopArtParams(
         dotScale = popDot, saturation = popSaturation, strength = strength,
+    )
+    FilterKindUi.MANGA -> MangaParams(
+        brightness = mangaBrightness, edge = mangaEdge, toneSize = mangaTone.roundToInt(),
+        strength = strength,
+    )
+    FilterKindUi.MANGA_BACKGROUND -> MangaBackgroundParams(
+        contrast = mangaContrast, edgeDarkness = mangaEdgeDarkness,
+        toneSize = mangaTone.roundToInt(), strength = strength,
+    )
+    FilterKindUi.ANIME_BACKGROUND -> AnimeBackgroundParams(
+        brightness = animeBrightness, contrast = animeContrast, saturation = animeSaturation,
+        posterize = animePosterize.roundToInt(), strength = strength,
+    )
+    FilterKindUi.PENCIL_SKETCH -> PencilSketchParams(
+        lineLength = pencilLine, strength = strength,
+    )
+    FilterKindUi.OIL_PAINT -> OilPaintParams(
+        radius = oilRadius.roundToInt(), levels = oilLevels.roundToInt(), strength = strength,
+    )
+    FilterKindUi.BLUR_FRAME -> BlurFrameParams(
+        width = frameWidth, blur = frameBlur, strength = strength,
+    )
+    FilterKindUi.TABLE_FRAME -> TableFrameParams(
+        width = tableWidth, color = if (tableInk) ink else "#FFFFFF",
+        cornerRadius = tableCorner, strength = strength,
+    )
+    FilterKindUi.RAIN -> RainParams(
+        density = rainDensity, angleDeg = rainAngle, length = rainLength,
+        opacity = rainOpacity, seed = rainSeed.roundToLong(), strength = strength,
     )
 }
