@@ -546,3 +546,205 @@ data class CloudsParams(
     override val reach: Int get() = 0
     override val coversCanvas: Boolean get() = true
 }
+
+/*
+ * Parameters of the M5 artistic and generative filters: palette, QR code, stained glass, dots, stamp, glitch,
+ * retro game, chrome, sheer, impressionist, swirl painting and pop art.
+ */
+
+/**
+ * Palette posterization: the content is reduced to [colors] colours by a deterministic median cut over its own
+ * colour histogram, then every pixel takes its nearest palette entry. The palette is built from the whole
+ * content, so the filter uses the full-source path and does not depend on tile order.
+ */
+@Serializable
+@SerialName("palette")
+data class PaletteParams(
+    /** 2..48 colours. */
+    val colors: Int = 8,
+    val strength: Float = 1f,
+) : FilterParams() {
+    override val kind: String get() = "palette"
+    override val reach: Int get() = 0
+    override val writeReach: Int get() = 0
+    override val needsFullSource: Boolean get() = true
+}
+
+/**
+ * QR code generator: UTF-8 [text], [size] pixels per module, a quiet zone of [margin] modules and the module
+ * [color]. It is a Draw generator that covers the canvas (or the selection) and does not read the layer, so any
+ * tile can draw its own part of the symbol from canvas coordinates.
+ */
+@Serializable
+@SerialName("qr-code")
+data class QrCodeParams(
+    val text: String = "Boundless Paint",
+    /** 1..32 px per module. */
+    val size: Int = 8,
+    /** 0..8 quiet-zone modules. */
+    val margin: Int = 4,
+    /** "#RRGGBB" of the dark modules. */
+    val color: String = "#000000",
+    val strength: Float = 1f,
+) : FilterParams() {
+    override val kind: String get() = "qr-code"
+    override val reach: Int get() = 0
+    override val writeReach: Int get() = 0
+    override val coversCanvas: Boolean get() = true
+}
+
+/** Stained glass: jittered Voronoi cells of one average colour with a [borderWidth] px border. */
+@Serializable
+@SerialName("stained-glass")
+data class StainedGlassParams(
+    /** 4..100 px, the lattice pitch of the Voronoi seeds. */
+    val cell: Int = 24,
+    /** 0..20 px, the drawn border along the cell boundaries. */
+    val borderWidth: Float = 2f,
+    /** "#RRGGBB" of the lead came between the panes. */
+    val borderColor: String = "#000000",
+    val strength: Float = 1f,
+) : FilterParams() {
+    override val kind: String get() = "stained-glass"
+    override val reach: Int get() = 3 * cell.coerceIn(4, 100) + 2
+    override val writeReach: Int get() = 0
+    override val needsStableSource: Boolean get() = true
+}
+
+/**
+ * Dots mosaic: round dots of the source colour on a hexagonal or square lattice, separated by [color] gaps.
+ * The lattice is anchored to canvas coordinates, so neighbouring tiles agree on every dot.
+ */
+@Serializable
+@SerialName("dots")
+data class DotsParams(
+    /** 1..64 px, the dot diameter. */
+    val size: Int = 6,
+    /** 2..128 px between dot centres. */
+    val spacing: Int = 12,
+    /** hex or square. */
+    val shape: String = "hex",
+    /** "#RRGGBB" of the gaps between dots. */
+    val color: String = "#FFFFFF",
+    val strength: Float = 1f,
+) : FilterParams() {
+    override val kind: String get() = "dots"
+    override val reach: Int get() = spacing.coerceIn(2, 128) + size.coerceIn(1, 64) + 4
+    override val writeReach: Int get() = 0
+    override val needsStableSource: Boolean get() = true
+}
+
+/** One-bit stamp: luminance above [threshold] becomes white, below it black; the painted shape stays. */
+@Serializable
+@SerialName("stamp")
+data class StampParams(
+    /** 0..1 luminance threshold. */
+    val threshold: Float = 0.5f,
+    val strength: Float = 1f,
+) : FilterParams() {
+    override val kind: String get() = "stamp"
+    override val reach: Int get() = 0
+    override val writeReach: Int get() = 0
+}
+
+/** Glitch: horizontal slices of [sliceHeight] px shift by up to [amount] px and split the RGB channels. */
+@Serializable
+@SerialName("glitch")
+data class GlitchParams(
+    /** 0..64 px of slice displacement. */
+    val amount: Int = 12,
+    /** 2..128 px, the height of one shifted slice. */
+    val sliceHeight: Int = 16,
+    val seed: Long = 1L,
+    val strength: Float = 1f,
+) : FilterParams() {
+    override val kind: String get() = "glitch"
+    override val reach: Int get() = amount.coerceIn(0, 64) + maxOf(1, amount.coerceIn(0, 64) / 6) + 3
+    override val writeReach: Int get() = 0
+    override val needsStableSource: Boolean get() = true
+}
+
+/** Retro game: pixel blocks quantized to an NES-like, Game Boy-like or general 16-colour palette. */
+@Serializable
+@SerialName("retro-game")
+data class RetroGameParams(
+    /** nes, gb or 16. */
+    val palette: String = "nes",
+    /** 1..32 px per pixel block. */
+    val pixelSize: Int = 4,
+    /** 0..1 ordered-dither strength. */
+    val dither: Float = 0.5f,
+    val strength: Float = 1f,
+) : FilterParams() {
+    override val kind: String get() = "retro-game"
+    override val reach: Int get() = 2 * pixelSize.coerceIn(1, 32) + 2
+    override val writeReach: Int get() = 0
+    override val needsStableSource: Boolean get() = true
+}
+
+/** Chrome: a polished metal ramp driven by the luminance detail at the [smoothness] scale. */
+@Serializable
+@SerialName("chrome")
+data class ChromeParams(
+    /** 0..16 px, the scale of the detail the metal bands respond to. */
+    val smoothness: Float = 4f,
+    val strength: Float = 1f,
+) : FilterParams() {
+    override val kind: String get() = "chrome"
+    override val reach: Int get() = 2 * ceil(smoothness.coerceIn(0f, 16f)).toInt()
+    override val writeReach: Int get() = 0
+    override val needsStableSource: Boolean get() = true
+}
+
+/** Sheer: a soft diagonal sheen that lifts the pigments without changing the painted shape. */
+@Serializable
+@SerialName("sheer")
+data class SheerParams(
+    val strength: Float = 1f,
+) : FilterParams() {
+    override val kind: String get() = "sheer"
+    override val reach: Int get() = 0
+    override val writeReach: Int get() = 0
+}
+
+/** Impressionist: short directional dabs of the local colour, [strokeSize] px across. */
+@Serializable
+@SerialName("impressionist")
+data class ImpressionistParams(
+    /** 2..32 px, the lattice pitch and the basis of the dab length. */
+    val strokeSize: Int = 8,
+    val strength: Float = 1f,
+) : FilterParams() {
+    override val kind: String get() = "impressionist"
+    override val reach: Int get() = 4 * strokeSize.coerceIn(2, 32) + 8
+    override val writeReach: Int get() = 0
+    override val needsStableSource: Boolean get() = true
+}
+
+/** Swirl painting: the content is dragged along a procedural swirl field and smeared with the flow. */
+@Serializable
+@SerialName("swirl-painting")
+data class SwirlPaintingParams(
+    val strength: Float = 1f,
+) : FilterParams() {
+    override val kind: String get() = "swirl-painting"
+    override val reach: Int get() = 40
+    override val writeReach: Int get() = 0
+    override val needsStableSource: Boolean get() = true
+}
+
+/** Pop art: a halftone dot screen in saturated source colours on white paper. */
+@Serializable
+@SerialName("pop-art")
+data class PopArtParams(
+    /** 0.2..1.2, the dot radius relative to the 12 px cell. */
+    val dotScale: Float = 0.8f,
+    /** 0..2, the saturation boost of the dot colours. */
+    val saturation: Float = 1.6f,
+    val strength: Float = 1f,
+) : FilterParams() {
+    override val kind: String get() = "pop-art"
+    override val reach: Int get() = 18
+    override val writeReach: Int get() = 0
+    override val needsStableSource: Boolean get() = true
+}

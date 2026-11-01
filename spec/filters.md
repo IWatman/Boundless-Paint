@@ -16,7 +16,11 @@
   one undo step, selection and alpha lock aware, seam-free across tiles.
 - **Implemented in the third M5 batch (2026-11-01):** gloom, find edges (sketch), trace, bevel inner/outer,
   emboss, relief, satin, wet edge, waterdrop, extrude and clouds — the same files, one undo step, selection and
-  alpha lock aware, seam-free across tiles. The rest below is still planned.
+  alpha lock aware, seam-free across tiles.
+- **Implemented in the fourth M5 batch (2026-11-01):** palette posterization, QR code, stained glass, dots, stamp,
+  glitch, retro game, chrome, sheer, impressionist, swirl painting and pop art — `core/filter/FilterParamsM5.kt`,
+  `core/filter/Filters.kt` and the self-contained `core/filter/QrCode.kt`, one undo step, selection and alpha lock
+  aware, seam-free across tiles. The rest below is still planned.
 
 ## Color and tone (Adjust)
 | Filter | Parameters | live | Milestone |

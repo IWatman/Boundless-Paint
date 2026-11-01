@@ -3,10 +3,12 @@ package app.painter.ui.studio
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -69,9 +71,21 @@ import app.painter.core.filter.HalftoneParams
 import app.painter.core.filter.LayerGlowParams
 import app.painter.core.filter.LayerStrokeParams
 import app.painter.core.filter.PanelGridParams
+import app.painter.core.filter.PaletteParams
+import app.painter.core.filter.PopArtParams
+import app.painter.core.filter.QrCodeParams
+import app.painter.core.filter.RetroGameParams
 import app.painter.core.filter.ScreentoneParams
+import app.painter.core.filter.SheerParams
 import app.painter.core.filter.SpinBlurParams
+import app.painter.core.filter.StainedGlassParams
+import app.painter.core.filter.StampParams
+import app.painter.core.filter.SwirlPaintingParams
 import app.painter.core.filter.ZoomBlurParams
+import app.painter.core.filter.ChromeParams
+import app.painter.core.filter.DotsParams
+import app.painter.core.filter.GlitchParams
+import app.painter.core.filter.ImpressionistParams
 import app.painter.core.color.Rgba
 import app.painter.ui.components.ParamSlider
 import kotlin.math.roundToInt
@@ -132,6 +146,18 @@ private enum class FilterKindUi(val label: Int) {
     WATERDROP(R.string.filter_waterdrop),
     EXTRUDE(R.string.filter_extrude),
     CLOUDS(R.string.filter_clouds),
+    PALETTE(R.string.filter_palette),
+    QR(R.string.filter_qr),
+    STAINED_GLASS(R.string.filter_stained_glass),
+    DOTS(R.string.filter_dots),
+    STAMP(R.string.filter_stamp),
+    GLITCH(R.string.filter_glitch),
+    RETRO_GAME(R.string.filter_retro_game),
+    CHROME(R.string.filter_chrome),
+    SHEER(R.string.filter_sheer),
+    IMPRESSIONIST(R.string.filter_impressionist),
+    SWIRL_PAINTING(R.string.filter_swirl_painting),
+    POP_ART(R.string.filter_pop_art),
 }
 
 /**
@@ -208,6 +234,28 @@ fun FilterDialog(ink: Rgba, onDismiss: () -> Unit, onApply: (FilterParams) -> Un
     var cloudSeed by remember { mutableStateOf(1f) }
     var cloudLightInk by remember { mutableStateOf(false) }
     var cloudDarkInk by remember { mutableStateOf(false) }
+    var paletteColors by remember { mutableStateOf(8f) }
+    var qrText by remember { mutableStateOf("Boundless Paint") }
+    var qrSize by remember { mutableStateOf(8f) }
+    var qrMargin by remember { mutableStateOf(4f) }
+    var qrInk by remember { mutableStateOf(false) }
+    var glassCell by remember { mutableStateOf(24f) }
+    var glassBorder by remember { mutableStateOf(2f) }
+    var glassInk by remember { mutableStateOf(false) }
+    var dotsSize by remember { mutableStateOf(6f) }
+    var dotsSpacing by remember { mutableStateOf(12f) }
+    var dotsHex by remember { mutableStateOf(true) }
+    var dotsInk by remember { mutableStateOf(false) }
+    var glitchAmount by remember { mutableStateOf(12f) }
+    var glitchSlice by remember { mutableStateOf(16f) }
+    var glitchSeed by remember { mutableStateOf(1f) }
+    var retroPalette by remember { mutableStateOf("nes") }
+    var retroPixel by remember { mutableStateOf(4f) }
+    var retroDither by remember { mutableStateOf(0.5f) }
+    var chromeSmooth by remember { mutableStateOf(4f) }
+    var impressionSize by remember { mutableStateOf(8f) }
+    var popDot by remember { mutableStateOf(0.8f) }
+    var popSaturation by remember { mutableStateOf(1.6f) }
     val inkHex = remember(ink) {
         "#%02X%02X%02X".format(
             (ink.r.coerceIn(0f, 1f) * 255).roundToInt(),
@@ -225,7 +273,10 @@ fun FilterDialog(ink: Rgba, onDismiss: () -> Unit, onApply: (FilterParams) -> Un
         sketchThickness, sketchAmount, sketchSensitivity, bevelVariant, bevelDepth, bevelSize,
         bevelHighlightInk, bevelShadowInk, height, soften, satinInk, satinDistance, satinSize, wetWidth,
         gloss, extrudeLength, extrudeShading, extrudeInk, cloudScale, cloudDetail, cloudSeed,
-        cloudLightInk, cloudDarkInk, lightAngle,
+        cloudLightInk, cloudDarkInk, lightAngle, paletteColors, qrText, qrSize, qrMargin, qrInk,
+        glassCell, glassBorder, glassInk, dotsSize, dotsSpacing, dotsHex, dotsInk,
+        glitchAmount, glitchSlice, glitchSeed, retroPalette, retroPixel, retroDither,
+        chromeSmooth, impressionSize, popDot, popSaturation,
     )
     val percent = { v: Float -> "${(v * 100).roundToInt()}%" }
 
@@ -833,6 +884,123 @@ fun FilterDialog(ink: Rgba, onDismiss: () -> Unit, onApply: (FilterParams) -> Un
                             }
                         }
                     }
+                    FilterKindUi.PALETTE -> ParamSlider(
+                        stringResource(R.string.colors), paletteColors, 2f..48f,
+                        { it.roundToInt().toString() }, { paletteColors = it }, step = 1f,
+                    )
+                    FilterKindUi.QR -> {
+                        OutlinedTextField(
+                            value = qrText,
+                            onValueChange = { if (it.length <= 200) qrText = it },
+                            label = { Text(stringResource(R.string.text)) },
+                            singleLine = false,
+                            maxLines = 3,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        ParamSlider(
+                            stringResource(R.string.size), qrSize, 1f..32f,
+                            { it.roundToInt().toString() }, { qrSize = it }, step = 1f, unit = "px",
+                        )
+                        ParamSlider(
+                            stringResource(R.string.margin), qrMargin, 0f..8f,
+                            { it.roundToInt().toString() }, { qrMargin = it }, step = 1f,
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            ToggleChip(stringResource(R.string.black), !qrInk) { qrInk = false }
+                            ToggleChip(stringResource(R.string.color), qrInk) { qrInk = true }
+                        }
+                    }
+                    FilterKindUi.STAINED_GLASS -> {
+                        ParamSlider(
+                            stringResource(R.string.cell_size), glassCell, 4f..64f,
+                            { it.roundToInt().toString() }, { glassCell = it }, step = 1f, unit = "px",
+                        )
+                        ParamSlider(
+                            stringResource(R.string.border_width), glassBorder, 0f..12f,
+                            { it.roundToInt().toString() }, { glassBorder = it }, step = 1f, unit = "px",
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            ToggleChip(stringResource(R.string.black), !glassInk) { glassInk = false }
+                            ToggleChip(stringResource(R.string.color), glassInk) { glassInk = true }
+                        }
+                    }
+                    FilterKindUi.DOTS -> {
+                        ParamSlider(
+                            stringResource(R.string.size), dotsSize, 1f..32f,
+                            { it.roundToInt().toString() }, { dotsSize = it }, step = 1f, unit = "px",
+                        )
+                        ParamSlider(
+                            stringResource(R.string.spacing), dotsSpacing, 2f..64f,
+                            { it.roundToInt().toString() }, { dotsSpacing = it }, step = 1f, unit = "px",
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            ToggleChip(stringResource(R.string.hexagon), dotsHex) { dotsHex = true }
+                            ToggleChip(stringResource(R.string.square), !dotsHex) { dotsHex = false }
+                        }
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            ToggleChip(stringResource(R.string.white), !dotsInk) { dotsInk = false }
+                            ToggleChip(stringResource(R.string.color), dotsInk) { dotsInk = true }
+                        }
+                    }
+                    FilterKindUi.STAMP -> ParamSlider(
+                        stringResource(R.string.threshold), threshold, 0f..1f, percent,
+                        { threshold = it }, step = 0.01f,
+                    )
+                    FilterKindUi.GLITCH -> {
+                        ParamSlider(
+                            stringResource(R.string.amount), glitchAmount, 0f..64f,
+                            { it.roundToInt().toString() }, { glitchAmount = it }, step = 1f, unit = "px",
+                        )
+                        ParamSlider(
+                            stringResource(R.string.slice_height), glitchSlice, 4f..64f,
+                            { it.roundToInt().toString() }, { glitchSlice = it }, step = 1f, unit = "px",
+                        )
+                        ParamSlider(
+                            stringResource(R.string.seed), glitchSeed, 1f..64f,
+                            { it.roundToInt().toString() }, { glitchSeed = it }, step = 1f,
+                        )
+                    }
+                    FilterKindUi.RETRO_GAME -> {
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            ToggleChip(stringResource(R.string.retro_nes), retroPalette == "nes") {
+                                retroPalette = "nes"
+                            }
+                            ToggleChip(stringResource(R.string.retro_gb), retroPalette == "gb") {
+                                retroPalette = "gb"
+                            }
+                            ToggleChip(stringResource(R.string.retro_16), retroPalette == "16") {
+                                retroPalette = "16"
+                            }
+                        }
+                        ParamSlider(
+                            stringResource(R.string.pixel_size), retroPixel, 1f..16f,
+                            { it.roundToInt().toString() }, { retroPixel = it }, step = 1f, unit = "px",
+                        )
+                        ParamSlider(
+                            stringResource(R.string.dither), retroDither, 0f..1f, percent,
+                            { retroDither = it }, step = 0.01f,
+                        )
+                    }
+                    FilterKindUi.CHROME -> ParamSlider(
+                        stringResource(R.string.smoothness), chromeSmooth, 0f..16f,
+                        { it.roundToInt().toString() }, { chromeSmooth = it }, step = 1f, unit = "px",
+                    )
+                    FilterKindUi.SHEER -> {}
+                    FilterKindUi.IMPRESSIONIST -> ParamSlider(
+                        stringResource(R.string.stroke_size), impressionSize, 2f..24f,
+                        { it.roundToInt().toString() }, { impressionSize = it }, step = 1f, unit = "px",
+                    )
+                    FilterKindUi.SWIRL_PAINTING -> {}
+                    FilterKindUi.POP_ART -> {
+                        ParamSlider(
+                            stringResource(R.string.dot_scale), popDot, 0.2f..1.2f,
+                            { "%.2f".format(it) }, { popDot = it }, step = 0.05f,
+                        )
+                        ParamSlider(
+                            stringResource(R.string.saturation), popSaturation, 0f..2f,
+                            { "%.2f".format(it) }, { popSaturation = it }, step = 0.05f,
+                        )
+                    }
                 }
                 ParamSlider(
                     stringResource(R.string.strength), strength, 0f..1f, percent,
@@ -917,6 +1085,28 @@ private fun FilterKindUi.params(
     cloudLightInk: Boolean,
     cloudDarkInk: Boolean,
     lightAngle: Float,
+    paletteColors: Float,
+    qrText: String,
+    qrSize: Float,
+    qrMargin: Float,
+    qrInk: Boolean,
+    glassCell: Float,
+    glassBorder: Float,
+    glassInk: Boolean,
+    dotsSize: Float,
+    dotsSpacing: Float,
+    dotsHex: Boolean,
+    dotsInk: Boolean,
+    glitchAmount: Float,
+    glitchSlice: Float,
+    glitchSeed: Float,
+    retroPalette: String,
+    retroPixel: Float,
+    retroDither: Float,
+    chromeSmooth: Float,
+    impressionSize: Float,
+    popDot: Float,
+    popSaturation: Float,
 ): FilterParams = when (this) {
     FilterKindUi.BLUR -> BlurParams(radius, strength)
     FilterKindUi.MOTION -> MotionBlurParams(distance, angle, strength)
@@ -1029,5 +1219,37 @@ private fun FilterKindUi.params(
         colorA = if (cloudLightInk) ink else "#FFFFFF",
         colorB = if (cloudDarkInk) ink else "#000000",
         strength = strength,
+    )
+    FilterKindUi.PALETTE -> PaletteParams(colors = paletteColors.roundToInt(), strength = strength)
+    FilterKindUi.QR -> QrCodeParams(
+        text = qrText, size = qrSize.roundToInt(), margin = qrMargin.roundToInt(),
+        color = if (qrInk) ink else "#000000", strength = strength,
+    )
+    FilterKindUi.STAINED_GLASS -> StainedGlassParams(
+        cell = glassCell.roundToInt(), borderWidth = glassBorder,
+        borderColor = if (glassInk) ink else "#000000", strength = strength,
+    )
+    FilterKindUi.DOTS -> DotsParams(
+        size = dotsSize.roundToInt(), spacing = dotsSpacing.roundToInt(),
+        shape = if (dotsHex) "hex" else "square",
+        color = if (dotsInk) ink else "#FFFFFF", strength = strength,
+    )
+    FilterKindUi.STAMP -> StampParams(threshold = threshold, strength = strength)
+    FilterKindUi.GLITCH -> GlitchParams(
+        amount = glitchAmount.roundToInt(), sliceHeight = glitchSlice.roundToInt(),
+        seed = glitchSeed.roundToLong(), strength = strength,
+    )
+    FilterKindUi.RETRO_GAME -> RetroGameParams(
+        palette = retroPalette, pixelSize = retroPixel.roundToInt(), dither = retroDither,
+        strength = strength,
+    )
+    FilterKindUi.CHROME -> ChromeParams(smoothness = chromeSmooth, strength = strength)
+    FilterKindUi.SHEER -> SheerParams(strength = strength)
+    FilterKindUi.IMPRESSIONIST -> ImpressionistParams(
+        strokeSize = impressionSize.roundToInt(), strength = strength,
+    )
+    FilterKindUi.SWIRL_PAINTING -> SwirlPaintingParams(strength = strength)
+    FilterKindUi.POP_ART -> PopArtParams(
+        dotScale = popDot, saturation = popSaturation, strength = strength,
     )
 }

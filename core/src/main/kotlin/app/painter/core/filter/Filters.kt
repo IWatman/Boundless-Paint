@@ -152,8 +152,10 @@ object Filters {
     ) {
         val content = geometry.content
         val src = readRect(grid, content.x0, content.y0, content.width, content.height)
+        // A palette is a property of the whole content, so it is extracted once before the tiles run.
+        val palette = if (params is PaletteParams) buildPaletteLut(src, params.colors) else null
         val jobs = keys.map { key ->
-            Callable { applyFullSourceTile(grid, key, params, out, selection, alphaLock, geometry, src) }
+            Callable { applyFullSourceTile(grid, key, params, out, selection, alphaLock, geometry, src, palette) }
         }
         runParallel(jobs, threads)
     }
@@ -223,6 +225,7 @@ object Filters {
         alphaLock: Boolean,
         geometry: Geometry,
         src: FloatArray,
+        palette: IntArray?,
     ) {
         val tileX = key.tx * TILE
         val tileY = key.ty * TILE
@@ -248,7 +251,7 @@ object Filters {
         for (y in y0 until y1) {
             for (x in x0 until x1) {
                 val i = ((y - content.y0) * w + (x - content.x0)) * 4
-                globalPixel(params, src, w, h, content.x0, content.y0, geometry, x, y, warped)
+                globalPixel(params, src, w, h, content.x0, content.y0, geometry, x, y, palette, warped)
                 val r = src[i] + (warped[0] - src[i]) * strength
                 val g = src[i + 1] + (warped[1] - src[i + 1]) * strength
                 val b = src[i + 2] + (warped[2] - src[i + 2]) * strength
@@ -401,8 +404,19 @@ object Filters {
         is WetEdgeParams -> mix(src, wetEdge(src, w, h, params), params.strength)
         is ExtrudeParams -> mix(src, extrude(src, w, h, params), params.strength)
         is CloudsParams -> mix(src, clouds(src, w, h, ox, oy, params), params.strength)
+        is QrCodeParams -> mix(src, qrCode(src, w, h, ox, oy, geometry, params), params.strength)
+        is StainedGlassParams -> mix(src, stainedGlass(src, w, h, ox, oy, params), params.strength)
+        is DotsParams -> mix(src, dots(src, w, h, ox, oy, params), params.strength)
+        is StampParams -> mix(src, stamp(src, params), params.strength)
+        is GlitchParams -> mix(src, glitch(src, w, h, ox, oy, params), params.strength)
+        is RetroGameParams -> mix(src, retroGame(src, w, h, ox, oy, params), params.strength)
+        is ChromeParams -> mix(src, chrome(src, w, h, params), params.strength)
+        is SheerParams -> mix(src, sheer(src, w, h, ox, oy), params.strength)
+        is ImpressionistParams -> mix(src, impressionist(src, w, h, ox, oy, params), params.strength)
+        is SwirlPaintingParams -> mix(src, swirlPainting(src, w, h, ox, oy), params.strength)
+        is PopArtParams -> mix(src, popArt(src, w, h, ox, oy, params), params.strength)
         is SphereLensParams, is WaveParams, is RippleParams, is TwirlParams, is PolarCoordinatesParams,
-        is ExpansionParams, is KaleidoscopeParams, is WaterdropParams ->
+        is ExpansionParams, is KaleidoscopeParams, is WaterdropParams, is PaletteParams ->
             throw IllegalArgumentException("${params.kind} is processed from the full content snapshot")
     }
 
@@ -416,6 +430,7 @@ object Filters {
         is ExpansionParams -> params.strength
         is KaleidoscopeParams -> params.strength
         is WaterdropParams -> params.strength
+        is PaletteParams -> params.strength
         else -> 1f
     }
 
@@ -433,11 +448,28 @@ object Filters {
         geometry: Geometry,
         x: Int,
         y: Int,
+        palette: IntArray?,
         out: FloatArray,
     ) {
         val gx = x.toFloat()
         val gy = y.toFloat()
         when (params) {
+            is PaletteParams -> {
+                val i = (((y - oy) * w + (x - ox)) * 4).coerceIn(0, src.size - 4)
+                val a = src[i + 3]
+                if (a <= 0f || palette == null || palette.isEmpty()) {
+                    out.fill(0f)
+                } else {
+                    val r = ((src[i] / a).coerceIn(0f, 1f) * 31f).roundToInt()
+                    val g = ((src[i + 1] / a).coerceIn(0f, 1f) * 31f).roundToInt()
+                    val b = ((src[i + 2] / a).coerceIn(0f, 1f) * 31f).roundToInt()
+                    val rgb = palette[(r shl 10) or (g shl 5) or b]
+                    out[0] = ((rgb shr 16) and 0xFF) / 255f * a
+                    out[1] = ((rgb shr 8) and 0xFF) / 255f * a
+                    out[2] = (rgb and 0xFF) / 255f * a
+                    out[3] = a
+                }
+            }
             is SphereLensParams -> {
                 val cx = geometry.content.x0 + geometry.content.width * params.centerX.coerceIn(0f, 1f)
                 val cy = geometry.content.y0 + geometry.content.height * params.centerY.coerceIn(0f, 1f)
@@ -2002,6 +2034,642 @@ object Filters {
         }
         return out
     }
+
+    // ---------------------------------------------------------------- M5 artistic and generative
+
+    /**
+     * Palette posterization. A deterministic median cut over a 32x32x32 colour histogram of the whole content
+     * yields at most [requested] entries; every 5-bit source bin is then mapped to its nearest entry once, so
+     * the per-tile write is a table lookup that cannot depend on tile order.
+     */
+    private fun buildPaletteLut(src: FloatArray, requested: Int): IntArray {
+        val colors = requested.coerceIn(2, 48)
+        val counts = IntArray(32768)
+        for (i in src.indices step 4) {
+            val a = src[i + 3]
+            if (a <= 0.004f) continue
+            val r = ((src[i] / a).coerceIn(0f, 1f) * 31f).roundToInt()
+            val g = ((src[i + 1] / a).coerceIn(0f, 1f) * 31f).roundToInt()
+            val b = ((src[i + 2] / a).coerceIn(0f, 1f) * 31f).roundToInt()
+            counts[(r shl 10) or (g shl 5) or b]++
+        }
+        val bins = ArrayList<Int>()
+        for (bin in counts.indices) if (counts[bin] > 0) bins.add(bin)
+        if (bins.isEmpty()) {
+            val lut = IntArray(32768) { 0 }
+            return lut
+        }
+        var boxes = listOf(PaletteBox(bins, counts))
+        while (boxes.size < colors) {
+            var best = -1
+            var bestScore = 0L
+            for (i in boxes.indices) {
+                val score = boxes[i].splitScore()
+                if (score > bestScore) {
+                    bestScore = score
+                    best = i
+                }
+            }
+            if (best < 0) break
+            val parts = boxes[best].split(counts) ?: break
+            val next = ArrayList<PaletteBox>(boxes.size + 1)
+            next.addAll(boxes)
+            next.removeAt(best)
+            next.add(parts.first)
+            next.add(parts.second)
+            boxes = next
+        }
+        val palette = IntArray(boxes.size) { boxes[it].averageColor() }
+        val lut = IntArray(32768)
+        for (bin in lut.indices) {
+            val r = ((bin shr 10) and 31) / 31f
+            val g = ((bin shr 5) and 31) / 31f
+            val b = (bin and 31) / 31f
+            lut[bin] = nearestPaletteColor(r, g, b, palette)
+        }
+        return lut
+    }
+
+    /** One weighted RGB box of the median-cut palette. */
+    private class PaletteBox(val bins: MutableList<Int>, private val counts: IntArray) {
+        var weight = 0L
+        private val sum = LongArray(3)
+        private val low = IntArray(3) { 32 }
+        private val high = IntArray(3) { -1 }
+
+        init {
+            for (bin in bins) {
+                val n = counts[bin].toLong()
+                weight += n
+                val c = intArrayOf((bin shr 10) and 31, (bin shr 5) and 31, bin and 31)
+                for (k in 0..2) {
+                    sum[k] += n * c[k]
+                    if (c[k] < low[k]) low[k] = c[k]
+                    if (c[k] > high[k]) high[k] = c[k]
+                }
+            }
+        }
+
+        /** Larger and more varied boxes split first; a box with one bin cannot split. */
+        fun splitScore(): Long {
+            if (bins.size < 2) return 0L
+            var range = 0
+            for (k in 0..2) range = max(range, high[k] - low[k])
+            return if (range == 0) 0L else weight * (range + 1L)
+        }
+
+        fun split(counts: IntArray): Pair<PaletteBox, PaletteBox>? {
+            if (bins.size < 2) return null
+            var axis = 0
+            for (k in 1..2) if (high[k] - low[k] > high[axis] - low[axis]) axis = k
+            val shift = when (axis) {
+                0 -> 10
+                1 -> 5
+                else -> 0
+            }
+            val sorted = bins.sortedBy { (it shr shift) and 31 }
+            val half = weight / 2
+            var acc = 0L
+            var cut = 0
+            for (i in sorted.indices) {
+                acc += counts[sorted[i]]
+                if (acc >= half && i < sorted.size - 1) {
+                    cut = i + 1
+                    break
+                }
+            }
+            if (cut <= 0 || cut >= sorted.size) return null
+            return PaletteBox(ArrayList(sorted.subList(0, cut)), counts) to
+                PaletteBox(ArrayList(sorted.subList(cut, sorted.size)), counts)
+        }
+
+        fun averageColor(): Int {
+            if (weight <= 0L) return 0
+            val r = (sum[0] * 255L / (weight * 31L)).toInt().coerceIn(0, 255)
+            val g = (sum[1] * 255L / (weight * 31L)).toInt().coerceIn(0, 255)
+            val b = (sum[2] * 255L / (weight * 31L)).toInt().coerceIn(0, 255)
+            return (r shl 16) or (g shl 8) or b
+        }
+    }
+
+    /** Nearest palette entry to straight [r],[g],[b], packed as 0xRRGGBB. */
+    private fun nearestPaletteColor(r: Float, g: Float, b: Float, palette: IntArray): Int {
+        var best = 0
+        var bestDistance = Float.MAX_VALUE
+        for (entry in palette) {
+            val dr = r - (((entry shr 16) and 0xFF) / 255f)
+            val dg = g - (((entry shr 8) and 0xFF) / 255f)
+            val db = b - ((entry and 0xFF) / 255f)
+            val d = dr * dr + dg * dg + db * db
+            if (d < bestDistance) {
+                bestDistance = d
+                best = entry
+            }
+        }
+        return best
+    }
+
+    /**
+     * QR generator. The symbol is generated once per tile from the canvas geometry, so every tile draws the
+     * same modules at the same canvas coordinates; the white quiet zone and paper make it scannable even on an
+     * empty layer. A selection clips it like any other generator.
+     */
+    private fun qrCode(
+        src: FloatArray,
+        w: Int,
+        h: Int,
+        ox: Int,
+        oy: Int,
+        g: Geometry,
+        p: QrCodeParams,
+    ): FloatArray {
+        val code = QrCode.encode(p.text)
+        val margin = p.margin.coerceIn(0, 8)
+        val total = code.size + margin * 2
+        val maxSide = min(g.content.width, g.content.height).coerceAtLeast(1)
+        val module = min(p.size.coerceIn(1, 32), maxSide / total).coerceAtLeast(1)
+        val side = total * module
+        val left = g.content.x0 + (g.content.width - side) / 2
+        val top = g.content.y0 + (g.content.height - side) / 2
+        val out = FloatArray(src.size)
+        val paper = floatArrayOf(1f, 1f, 1f)
+        fillRect(out, w, h, left - ox, top - oy, left + side - ox, top + side - oy, paper)
+        val ink = ink(p.color)
+        for (my in 0 until code.size) for (mx in 0 until code.size) {
+            if (!code.dark(mx, my)) continue
+            val x0 = left + (margin + mx) * module - ox
+            val y0 = top + (margin + my) * module - oy
+            fillRect(out, w, h, x0, y0, x0 + module, y0 + module, ink)
+        }
+        return out
+    }
+
+    /** Stained glass: one average colour per Voronoi pane and a solid lead border along the cell edges. */
+    private fun stainedGlass(
+        src: FloatArray,
+        w: Int,
+        h: Int,
+        ox: Int,
+        oy: Int,
+        p: StainedGlassParams,
+    ): FloatArray {
+        val size = p.cell.coerceIn(4, 100).toFloat()
+        val sums = CellSums()
+        for (y in 0 until h) for (x in 0 until w) {
+            sums.add(crystalKey(x + ox + 0.5f, y + oy + 0.5f, size), src, (y * w + x) * 4)
+        }
+        val border = p.borderWidth.coerceIn(0f, 20f)
+        val ink = ink(p.borderColor)
+        val out = src.copyOf()
+        val avg = FloatArray(4)
+        for (y in 0 until h) for (x in 0 until w) {
+            val gx = x + ox + 0.5f
+            val gy = y + oy + 0.5f
+            if (!sums.average(crystalKey(gx, gy, size), avg)) continue
+            val a = avg[3]
+            if (a <= 0.002f) continue
+            val cov = if (border > 0.01f) {
+                val edge = voronoiEdge(gx, gy, size)
+                (border + 0.5f - edge).coerceIn(0f, 1f)
+            } else {
+                0f
+            }
+            val i = (y * w + x) * 4
+            out[i] = avg[0] * (1f - cov) + ink[0] * a * cov
+            out[i + 1] = avg[1] * (1f - cov) + ink[1] * a * cov
+            out[i + 2] = avg[2] * (1f - cov) + ink[2] * a * cov
+            out[i + 3] = a
+        }
+        return out
+    }
+
+    /** Distance from a canvas point to the nearest Voronoi cell boundary of the crystal lattice. */
+    private fun voronoiEdge(gx: Float, gy: Float, size: Float): Float {
+        val bx = floor(gx / size).toInt()
+        val by = floor(gy / size).toInt()
+        var d1 = Float.MAX_VALUE
+        var d2 = Float.MAX_VALUE
+        for (dy in -1..1) for (dx in -1..1) {
+            val cx = bx + dx
+            val cy = by + dy
+            val sx = (cx + 0.5f + hash(cx, cy, 0x51ED2701L) * 0.3f) * size
+            val sy = (cy + 0.5f + hash(cx, cy, 0x7F4A7C15L) * 0.3f) * size
+            val d = (gx - sx) * (gx - sx) + (gy - sy) * (gy - sy)
+            if (d < d1) {
+                d2 = d1
+                d1 = d
+            } else if (d < d2) {
+                d2 = d
+            }
+        }
+        if (d2 == Float.MAX_VALUE) return size / 2f
+        return 0.5f * (sqrt(d2) - sqrt(d1))
+    }
+
+    /** Dots mosaic: source-colour dots on a canvas-aligned hex or square lattice over [DotsParams.color]. */
+    private fun dots(src: FloatArray, w: Int, h: Int, ox: Int, oy: Int, p: DotsParams): FloatArray {
+        val spacing = p.spacing.coerceIn(2, 128).toFloat()
+        val radius = (p.size.coerceIn(1, 64) * 0.5f).coerceAtMost(spacing * 0.5f)
+        val hex = p.shape.equals("hex", true)
+        val rowHeight = if (hex) spacing * SQRT3_2 else spacing
+        val bg = ink(p.color)
+        val out = FloatArray(src.size)
+        // Keep the painted silhouette: only pixels with source coverage receive the gap colour.
+        for (i in src.indices step 4) {
+            if (src[i + 3] <= 0.004f) continue
+            out[i] = bg[0]
+            out[i + 1] = bg[1]
+            out[i + 2] = bg[2]
+            out[i + 3] = 1f
+        }
+        val minRow = floor((oy - radius) / rowHeight).toInt() - 1
+        val maxRow = floor((oy + h + radius) / rowHeight).toInt() + 1
+        val s = FloatArray(4)
+        for (row in minRow..maxRow) {
+            val offset = if (hex && row and 1 == 1) spacing * 0.5f else 0f
+            val cy = (row + 0.5f) * rowHeight
+            val minCol = floor((ox - offset - radius) / spacing).toInt() - 1
+            val maxCol = floor((ox + w - offset + radius) / spacing).toInt() + 1
+            for (col in minCol..maxCol) {
+                val cx = (col + 0.5f) * spacing + offset
+                sample(src, w, h, cx - ox, cy - oy, s)
+                val a = s[3]
+                if (a <= 0.01f) continue
+                val r = s[0] / a
+                val g = s[1] / a
+                val b = s[2] / a
+                val xa = max((cx - radius - ox).toInt(), 0)
+                val xb = min((cx + radius - ox).toInt() + 1, w)
+                val ya = max((cy - radius - oy).toInt(), 0)
+                val yb = min((cy + radius - oy).toInt() + 1, h)
+                if (xb <= xa || yb <= ya) continue
+                for (y in ya until yb) for (x in xa until xb) {
+                    val d = hypot(x + ox + 0.5f - cx, y + oy + 0.5f - cy)
+                    val cov = (radius + 0.5f - d).coerceIn(0f, 1f)
+                    if (cov <= 0f) continue
+                    val i = (y * w + x) * 4
+                    out[i] = r * cov + out[i] * (1f - cov)
+                    out[i + 1] = g * cov + out[i + 1] * (1f - cov)
+                    out[i + 2] = b * cov + out[i + 2] * (1f - cov)
+                    out[i + 3] = cov + out[i + 3] * (1f - cov)
+                }
+            }
+        }
+        return out
+    }
+
+    /** One-bit stamp: luminance is thresholded, the painted alpha is kept. */
+    private fun stamp(src: FloatArray, p: StampParams): FloatArray {
+        val threshold = p.threshold.coerceIn(0f, 1f)
+        val out = FloatArray(src.size)
+        for (i in src.indices step 4) {
+            val a = src[i + 3]
+            if (a <= 0f) continue
+            val lum = (0.3f * src[i] + 0.59f * src[i + 1] + 0.11f * src[i + 2]) / a
+            val v = if (lum >= threshold) 1f else 0f
+            out[i] = v * a
+            out[i + 1] = v * a
+            out[i + 2] = v * a
+            out[i + 3] = a
+        }
+        return out
+    }
+
+    /** Glitch: per-slice horizontal shifts plus a channel split, all keyed by [GlitchParams.seed]. */
+    private fun glitch(src: FloatArray, w: Int, h: Int, ox: Int, oy: Int, p: GlitchParams): FloatArray {
+        val amount = p.amount.coerceIn(0, 64).toFloat()
+        val slice = p.sliceHeight.coerceIn(2, 128)
+        val shift = if (amount < 1f) 0f else max(1, (amount / 6f).roundToInt()).toFloat()
+        val out = FloatArray(src.size)
+        val sr = FloatArray(4)
+        val sg = FloatArray(4)
+        val sb = FloatArray(4)
+        for (y in 0 until h) for (x in 0 until w) {
+            val i = (y * w + x) * 4
+            if (src[i + 3] <= 0f) continue
+            val sliceIndex = floor((y + oy).toFloat() / slice).toInt()
+            val offset = hash(sliceIndex, 0, p.seed) * amount
+            val dir = if (hash(sliceIndex, 1, p.seed) < -0.2f) -1f else 1f
+            sample(src, w, h, x + offset + shift * dir, y.toFloat(), sr)
+            sample(src, w, h, x + offset, y.toFloat(), sg)
+            sample(src, w, h, x + offset - shift * dir, y.toFloat(), sb)
+            val a = max(sr[3], max(sg[3], sb[3]))
+            if (a <= 0.002f) continue
+            var r = if (sr[3] > 0.002f) sr[0] / sr[3] * a else 0f
+            var g = if (sg[3] > 0.002f) sg[1] / sg[3] * a else 0f
+            var b = if (sb[3] > 0.002f) sb[2] / sb[3] * a else 0f
+            if (hash(sliceIndex, 2, p.seed) > 0.75f) {
+                r = a - r
+                g = a - g
+                b = a - b
+            }
+            out[i] = r.coerceIn(0f, a)
+            out[i + 1] = g.coerceIn(0f, a)
+            out[i + 2] = b.coerceIn(0f, a)
+            out[i + 3] = a
+        }
+        return out
+    }
+
+    /** Retro game: canvas-aligned pixel blocks quantized to a small palette with ordered dither. */
+    private fun retroGame(src: FloatArray, w: Int, h: Int, ox: Int, oy: Int, p: RetroGameParams): FloatArray {
+        val palette = when (p.palette.lowercase()) {
+            "gb" -> RETRO_GB
+            "16" -> RETRO_16
+            else -> RETRO_NES
+        }
+        val cell = p.pixelSize.coerceIn(1, 32)
+        val dither = p.dither.coerceIn(0f, 1f)
+        val out = FloatArray(src.size)
+        val gx0 = (ox / cell) * cell
+        val gy0 = (oy / cell) * cell
+        for (cy in gy0 until oy + h step cell) {
+            for (cx in gx0 until ox + w step cell) {
+                val xa = max(cx, ox)
+                val xb = min(cx + cell, ox + w)
+                val ya = max(cy, oy)
+                val yb = min(cy + cell, oy + h)
+                if (xb <= xa || yb <= ya) continue
+                var sr = 0f
+                var sg = 0f
+                var sb = 0f
+                var sa = 0f
+                var n = 0
+                for (y in ya until yb) for (x in xa until xb) {
+                    val i = ((y - oy) * w + (x - ox)) * 4
+                    sr += src[i]
+                    sg += src[i + 1]
+                    sb += src[i + 2]
+                    sa += src[i + 3]
+                    n++
+                }
+                if (n == 0 || sa <= 0.002f) continue
+                val meanAlpha = sa / n
+                var r = (sr / sa).coerceIn(0f, 1f)
+                var g = (sg / sa).coerceIn(0f, 1f)
+                var b = (sb / sa).coerceIn(0f, 1f)
+                if (dither > 0f) {
+                    val bx = (cx / cell) and 3
+                    val by = (cy / cell) and 3
+                    val offset = (BAYER[by * 4 + bx] - 0.5f) * dither * 0.22f
+                    r = (r + offset).coerceIn(0f, 1f)
+                    g = (g + offset).coerceIn(0f, 1f)
+                    b = (b + offset).coerceIn(0f, 1f)
+                }
+                val rgb = nearestPaletteColor(r, g, b, palette)
+                val cr = ((rgb shr 16) and 0xFF) / 255f * meanAlpha
+                val cg = ((rgb shr 8) and 0xFF) / 255f * meanAlpha
+                val cb = (rgb and 0xFF) / 255f * meanAlpha
+                for (y in ya until yb) for (x in xa until xb) {
+                    val i = ((y - oy) * w + (x - ox)) * 4
+                    out[i] = cr
+                    out[i + 1] = cg
+                    out[i + 2] = cb
+                    out[i + 3] = meanAlpha
+                }
+            }
+        }
+        return out
+    }
+
+    /** Chrome: luminance detail drives a dark-to-white-to-dark metal ramp. */
+    private fun chrome(src: FloatArray, w: Int, h: Int, p: ChromeParams): FloatArray {
+        val radius = ceil(p.smoothness.coerceIn(0f, 16f)).toInt()
+        val lum = luminance(src)
+        val soft = if (radius > 0) boxBlurAlpha(lum, w, h, radius) else lum
+        val gain = 7f + radius * 1.3f
+        val out = src.copyOf()
+        for (i in src.indices step 4) {
+            val a = src[i + 3]
+            if (a <= 0f) continue
+            val detail = lum[i / 4] - soft[i / 4]
+            val u = (0.5f + detail * gain).coerceIn(0f, 1f)
+            val t = u * u * (3f - 2f * u)
+            var r: Float
+            var g: Float
+            var b: Float
+            when {
+                t < 0.42f -> {
+                    val k = t / 0.42f
+                    r = 0.07f + (0.55f - 0.07f) * k
+                    g = 0.09f + (0.62f - 0.09f) * k
+                    b = 0.13f + (0.76f - 0.13f) * k
+                }
+                t < 0.78f -> {
+                    val k = (t - 0.42f) / 0.36f
+                    r = 0.55f + (0.99f - 0.55f) * k
+                    g = 0.62f + (0.99f - 0.62f) * k
+                    b = 0.76f + (1f - 0.76f) * k
+                }
+                else -> {
+                    val k = (t - 0.78f) / 0.22f
+                    r = 0.99f + (0.28f - 0.99f) * k
+                    g = 0.99f + (0.30f - 0.99f) * k
+                    b = 1f + (0.36f - 1f) * k
+                }
+            }
+            out[i] = r * a
+            out[i + 1] = g * a
+            out[i + 2] = b * a
+        }
+        return out
+    }
+
+    /** Sheer: a broad diagonal sheen added to the pigments, keeping the painted shape. */
+    private fun sheer(src: FloatArray, w: Int, h: Int, ox: Int, oy: Int): FloatArray {
+        val out = src.copyOf()
+        for (y in 0 until h) for (x in 0 until w) {
+            val i = (y * w + x) * 4
+            val a = src[i + 3]
+            if (a <= 0f) continue
+            val gx = x + ox
+            val gy = y + oy
+            val band = 0.5f + 0.5f * cos(gx * 0.045f - gy * 0.031f + (gx + gy) * 0.002f)
+            val lum = (0.3f * src[i] + 0.59f * src[i + 1] + 0.11f * src[i + 2]) / a
+            val k = 0.10f + 0.34f * band * (0.35f + 0.65f * lum)
+            out[i] = src[i] + (a - src[i]) * k
+            out[i + 1] = src[i + 1] + (a - src[i + 1]) * k
+            out[i + 2] = src[i + 2] + (a - src[i + 2]) * k
+        }
+        return out
+    }
+
+    /** Impressionist: short dabs of the local colour, oriented across the local luminance gradient. */
+    private fun impressionist(
+        src: FloatArray,
+        w: Int,
+        h: Int,
+        ox: Int,
+        oy: Int,
+        p: ImpressionistParams,
+    ): FloatArray {
+        val pitch = p.strokeSize.coerceIn(2, 32).toFloat()
+        val length = pitch * 2.4f
+        val halfWidth = (pitch * 0.35f).coerceAtLeast(1f)
+        val out = src.copyOf()
+        val s = FloatArray(4)
+        val probe = FloatArray(4)
+        fun lumAt(px: Float, py: Float): Float {
+            sample(src, w, h, px - ox, py - oy, probe)
+            val a = probe[3]
+            if (a <= 0.002f) return 0f
+            return (0.3f * probe[0] + 0.59f * probe[1] + 0.11f * probe[2]) / a
+        }
+        val minRow = floor((oy - length - halfWidth) / pitch).toInt() - 1
+        val maxRow = floor((oy + h + length + halfWidth) / pitch).toInt() + 1
+        for (row in minRow..maxRow) {
+            val minCol = floor((ox - length - halfWidth) / pitch).toInt() - 1
+            val maxCol = floor((ox + w + length + halfWidth) / pitch).toInt() + 1
+            for (col in minCol..maxCol) {
+                val jx = hash(col, row, 0x2C1B3C6DL)
+                val jy = hash(col, row, 0x1B873593L)
+                val cx = (col + 0.5f) * pitch + jx * pitch * 0.35f
+                val cy = (row + 0.5f) * pitch + jy * pitch * 0.35f
+                sample(src, w, h, cx - ox, cy - oy, s)
+                if (s[3] <= 0.01f) continue
+                val probeDistance = pitch * 0.6f
+                val gradX = lumAt(cx + probeDistance, cy) - lumAt(cx - probeDistance, cy)
+                val gradY = lumAt(cx, cy + probeDistance) - lumAt(cx, cy - probeDistance)
+                var angle = if (gradX * gradX + gradY * gradY > 1e-5f) {
+                    atan2(gradY, gradX) + PI_F / 2f
+                } else {
+                    hash(col, row, 0x7F4A7C15L) * TWO_PI
+                }
+                angle += jx * 0.45f
+                val dx = cos(angle) * length * 0.5f
+                val dy = sin(angle) * length * 0.5f
+                val x0 = cx - dx
+                val y0 = cy - dy
+                val x1 = cx + dx
+                val y1 = cy + dy
+                val vx = x1 - x0
+                val vy = y1 - y0
+                val vv = vx * vx + vy * vy
+                if (vv < 1e-4f) continue
+                val xa = max(floor(min(x0, x1) - halfWidth - ox).toInt(), 0)
+                val xb = min(ceil(max(x0, x1) + halfWidth - ox).toInt() + 1, w)
+                val ya = max(floor(min(y0, y1) - halfWidth - oy).toInt(), 0)
+                val yb = min(ceil(max(y0, y1) + halfWidth - oy).toInt() + 1, h)
+                if (xb <= xa || yb <= ya) continue
+                for (y in ya until yb) for (x in xa until xb) {
+                    val px = x + ox + 0.5f
+                    val py = y + oy + 0.5f
+                    val t = (((px - x0) * vx + (py - y0) * vy) / vv).coerceIn(0f, 1f)
+                    val d = hypot(px - (x0 + vx * t), py - (y0 + vy * t))
+                    val cov = (halfWidth + 0.5f - d).coerceIn(0f, 1f)
+                    if (cov <= 0f) continue
+                    val k = cov * 0.85f
+                    val i = (y * w + x) * 4
+                    out[i] = s[0] * k + out[i] * (1f - k)
+                    out[i + 1] = s[1] * k + out[i + 1] * (1f - k)
+                    out[i + 2] = s[2] * k + out[i + 2] * (1f - k)
+                    out[i + 3] = s[3] * k + out[i + 3] * (1f - k)
+                }
+            }
+        }
+        return out
+    }
+
+    /**
+     * Swirl painting: a procedural flow field drags the pixels along curved strokes, then three samples along
+     * the flow are blended into a short painted smear. The field is evaluated at canvas coordinates.
+     */
+    private fun swirlPainting(src: FloatArray, w: Int, h: Int, ox: Int, oy: Int): FloatArray {
+        val out = FloatArray(src.size)
+        val base = FloatArray(4)
+        val sideA = FloatArray(4)
+        val sideB = FloatArray(4)
+        for (y in 0 until h) for (x in 0 until w) {
+            val gx = (x + ox).toFloat()
+            val gy = (y + oy).toFloat()
+            val n1 = valueNoise(x + ox, y + oy, 110f, 0x51ED2701L)
+            val n2 = valueNoise(x + ox, y + oy, 54f, 0x7F4A7C15L)
+            val angle = n1 * PI_F * 1.5f + (gx + gy) * 0.008f
+            val reach = 30f * (0.65f + 0.35f * n2)
+            val dx = cos(angle) * reach
+            val dy = sin(angle) * reach
+            sample(src, w, h, x + dx, y + dy, base)
+            sample(src, w, h, x + dx + cos(angle + 0.5f) * 8f, y + dy + sin(angle + 0.5f) * 8f, sideA)
+            sample(src, w, h, x + dx - cos(angle - 0.4f) * 8f, y + dy - sin(angle - 0.4f) * 8f, sideB)
+            val i = (y * w + x) * 4
+            out[i] = base[0] * 0.6f + sideA[0] * 0.2f + sideB[0] * 0.2f
+            out[i + 1] = base[1] * 0.6f + sideA[1] * 0.2f + sideB[1] * 0.2f
+            out[i + 2] = base[2] * 0.6f + sideA[2] * 0.2f + sideB[2] * 0.2f
+            out[i + 3] = base[3] * 0.6f + sideA[3] * 0.2f + sideB[3] * 0.2f
+        }
+        return out
+    }
+
+    /** Pop art: a white sheet with saturated halftone dots sampled from the content. */
+    private fun popArt(src: FloatArray, w: Int, h: Int, ox: Int, oy: Int, p: PopArtParams): FloatArray {
+        val cell = 12
+        val radius = cell * 0.5f * p.dotScale.coerceIn(0.2f, 1.2f)
+        val saturation = p.saturation.coerceIn(0f, 2f)
+        val out = FloatArray(src.size)
+        for (i in out.indices step 4) {
+            out[i] = 1f
+            out[i + 1] = 1f
+            out[i + 2] = 1f
+            out[i + 3] = 1f
+        }
+        val gx0 = (ox / cell) * cell
+        val gy0 = (oy / cell) * cell
+        val s = FloatArray(4)
+        for (cy in gy0 until oy + h step cell) {
+            for (cx in gx0 until ox + w step cell) {
+                val centerX = cx + cell / 2f
+                val centerY = cy + cell / 2f
+                sample(src, w, h, centerX - ox, centerY - oy, s)
+                val a = s[3]
+                if (a <= 0.01f) continue
+                var r = (s[0] / a).coerceIn(0f, 1f)
+                var g = (s[1] / a).coerceIn(0f, 1f)
+                var b = (s[2] / a).coerceIn(0f, 1f)
+                val lum = 0.3f * r + 0.59f * g + 0.11f * b
+                r = (lum + (r - lum) * saturation).coerceIn(0f, 1f)
+                g = (lum + (g - lum) * saturation).coerceIn(0f, 1f)
+                b = (lum + (b - lum) * saturation).coerceIn(0f, 1f)
+                val xa = max((centerX - radius - ox).toInt(), 0)
+                val xb = min((centerX + radius - ox).toInt() + 1, w)
+                val ya = max((centerY - radius - oy).toInt(), 0)
+                val yb = min((centerY + radius - oy).toInt() + 1, h)
+                if (xb <= xa || yb <= ya) continue
+                for (y in ya until yb) for (x in xa until xb) {
+                    val d = hypot(x + ox + 0.5f - centerX, y + oy + 0.5f - centerY)
+                    val cov = (radius + 0.5f - d).coerceIn(0f, 1f)
+                    if (cov <= 0f) continue
+                    val i = (y * w + x) * 4
+                    out[i] = r * cov + out[i] * (1f - cov)
+                    out[i + 1] = g * cov + out[i + 1] * (1f - cov)
+                    out[i + 2] = b * cov + out[i + 2] * (1f - cov)
+                }
+            }
+        }
+        return out
+    }
+
+    private val BAYER = floatArrayOf(
+        0f, 8f, 2f, 10f,
+        12f, 4f, 14f, 6f,
+        3f, 11f, 1f, 9f,
+        15f, 7f, 13f, 5f,
+    ).map { it / 16f }.toFloatArray()
+
+    private val RETRO_NES = intArrayOf(
+        0x000000, 0xFCFCFC, 0xBCBCBC, 0x7C7C7C,
+        0x0078F8, 0x00B8F8, 0x58D854, 0x00A800,
+        0xF8B800, 0xF87858, 0xF83800, 0xD82800,
+        0xA800A8, 0x6844FC, 0xF878F8, 0xFCE4A0,
+    )
+
+    private val RETRO_GB = intArrayOf(0x0F380F, 0x306230, 0x8BAC0F, 0x9BBC0F)
+
+    private val RETRO_16 = intArrayOf(
+        0x000000, 0x0000AA, 0x00AA00, 0x00AAAA,
+        0xAA0000, 0xAA00AA, 0xAA5500, 0xAAAAAA,
+        0x555555, 0x5555FF, 0x55FF55, 0x55FFFF,
+        0xFF5555, 0xFF55FF, 0xFFFF55, 0xFFFFFF,
+    )
 
     // ---------------------------------------------------------------- generators (draw)
 
