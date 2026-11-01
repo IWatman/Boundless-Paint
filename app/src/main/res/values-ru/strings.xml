@@ -422,6 +422,18 @@
     <string name="pattern_offset_y">Смещение Y</string>
     <string name="pattern_contrast">Контраст</string>
     <string name="pattern_invert">Инверсия</string>
+    <!-- Materials -->
+    <string name="materials">Материалы…</string>
+    <string name="materials_title">Материалы</string>
+    <string name="material_hint">Один штамп в центре холста или выделения.</string>
+    <string name="material_balloon">Шар</string>
+    <string name="material_fabric">Ткань</string>
+    <string name="material_wood">Дерево</string>
+    <string name="material_metal">Металл</string>
+    <string name="material_stone">Камень</string>
+    <string name="material_foliage">Листва</string>
+    <string name="material_sparkle">Блёстки</string>
+    <string name="material_paper">Бумага</string>
     <string name="tool_clone">Клон-кисть</string>
     <string name="clone_hint">Долгое нажатие — выбрать источник</string>
     <string name="gradient_linear">Линейный</string>

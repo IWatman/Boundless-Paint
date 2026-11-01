@@ -14,6 +14,7 @@ import app.painter.core.fill.Spread
 import app.painter.core.filter.FilterParams
 import app.painter.core.guide.OverlayRole
 import app.painter.core.history.MaskInit
+import app.painter.core.material.MaterialSpec
 import app.painter.core.perspective.PerspectiveType
 import app.painter.core.shape.ShapeTool
 import app.painter.core.stroke.BrushParams
@@ -542,6 +543,12 @@ interface StudioActions {
      * [background] is the coverage-0 colour and [ink] the coverage-1 colour.
      */
     fun patternFill(spec: PatternSpec, background: Rgba, ink: Rgba, opacity: Float) {}
+
+    /**
+     * Stamps one built-in procedural material at the canvas centre, or the selection centre, with the current
+     * colour as one undo step. The stamp size, rotation and opacity come from [spec].
+     */
+    fun stampMaterial(spec: MaterialSpec) {}
     fun setBrushSize(size: Float)
     fun setOpacity(opacity: Float)
     fun setFlow(flow: Float)

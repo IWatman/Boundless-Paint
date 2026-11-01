@@ -80,6 +80,7 @@ fun StudioScreen(
     var filterLayerOpen by remember { mutableStateOf(false) }
     var textOpen by remember { mutableStateOf(false) }
     var patternOpen by remember { mutableStateOf(false) }
+    var materialsOpen by remember { mutableStateOf(false) }
     var cropOpen by remember { mutableStateOf(false) }
     var resizeOpen by remember { mutableStateOf(false) }
     var straightenOpen by remember { mutableStateOf(false) }
@@ -121,6 +122,16 @@ fun StudioScreen(
             onApply = { spec, background, patternInk, opacity ->
                 patternOpen = false
                 actions.patternFill(spec, background, patternInk, opacity)
+            },
+        )
+    }
+    if (materialsOpen) {
+        MaterialDialog(
+            ink = state.color,
+            onDismiss = { materialsOpen = false },
+            onApply = { spec ->
+                materialsOpen = false
+                actions.stampMaterial(spec)
             },
         )
     }
@@ -230,6 +241,7 @@ fun StudioScreen(
                 onFilterLayer = { filterLayerOpen = true },
                 onText = { textOpen = true },
                 onPatternFill = { patternOpen = true },
+                onMaterials = { materialsOpen = true },
                 onCrop = { cropOpen = true },
                 onResize = { resizeOpen = true },
                 onStraighten = { straightenOpen = true },
@@ -784,6 +796,7 @@ private fun StudioTopBar(
     onFilterLayer: () -> Unit,
     onText: () -> Unit,
     onPatternFill: () -> Unit,
+    onMaterials: () -> Unit,
     onCrop: () -> Unit,
     onResize: () -> Unit,
     onStraighten: () -> Unit,
@@ -873,6 +886,13 @@ private fun StudioTopBar(
                             onClick = {
                                 toolsMenu = false
                                 onPatternFill()
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.materials)) },
+                            onClick = {
+                                toolsMenu = false
+                                onMaterials()
                             },
                         )
                         DropdownMenuItem(

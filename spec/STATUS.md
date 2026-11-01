@@ -35,6 +35,22 @@
   and visible-shape checks for each new pattern (fold, antiphase waves, triangle orientation, five star tips,
   hexagon lattice gaps and wood grain bands).
 
+### Materials library (2026-11-02)
+- Core: `core/material/MaterialStamp.kt` generates eight procedural stamps — balloon (soft satin sphere), fabric
+  (plain weave), wood (grain), metal (brushed plate), stone (speckled slab), foliage (leaf cluster), sparkle
+  (four-point stars with a faint glow) and paper (fibrous deckled sheet). Analytic shapes and deterministic value
+  noise produce a coverage and tone pair; the stamp is tinted with the current colour and composited over the
+  active layer through the selection with `maskedPatch`, so alpha lock and locked layers behave like the fill
+  tools. Size is clamped to 32..2048 px and the stamp is placed at the selection centre, or the canvas centre
+  when there is no selection.
+- UI: Editing Tools → Materials… shows eight live previews in the current colour and opacity, with size, rotation
+  and opacity sliders; Apply renders on a worker and lands as one undo step. No drag placement, stroke painting,
+  import or library persistence in this slice.
+- Tests: `MaterialStampTest` (14) — sampler and fill determinism for every material, clamped controls, visible
+  footprints and distinct textures, size, rotation, opacity, colour tinting, selection clipping and centring,
+  alpha lock, locked layers and undo/redo.
+- M5 now: **755 JVM tests** (648 core, 107 app).
+
 ### First filter batch (2026-11-01)
 - Core: ten more destructive filters — smooth (edge-preserving), lens blur, high-pass, frosted glass/scatter,
   grain (mono/rgb/alpha), local contrast, bokeh, lens flare, god rays and cross filter. Parameters live in

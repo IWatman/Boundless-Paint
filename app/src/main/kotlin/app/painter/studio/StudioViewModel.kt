@@ -91,6 +91,8 @@ import app.painter.core.io.SaveTracker
 import app.painter.core.io.TiffCmyk
 import app.painter.core.io.import.BrushImport
 import app.painter.core.liquify.LiquifySession
+import app.painter.core.material.MaterialSpec
+import app.painter.core.material.MaterialStamp
 import app.painter.core.perspective.PerspectiveConfig
 import app.painter.core.perspective.PerspectiveOverlay
 import app.painter.core.perspective.PerspectiveType
@@ -2301,6 +2303,42 @@ class StudioViewModel(
             // The layer may have been deleted while the pattern rendered; then the result is dropped.
             if (doc.findNode(id) !is RasterLayer) return@launch
             history.execute(doc, TilePatchCommand(patch, "Pattern fill"))
+            canvas?.invalidate(id, patch.after.keys)
+        }
+    }
+
+    /**
+     * Material library (spec §21): one procedural stamp at the canvas centre, or the selection centre, with the
+     * current colour. The generator runs on a worker over a private copy of the active layer and the result is
+     * one history step; the selection clips it and alpha lock keeps the old alpha.
+     */
+    override fun stampMaterial(spec: MaterialSpec) {
+        if (filterBusy) return
+        finishShape(commit = true)
+        finishTransform(apply = true)
+        finishGradient(apply = true)
+        commitPendingOpacity()
+        val layer = doc.activeRaster ?: return
+        if (!layer.visible || layer.effectivelyLocked) return
+        val id = layer.id
+        val color = _state.value.color
+        val copy = RasterLayer(id, layer.name, layer.pixels.copy()).also {
+            it.alphaLock = layer.alphaLock
+            it.locked = layer.locked
+        }
+        val selection = doc.selection.coverageOrNull()?.copy()
+        filterBusy = true
+        _state.update { it.copy(filterBusy = true) }
+        viewModelScope.launch {
+            val patch = runCatching {
+                withContext(Dispatchers.Default) { MaterialStamp.patch(copy, selection, spec, color) }
+            }.getOrNull()
+            filterBusy = false
+            _state.update { it.copy(filterBusy = false) }
+            if (patch == null || patch.after.isEmpty()) return@launch
+            // The layer may have been deleted while the stamp rendered; then the result is dropped.
+            if (doc.findNode(id) !is RasterLayer) return@launch
+            history.execute(doc, TilePatchCommand(patch, "Material"))
             canvas?.invalidate(id, patch.after.keys)
         }
     }

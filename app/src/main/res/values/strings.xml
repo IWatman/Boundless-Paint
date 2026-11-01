@@ -421,6 +421,18 @@
     <string name="pattern_offset_y">Offset Y</string>
     <string name="pattern_contrast">Contrast</string>
     <string name="pattern_invert">Invert</string>
+    <!-- Materials -->
+    <string name="materials">Materials…</string>
+    <string name="materials_title">Materials</string>
+    <string name="material_hint">One stamp at the canvas or selection centre.</string>
+    <string name="material_balloon">Balloon</string>
+    <string name="material_fabric">Fabric</string>
+    <string name="material_wood">Wood</string>
+    <string name="material_metal">Metal</string>
+    <string name="material_stone">Stone</string>
+    <string name="material_foliage">Foliage</string>
+    <string name="material_sparkle">Sparkle</string>
+    <string name="material_paper">Paper</string>
     <string name="tool_clone">Clone</string>
     <!-- Clone tool -->
     <string name="clone_hint">Long-press to set the source</string>
