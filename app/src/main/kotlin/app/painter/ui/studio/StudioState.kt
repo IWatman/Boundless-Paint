@@ -756,7 +756,7 @@ interface StudioActions {
     /** Links Google Drive; Google Play services shows the account/consent sheet when needed. */
     fun driveConnect() {}
 
-    /** Clears the local Drive link and best-effort revokes the Google grant. */
+    /** Clears the local Drive link; the Google grant stays in Play services. */
     fun driveDisconnect() {}
 
     /** Backs up the open project. */
