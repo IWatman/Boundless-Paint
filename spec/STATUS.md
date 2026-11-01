@@ -134,6 +134,22 @@
   on `painter_tab`: the system chooser listed Drive, Print, Messages, Nearby Share and Maps, and the print
   spooler rendered the 2560×1432 opaque PNG from the cache. M4 tests: **611 JVM tests** (511 core, 100 app).
 
+## M5: in progress (2026-11-01)
+### First filter batch (2026-11-01)
+- Core: ten more destructive filters — smooth (edge-preserving), lens blur, high-pass, frosted glass/scatter,
+  grain (mono/rgb/alpha), local contrast, bokeh, lens flare, god rays and cross filter. Parameters live in
+  `FilterParamsM5.kt` and join the sealed `FilterParams` family, so `FilterCodec` and live filter layers keep
+  working unchanged.
+- Tiling: aperture gathers use the padded patch, light filters work in canvas coordinates, scatter uses
+  canvas-aligned value noise, and the two-pass blur behind smooth/high-pass/local contrast has a reach of `2r`;
+  every filter is deterministic and seam-free across 256 px tiles.
+- UI: Editing Tools → Filters… has a chip for each new filter with only its controls (radius/distance/size,
+  mono/rgb/alpha grain, centre X/Y, length, threshold, rays, blade angle and highlight boost) plus the common
+  strength. Every control changes the result.
+- Tests: `FiltersM5Test` (8) — determinism and visible change, every control, cross-tile reads, boundary
+  continuity probe, selection and alpha lock, grain variants and `FilterCodec` round trips.
+  **619 JVM tests** (519 core, 100 app).
+
 ## M2: done (2026-10-31)
 - Build: `. .\tools\env.ps1; .\gradlew.bat :core:test :app:testDebugUnitTest :app:assembleDebug`.
 - Tests: **524 JVM tests, all green** (451 in `:core`, 73 in `:app`); GPU↔CPU parity `BlendParityTest` (33 modes, 13 adjustments, in sRGB and in linear light) green on `painter_tab` (Android 14, GLES 3.1, RGBA16F).
