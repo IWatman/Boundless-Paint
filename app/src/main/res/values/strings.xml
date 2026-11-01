@@ -750,9 +750,15 @@
     <string name="video_export_format">Format: MP4 · H.264 + AAC</string>
     <string name="video_export_audio_note">Audio is mixed at 48 kHz stereo; the master volume applies. Audio beyond the video end is cut.</string>
     <string name="video_export_quality">Resolution</string>
+    <string name="video_export_4k60">4K · 60 fps</string>
+    <string name="video_export_4k30">4K · 30 fps</string>
     <string name="video_export_estimate">Estimated size: %1$s (estimate, not a promise)</string>
     <string name="video_export_unsupported_item">%1$s: %2$s</string>
     <string name="video_export_encoder_reason">the encoder does not support %1$s at %2$d fps</string>
+    <string name="video_export_encoder_reason_4k">the encoder does not support 4K at 60 or 30 fps</string>
+    <string name="video_export_memory_reason">not enough memory: the 4K working set needs about %1$s and the device has a %2$s large heap</string>
+    <string name="video_export_layer_limit">At %1$s this device fits %2$d layers with a %3$s layer budget (40%% of the large heap); the timeline references %4$d frame layers. Frames are layers, so a 4K canvas cannot hold this timeline. The current canvas can still be exported.</string>
+    <string name="video_export_layer_limit_canvas">This canvas fits %1$d layers; the timeline references %2$d frame layers. Frames are layers, so reduce the frame count or the canvas size.</string>
     <string name="video_export_size_reason">the canvas size cannot be scaled to this resolution</string>
     <string name="video_export_no_encoder">No H.264 encoder on this device can export video.</string>
     <string name="video_export_no_frames">Add at least one clip before exporting.</string>

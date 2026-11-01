@@ -1,5 +1,6 @@
 package app.painter.ui.studio
 
+import android.app.ActivityManager
 import android.text.format.Formatter
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -30,15 +31,16 @@ import app.painter.R
 import app.painter.core.doc.VIDEO_TICKS_PER_SECOND
 import app.painter.core.video.AudioMix
 import app.painter.core.video.VideoExportPlan
+import app.painter.studio.LayerLimit
 import app.painter.studio.VideoExportOptions
 import app.painter.studio.videoExportPresetLabel
 import app.painter.video.VideoEncoders
 import java.util.Locale
 
 /**
- * Export format/size dialog of slice S3 (spec/VIDEO-MODE.md §5.7). Only presets the device encoder accepts at
- * 60 fps are enabled, and the reason is shown before the user can open the file picker. MP4/H.264 is fixed;
- * audio is not offered until S4.
+ * Export format/size dialog (spec/VIDEO-MODE.md §5.7). The chips mirror the `VideoEncoderCaps` probe exactly:
+ * 720p/1080p/1440p at 60 fps, 4K at 60 fps when supported, otherwise the explicit 4K/30 fallback. A 4K chip is
+ * disabled with a reason when the encoder or the memory guard refuses it; there is never a silent rate change.
  */
 @Composable
 internal fun VideoExportDialog(
@@ -49,17 +51,27 @@ internal fun VideoExportDialog(
     onConfirm: (VideoExportOptions) -> Unit,
 ) {
     val context = LocalContext.current
+    val largeHeapBytes = remember {
+        context.getSystemService(ActivityManager::class.java)
+            ?.largeMemoryClass?.toLong()?.times(1024L * 1024L) ?: 0L
+    }
+    val layerBudget = largeHeapBytes * 4L / 10L
     val encoder = remember { VideoEncoders.best() }
-    val choices = remember(encoder, canvasWidth, canvasHeight) {
-        encoder?.let { VideoExportPlan.choices(canvasWidth, canvasHeight, caps = it) } ?: emptyList()
+    val choices = remember(encoder, canvasWidth, canvasHeight, largeHeapBytes) {
+        encoder?.let {
+            VideoExportPlan.choices(canvasWidth, canvasHeight, caps = it, largeHeapBytes = largeHeapBytes)
+        } ?: emptyList()
     }
-    val defaultLongSide = remember(choices) { VideoExportPlan.defaultLongSide(choices) }
-    var selectedLongSide by remember(choices) { mutableStateOf(defaultLongSide) }
-    val active = choices.firstOrNull {
-        it.longSide == (selectedLongSide ?: defaultLongSide) && it.supported
-    }
+    var selected by remember(choices) { mutableStateOf(VideoExportPlan.defaultChoice(choices)) }
+    val active = selected?.takeIf { it.supported } ?: VideoExportPlan.defaultChoice(choices)
+    val activeLabel = active?.let { videoExportChoiceLabel(it) } ?: ""
     val plan = active?.plan
-    val frames = VideoExportPlan.frameCount(video.durationTicks, VideoExportPlan.FPS)
+    val outputFps = plan?.fps ?: VideoExportPlan.FPS
+    val frames = VideoExportPlan.frameCount(video.durationTicks, outputFps)
+    val frameLayers = video.tracks
+        .flatMap { track -> track.clips.filter { !it.missing }.mapNotNull { it.frameId } }
+        .distinct()
+        .size
     val missingFrames = video.tracks.sumOf { track -> track.clips.count { it.missing } }
     val audio = video.audio
     val hasAudioClips = audio != null && audio.clips.isNotEmpty()
@@ -75,7 +87,7 @@ internal fun VideoExportDialog(
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(stringResource(R.string.video_export_duration, formatVideoTime(video.durationTicks)))
-                Text(stringResource(R.string.video_export_frames, frames, VideoExportPlan.FPS))
+                Text(stringResource(R.string.video_export_frames, frames, outputFps))
                 Text(stringResource(R.string.video_export_format))
                 if (hasAudioClips) {
                     Text(
@@ -121,14 +133,17 @@ internal fun VideoExportDialog(
                 }
                 if (choices.isNotEmpty()) {
                     Text(stringResource(R.string.video_export_quality), Modifier.padding(top = 4.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        for (choice in choices) {
-                            ToggleChip(
-                                label = videoExportPresetLabel(choice.longSide),
-                                checked = choice.longSide == (selectedLongSide ?: defaultLongSide),
-                                enabled = choice.supported,
-                                onToggle = { selectedLongSide = choice.longSide },
-                            )
+                    // Two short rows keep four chips inside the dialog on a phone.
+                    for (row in choices.chunked(3)) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            for (choice in row) {
+                                ToggleChip(
+                                    label = videoExportChoiceLabel(choice),
+                                    checked = choice.longSide == active?.longSide && choice.fps == active?.fps,
+                                    enabled = choice.supported,
+                                    onToggle = { selected = choice },
+                                )
+                            }
                         }
                     }
                 }
@@ -142,17 +157,31 @@ internal fun VideoExportDialog(
                     for (choice in choices.filter { !it.supported }) {
                         val reason = when (choice.refusal) {
                             VideoExportPlan.Refusal.SIZE -> stringResource(R.string.video_export_size_reason)
-                            VideoExportPlan.Refusal.ENCODER -> stringResource(
-                                R.string.video_export_encoder_reason,
-                                videoExportPresetLabel(choice.longSide),
-                                VideoExportPlan.FPS,
-                            )
+                            VideoExportPlan.Refusal.ENCODER -> if (choice.longSide >= VideoExportPlan.FOUR_K_LONG_SIDE) {
+                                stringResource(R.string.video_export_encoder_reason_4k)
+                            } else {
+                                stringResource(
+                                    R.string.video_export_encoder_reason,
+                                    videoExportPresetLabel(choice.longSide),
+                                    choice.fps,
+                                )
+                            }
+                            VideoExportPlan.Refusal.MEMORY -> {
+                                val needed = choice.size?.let {
+                                    VideoExportPlan.estimatedPeakBytes(it.width, it.height)
+                                } ?: 0L
+                                stringResource(
+                                    R.string.video_export_memory_reason,
+                                    Formatter.formatShortFileSize(context, needed),
+                                    Formatter.formatShortFileSize(context, largeHeapBytes),
+                                )
+                            }
                             null -> continue
                         }
                         Text(
                             stringResource(
                                 R.string.video_export_unsupported_item,
-                                videoExportPresetLabel(choice.longSide),
+                                videoExportChoiceLabel(choice),
                                 reason,
                             ),
                             style = MaterialTheme.typography.bodySmall,
@@ -177,6 +206,36 @@ internal fun VideoExportDialog(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
+                    if (layerBudget > 0L) {
+                        val canvasLayerLimit = LayerLimit.maxLayers(canvasWidth, canvasHeight, layerBudget)
+                        val exportLayerLimit = LayerLimit.maxLayers(it.width, it.height, layerBudget)
+                        when {
+                            frameLayers > canvasLayerLimit -> {
+                                Text(
+                                    stringResource(
+                                        R.string.video_export_layer_limit_canvas,
+                                        canvasLayerLimit,
+                                        frameLayers,
+                                    ),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.error,
+                                )
+                            }
+                            it.longSide >= VideoExportPlan.FOUR_K_LONG_SIDE && frameLayers > exportLayerLimit -> {
+                                Text(
+                                    stringResource(
+                                        R.string.video_export_layer_limit,
+                                        activeLabel,
+                                        exportLayerLimit,
+                                        Formatter.formatShortFileSize(context, layerBudget),
+                                        frameLayers,
+                                    ),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+                    }
                 }
                 if (missingFrames > 0) {
                     Text(
@@ -316,6 +375,16 @@ internal fun VideoExportProgressDialog(
             }
         },
     )
+}
+
+/** Chip label; the 4K rate is always explicit, lower presets run at the timeline's 60 fps. */
+@Composable
+private fun videoExportChoiceLabel(choice: VideoExportPlan.Choice): String = when {
+    choice.longSide >= VideoExportPlan.FOUR_K_LONG_SIDE &&
+        choice.fps == VideoExportPlan.FALLBACK_FPS -> stringResource(R.string.video_export_4k30)
+
+    choice.longSide >= VideoExportPlan.FOUR_K_LONG_SIDE -> stringResource(R.string.video_export_4k60)
+    else -> videoExportPresetLabel(choice.longSide)
 }
 
 private fun formatElapsed(milliseconds: Long): String {

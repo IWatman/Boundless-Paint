@@ -179,6 +179,32 @@
 - Not measured: audible A/V drift and 1080p60 throughput on hardware; recording itself was not instrumented.
 - M5 now: **810 JVM tests** (703 core, 107 app).
 
+### Video mode S5 (2026-11-02)
+- 4K: `VideoExportPlan` now offers 720p/1080p/1440p plus 4K. The 4K chip is 60 fps when the selected encoder
+  advertises that exact size and rate, otherwise the explicit 4K/30 fallback; when neither works the 4K/60 chip
+  is disabled with the encoder reason. Bitrate stays 40 Mbps at 4K/60 and 4K/30. The dialog shows the frame
+  count at the selected rate, so there is no silent fps change.
+- Memory guard: `VideoExportPlan.estimatedPeakBytes` budgets two I420 buffers, a full-canvas RGBA16F grid and
+  48 MiB of headroom; 4K is refused when that exceeds half of `ActivityManager.largeMemoryClass`. The 4K
+  estimate is 141,570,048 bytes (135 MiB), so a 256 MB large heap is refused and 512 MB is accepted. The dialog
+  disables the chip with the estimate and heap size; `StudioViewModel` rechecks before the file picker.
+- Frame cache: the exporter keeps exactly one reusable I420 frame, so 4K stays at 11.9 MiB for the rasterizer
+  buffer and does not gain a second frame cache.
+- Layer limit: the export dialog derives `LayerLimit.maxLayers` from the selected output size and the 40% heap
+  budget (6 layers at 4K/512 MB, 24 at 1080p/512 MB) and explains the limit when the timeline references more
+  frame layers. The current canvas limit is checked separately and shown as an error when exceeded.
+- Second drawing track: **not shipped**. The core model, `Video.visibleFrames`, compositor and exporter already
+  composite every visible track, and `VideoTest` now covers two tracks, but the UI to create and manage a second
+  frame group would also need animation-panel and layer-row work. The shipped UI remains one drawing track and
+  the format is ready for a later slice.
+- Tests: `VideoExportPlanTest` (19, matrix/4K30/memory/pixel cap), `VideoTest` +1 multi-track visibility,
+  `LayerLimitTest` +1 derived 4K/1080p limits; instrumented `VideoExporter4KTest` runs only when the selected
+  encoder advertises 4K and the heap passes the guard, otherwise it is skipped. The `painter_tab` AVD skipped
+  it, so no 4K hardware result is claimed.
+- Not measured: 4K/60 and 4K/30 throughput on the reference tablet; the instrumented 4K smoke is a capability
+  check, not a benchmark. The 1080p60 timing remains unmeasured.
+- M5 now: **818 JVM tests** (710 core, 108 app).
+
 ## M3: done (2026-10-31)
 ### Filters (2026-10-31)
 - Core: `core/filter` — `FilterParams` (sealed, 9 kinds) and `Filters.apply`, which runs tile by tile with a patch

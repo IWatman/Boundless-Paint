@@ -5,6 +5,7 @@ import android.Manifest
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.SystemClock
+import android.text.format.Formatter
 import android.app.Application
 import android.graphics.Bitmap
 import androidx.compose.ui.graphics.ImageBitmap
@@ -3425,16 +3426,18 @@ class StudioViewModel(
             publishVideoExportFailure(uiString(R.string.video_export_no_encoder))
             return
         }
-        val choice = VideoExportPlan.choice(doc.width, doc.height, options.longSide, options.outputFps, encoder)
+        val heapBytes = largeHeapBytes()
+        val choice = VideoExportPlan.choice(
+            canvasWidth = doc.width,
+            canvasHeight = doc.height,
+            longSide = options.longSide,
+            fps = options.outputFps,
+            caps = encoder,
+            largeHeapBytes = heapBytes,
+        )
         val plan = choice.plan
         if (plan == null) {
-            publishVideoExportFailure(
-                uiString(
-                    R.string.video_export_encoder_reason,
-                    videoExportPresetLabel(options.longSide),
-                    options.outputFps,
-                ),
-            )
+            publishVideoExportFailure(videoExportRefusalMessage(choice, options, heapBytes))
             return
         }
         val durationTicks = Video.durationTicks(meta)
@@ -3591,6 +3594,30 @@ class StudioViewModel(
     override fun dismissVideoExport() {
         if (videoExportBusy) return
         _state.update { it.copy(videoExport = null) }
+    }
+
+    /** Why a chosen preset cannot be encoded; the dialog uses the same reasons before the picker opens. */
+    private fun videoExportRefusalMessage(
+        choice: VideoExportPlan.Choice,
+        options: VideoExportOptions,
+        largeHeapBytes: Long,
+    ): String = when (choice.refusal) {
+        VideoExportPlan.Refusal.MEMORY -> {
+            val needed = choice.size?.let {
+                VideoExportPlan.estimatedPeakBytes(it.width, it.height)
+            } ?: 0L
+            uiString(
+                R.string.video_export_memory_reason,
+                Formatter.formatShortFileSize(getApplication<Application>(), needed),
+                Formatter.formatShortFileSize(getApplication<Application>(), largeHeapBytes),
+            )
+        }
+        VideoExportPlan.Refusal.SIZE -> uiString(R.string.video_export_size_reason)
+        else -> uiString(
+            R.string.video_export_encoder_reason,
+            videoExportPresetLabel(options.longSide),
+            options.outputFps,
+        )
     }
 
     /** Shows a failure that happened before the job could start (encoder gone, no frames). */
@@ -5567,11 +5594,13 @@ class StudioViewModel(
     }
 
     /** Layer limit per spec/GAPS.md: 40% of the large heap, and the GPU tiles get their own budget (debt 6). */
-    fun layerLimitFor(w: Int, h: Int): Int {
-        val am = getApplication<Application>().getSystemService(ActivityManager::class.java)
-        val budget = am.largeMemoryClass.toLong() * 1024 * 1024 * 4 / 10
-        return LayerLimit.maxLayers(w, h, budget)
-    }
+    fun layerLimitFor(w: Int, h: Int): Int =
+        LayerLimit.maxLayers(w, h, largeHeapBytes() * 4L / 10L)
+
+    /** `ActivityManager.largeMemoryClass` in bytes; 0 when the service is unavailable. */
+    private fun largeHeapBytes(): Long =
+        getApplication<Application>().getSystemService(ActivityManager::class.java)
+            ?.largeMemoryClass?.toLong()?.times(1024L * 1024L) ?: 0L
 
     private fun renderThumbnailPng(d: Document): ByteArray {
         val grid = Compositor.flatten(d, includePaper = true)
