@@ -3,6 +3,7 @@ package app.painter.core.filter
 import app.painter.core.history.snapshotTiles
 import app.painter.core.raster.IntRect
 import app.painter.core.raster.MaskGrid
+import app.painter.core.raster.MaskTile
 import app.painter.core.raster.Tile
 import app.painter.core.raster.TileGrid
 import app.painter.core.raster.TileKey
@@ -11,6 +12,7 @@ import app.painter.core.stroke.StrokeContext
 import java.util.concurrent.Callable
 import java.util.concurrent.Executors
 import kotlin.math.abs
+import kotlin.math.atan2
 import kotlin.math.ceil
 import kotlin.math.cos
 import kotlin.math.floor
@@ -22,16 +24,21 @@ import kotlin.math.sin
 import kotlin.math.sqrt
 
 /**
- * Destructive filters of spec/filters.md (M3 and the first M5 batch). A filter runs over the painted area of one
+ * Destructive filters of spec/filters.md (M3 and the M5 batches). A filter runs over the painted area of one
  * layer, tile by tile: each tile is processed with a patch padded by [FilterParams.reach], so neighbouring tiles
- * never show a seam. Pixels outside [out] (the content expanded by the reach, clipped by the selection) are left
- * alone.
+ * never show a seam. Warps that can read any pixel of the content set [FilterParams.needsFullSource]; they are
+ * sampled from one immutable snapshot of the painted area instead of a padded tile patch, which keeps the same
+ * guarantee without a padding the size of the canvas. Pixels outside [out] are left alone.
  *
  * All arithmetic is on premultiplied RGBA floats, like the rest of the raster code.
  */
 object Filters {
 
     private const val TILE = Tile.SIZE
+    private val TWO_PI = (Math.PI * 2).toFloat()
+    private val PI_F = Math.PI.toFloat()
+    private val SQRT3 = sqrt(3f)
+    private val SQRT3_2 = SQRT3 / 2f
 
     /**
      * Applies [params] to [grid] in place and returns the before/after patch for the history.
@@ -50,14 +57,17 @@ object Filters {
         } else {
             grid.bounds() ?: return TilePatch(layerId, emptyMap(), emptyMap())
         }
-        val canvas = IntRect(0, 0, grid.width, grid.height)
-        val reach = params.reach.coerceAtLeast(0)
-        val padded = IntRect(
-            (content.x0 - reach).coerceAtLeast(0),
-            (content.y0 - reach).coerceAtLeast(0),
-            (content.x1 + reach).coerceAtMost(grid.width),
-            (content.y1 + reach).coerceAtMost(grid.height),
-        )
+        val writeReach = params.writeReach.coerceAtLeast(0)
+        val padded = if (params.needsFullSource) {
+            content
+        } else {
+            IntRect(
+                (content.x0 - writeReach).coerceAtLeast(0),
+                (content.y0 - writeReach).coerceAtLeast(0),
+                (content.x1 + writeReach).coerceAtMost(grid.width),
+                (content.y1 + writeReach).coerceAtMost(grid.height),
+            )
+        }
         val out = if (selection != null) {
             val sel = selection.bounds() ?: return TilePatch(layerId, emptyMap(), emptyMap())
             padded.intersect(sel) ?: return TilePatch(layerId, emptyMap(), emptyMap())
@@ -68,7 +78,7 @@ object Filters {
         if (keys.isEmpty()) return TilePatch(layerId, emptyMap(), emptyMap())
 
         val before = snapshotTiles(grid, keys)
-        process(grid, params, out, keys, selection, alphaLock, Geometry(content), threads)
+        process(grid, params, out, keys, selection, alphaLock, Geometry(content), threads, before)
         val after = snapshotTiles(grid, keys)
         return TilePatch(layerId, before, after)
     }
@@ -84,16 +94,23 @@ object Filters {
         } else {
             grid.bounds() ?: return
         }
-        val reach = params.reach.coerceAtLeast(0)
-        val padded = IntRect(
-            (content.x0 - reach).coerceAtLeast(0),
-            (content.y0 - reach).coerceAtLeast(0),
-            (content.x1 + reach).coerceAtMost(grid.width),
-            (content.y1 + reach).coerceAtMost(grid.height),
-        )
+        val writeReach = params.writeReach.coerceAtLeast(0)
+        val padded = if (params.needsFullSource) {
+            content
+        } else {
+            IntRect(
+                (content.x0 - writeReach).coerceAtLeast(0),
+                (content.y0 - writeReach).coerceAtLeast(0),
+                (content.x1 + writeReach).coerceAtMost(grid.width),
+                (content.y1 + writeReach).coerceAtMost(grid.height),
+            )
+        }
         val keys = padded.tileKeys(grid.width, grid.height)
         if (keys.isEmpty()) return
-        process(grid, params, padded, keys, null, false, Geometry(content), threads)
+        // Cell filters need the same pre-filter view as the history path; other filters keep the zero-copy
+        // path that avoids doubling the heap while a live filter layer is recomputed after every stroke.
+        val source = if (params.needsStableSource) snapshotTiles(grid, keys) else null
+        process(grid, params, padded, keys, null, false, Geometry(content), threads, source)
     }
 
     /** Runs the tile jobs of one filter pass. */
@@ -106,9 +123,37 @@ object Filters {
         alphaLock: Boolean,
         geometry: Geometry,
         threads: Int,
+        source: Map<TileKey, Tile?>?,
     ) {
+        if (params.needsFullSource) {
+            processFullSource(grid, params, out, keys, selection, alphaLock, geometry, threads)
+            return
+        }
         val jobs = keys.map { key ->
-            Callable { applyTile(grid, key, params, out, selection, alphaLock, geometry) }
+            Callable { applyTile(grid, key, params, out, selection, alphaLock, geometry, source) }
+        }
+        runParallel(jobs, threads)
+    }
+
+    /**
+     * Runs a warp that may read any pixel of the content. The content is copied once into an immutable
+     * snapshot; every worker samples it with canvas coordinates, so the result is independent of the tile
+     * grid and of the thread count.
+     */
+    private fun processFullSource(
+        grid: TileGrid,
+        params: FilterParams,
+        out: IntRect,
+        keys: List<TileKey>,
+        selection: MaskGrid?,
+        alphaLock: Boolean,
+        geometry: Geometry,
+        threads: Int,
+    ) {
+        val content = geometry.content
+        val src = readRect(grid, content.x0, content.y0, content.width, content.height)
+        val jobs = keys.map { key ->
+            Callable { applyFullSourceTile(grid, key, params, out, selection, alphaLock, geometry, src) }
         }
         runParallel(jobs, threads)
     }
@@ -128,6 +173,7 @@ object Filters {
         selection: MaskGrid?,
         alphaLock: Boolean,
         geometry: Geometry,
+        source: Map<TileKey, Tile?>?,
     ) {
         val tileX = key.tx * TILE
         val tileY = key.ty * TILE
@@ -144,7 +190,7 @@ object Filters {
         val ey = (tileY + TILE + reach).coerceAtMost(grid.height)
         val w = ex - ox
         val h = ey - oy
-        val src = readRect(grid, ox, oy, w, h)
+        val src = readRect(grid, ox, oy, w, h, source)
         val dst = filter(params, src, w, h, ox, oy, geometry)
 
         val tile = grid.getOrCreate(key.tx, key.ty)
@@ -156,47 +202,130 @@ object Filters {
         }
         val px = FloatArray(4)
         for (y in y0 until y1) {
-            val tyi = y - tileY
             for (x in x0 until x1) {
-                val i = tile.index(x - tileX, tyi)
                 val j = ((y - oy) * w + (x - ox)) * 4
-                var r = dst[j]
-                var g = dst[j + 1]
-                var b = dst[j + 2]
-                var a = dst[j + 3]
-                if (alphaLock) {
-                    tile.read(i, px)
-                    val alpha = px[3]
-                    if (alpha > 0f) {
-                        val k = if (a > 0f) alpha / a else 0f
-                        r *= k; g *= k; b *= k; a = alpha
-                    } else {
-                        r = 0f; g = 0f; b = 0f; a = 0f
-                    }
-                }
-                val cov = when {
-                    selection == null -> 1f
-                    maskTile != null -> (maskTile.data[tyi * TILE + (x - tileX)].toInt() and 0xFF) / 255f
-                    else -> maskConst
-                }
-                if (cov < 1f) {
-                    tile.read(i, px)
-                    r = px[0] + (r - px[0]) * cov
-                    g = px[1] + (g - px[1]) * cov
-                    b = px[2] + (b - px[2]) * cov
-                    a = px[3] + (a - px[3]) * cov
-                }
-                tile.write(i, r, g, b, a)
+                storePixel(
+                    tile, tileX, tileY, selection != null, maskTile, maskConst, x, y,
+                    dst[j], dst[j + 1], dst[j + 2], dst[j + 3], alphaLock, px,
+                )
             }
         }
         tile.markDirty()
     }
 
-    /** Copies the [ox],[oy]-based [w]×[h] rect of [grid] into a premultiplied float buffer. */
-    private fun readRect(grid: TileGrid, ox: Int, oy: Int, w: Int, h: Int): FloatArray {
+    /** One tile of a full-source warp; [src] is the immutable content snapshot of [geometry]. */
+    private fun applyFullSourceTile(
+        grid: TileGrid,
+        key: TileKey,
+        params: FilterParams,
+        out: IntRect,
+        selection: MaskGrid?,
+        alphaLock: Boolean,
+        geometry: Geometry,
+        src: FloatArray,
+    ) {
+        val tileX = key.tx * TILE
+        val tileY = key.ty * TILE
+        val x0 = max(out.x0, tileX)
+        val y0 = max(out.y0, tileY)
+        val x1 = min(out.x1, tileX + TILE)
+        val y1 = min(out.y1, tileY + TILE)
+        if (x1 <= x0 || y1 <= y0) return
+
+        val content = geometry.content
+        val w = content.width
+        val h = content.height
+        val strength = strengthOf(params).coerceIn(0f, 1f)
+        val tile = grid.getOrCreate(key.tx, key.ty)
+        val maskTile = selection?.get(key)
+        val maskConst = if (selection != null && maskTile == null) {
+            (selection.defaultValue.toInt() and 0xFF) / 255f
+        } else {
+            1f
+        }
+        val px = FloatArray(4)
+        val warped = FloatArray(4)
+        for (y in y0 until y1) {
+            for (x in x0 until x1) {
+                val i = ((y - content.y0) * w + (x - content.x0)) * 4
+                globalPixel(params, src, w, h, content.x0, content.y0, geometry, x, y, warped)
+                val r = src[i] + (warped[0] - src[i]) * strength
+                val g = src[i + 1] + (warped[1] - src[i + 1]) * strength
+                val b = src[i + 2] + (warped[2] - src[i + 2]) * strength
+                val a = src[i + 3] + (warped[3] - src[i + 3]) * strength
+                storePixel(
+                    tile, tileX, tileY, selection != null, maskTile, maskConst, x, y,
+                    r, g, b, a, alphaLock, px,
+                )
+            }
+        }
+        tile.markDirty()
+    }
+
+    /** Applies the selection coverage and alpha lock to one filtered pixel and writes it into [tile]. */
+    private fun storePixel(
+        tile: Tile,
+        tileX: Int,
+        tileY: Int,
+        hasSelection: Boolean,
+        maskTile: MaskTile?,
+        maskConst: Float,
+        x: Int,
+        y: Int,
+        rIn: Float,
+        gIn: Float,
+        bIn: Float,
+        aIn: Float,
+        alphaLock: Boolean,
+        px: FloatArray,
+    ) {
+        val i = tile.index(x - tileX, y - tileY)
+        var r = rIn
+        var g = gIn
+        var b = bIn
+        var a = aIn
+        if (alphaLock) {
+            tile.read(i, px)
+            val alpha = px[3]
+            if (alpha > 0f) {
+                val k = if (a > 0f) alpha / a else 0f
+                r *= k; g *= k; b *= k; a = alpha
+            } else {
+                r = 0f; g = 0f; b = 0f; a = 0f
+            }
+        }
+        val cov = when {
+            !hasSelection -> 1f
+            maskTile != null -> (maskTile.data[(y - tileY) * TILE + (x - tileX)].toInt() and 0xFF) / 255f
+            else -> maskConst
+        }
+        if (cov < 1f) {
+            tile.read(i, px)
+            r = px[0] + (r - px[0]) * cov
+            g = px[1] + (g - px[1]) * cov
+            b = px[2] + (b - px[2]) * cov
+            a = px[3] + (a - px[3]) * cov
+        }
+        tile.write(i, r, g, b, a)
+    }
+
+    /**
+     * Copies the [ox],[oy]-based [w]×[h] rect of [grid] into a premultiplied float buffer. Tiles present in
+     * [source] are read from that pre-filter snapshot, so a worker never sees a neighbour that another worker
+     * has already rewritten.
+     */
+    private fun readRect(
+        grid: TileGrid,
+        ox: Int,
+        oy: Int,
+        w: Int,
+        h: Int,
+        source: Map<TileKey, Tile?>? = null,
+    ): FloatArray {
         val out = FloatArray(w * h * 4)
         for (key in IntRect(ox, oy, ox + w, oy + h).tileKeys(grid.width, grid.height)) {
-            val tile = grid.get(key) ?: continue
+            val tile = if (source != null && source.containsKey(key)) source[key] else grid.get(key)
+            if (tile == null) continue
             val tx0 = max(ox, key.tx * TILE)
             val ty0 = max(oy, key.ty * TILE)
             val tx1 = min(ox + w, key.tx * TILE + TILE)
@@ -258,6 +387,176 @@ object Filters {
         is LayerGlowParams -> layerGlow(src, w, h, params)
         is PanelGridParams -> panelGrid(src, w, h, params)
         is ScreentoneParams -> screentone(src, w, h, params)
+        is CrystallizeParams -> mix(src, crystallize(src, w, h, ox, oy, params), params.strength)
+        is HexPixelateParams -> mix(src, hexPixelate(src, w, h, ox, oy, params), params.strength)
+        is TrianglePixelateParams -> mix(src, trianglePixelate(src, w, h, ox, oy, params), params.strength)
+        is PointillizeParams -> mix(src, pointillize(src, w, h, ox, oy, params), params.strength)
+        is SphereLensParams, is WaveParams, is RippleParams, is TwirlParams, is PolarCoordinatesParams,
+        is ExpansionParams, is KaleidoscopeParams ->
+            throw IllegalArgumentException("${params.kind} is processed from the full content snapshot")
+    }
+
+    /** Common strength of a full-source warp. */
+    private fun strengthOf(params: FilterParams): Float = when (params) {
+        is SphereLensParams -> params.strength
+        is WaveParams -> params.strength
+        is RippleParams -> params.strength
+        is TwirlParams -> params.strength
+        is PolarCoordinatesParams -> params.strength
+        is ExpansionParams -> params.strength
+        is KaleidoscopeParams -> params.strength
+        else -> 1f
+    }
+
+    /**
+     * One pixel of a full-source warp: [src] is the content snapshot with its top-left at [ox],[oy].
+     * Coordinates are canvas pixels, so the mapping never depends on the tile that owns the pixel.
+     */
+    private fun globalPixel(
+        params: FilterParams,
+        src: FloatArray,
+        w: Int,
+        h: Int,
+        ox: Int,
+        oy: Int,
+        geometry: Geometry,
+        x: Int,
+        y: Int,
+        out: FloatArray,
+    ) {
+        val gx = x.toFloat()
+        val gy = y.toFloat()
+        when (params) {
+            is SphereLensParams -> {
+                val cx = geometry.content.x0 + geometry.content.width * params.centerX.coerceIn(0f, 1f)
+                val cy = geometry.content.y0 + geometry.content.height * params.centerY.coerceIn(0f, 1f)
+                val radius = params.radius.coerceIn(1f, 2000f)
+                val dx = gx - cx
+                val dy = gy - cy
+                val r = hypot(dx, dy)
+                if (r < 1e-4f || r >= radius) {
+                    sample(src, w, h, gx - ox, gy - oy, out)
+                } else {
+                    val t = r / radius
+                    // Strong magnification in the middle, identity at the rim.
+                    val f = 1f - 0.9f * (1f - t * t)
+                    sample(src, w, h, cx + dx * f - ox, cy + dy * f - oy, out)
+                }
+            }
+            is WaveParams -> {
+                val amplitude = params.amplitude.coerceIn(0f, 200f)
+                val wavelength = params.wavelength.coerceIn(4f, 1000f)
+                val a = Math.toRadians(params.angleDeg.toDouble()).toFloat()
+                val dx = cos(a)
+                val dy = sin(a)
+                val phase = (gx * dx + gy * dy) / wavelength * TWO_PI
+                val offset = amplitude * sin(phase)
+                sample(src, w, h, gx - dy * offset - ox, gy + dx * offset - oy, out)
+            }
+            is RippleParams -> {
+                val cx = geometry.content.x0 + geometry.content.width * params.centerX.coerceIn(0f, 1f)
+                val cy = geometry.content.y0 + geometry.content.height * params.centerY.coerceIn(0f, 1f)
+                val dx = gx - cx
+                val dy = gy - cy
+                val r = hypot(dx, dy)
+                val amplitude = params.amplitude.coerceIn(0f, 100f)
+                val frequency = params.frequency.coerceIn(0.1f, 40f)
+                if (r < 1e-4f) {
+                    sample(src, w, h, gx - ox, gy - oy, out)
+                } else {
+                    val phase = r / 100f * frequency * TWO_PI
+                    val radius = (r + amplitude * sin(phase)).coerceAtLeast(0f)
+                    sample(src, w, h, cx + dx / r * radius - ox, cy + dy / r * radius - oy, out)
+                }
+            }
+            is TwirlParams -> {
+                val cx = geometry.content.x0 + geometry.content.width * params.centerX.coerceIn(0f, 1f)
+                val cy = geometry.content.y0 + geometry.content.height * params.centerY.coerceIn(0f, 1f)
+                val radius = params.radius.coerceIn(1f, 2000f)
+                val dx = gx - cx
+                val dy = gy - cy
+                val r = hypot(dx, dy)
+                if (r >= radius) {
+                    sample(src, w, h, gx - ox, gy - oy, out)
+                } else {
+                    val t = r / radius
+                    val angle = Math.toRadians(params.angleDeg.toDouble().coerceIn(-720.0, 720.0))
+                        .toFloat() * (1f - t) * (1f - t)
+                    val ca = cos(-angle)
+                    val sa = sin(-angle)
+                    sample(src, w, h, cx + dx * ca - dy * sa - ox, cy + dx * sa + dy * ca - oy, out)
+                }
+            }
+            is PolarCoordinatesParams -> polarPixel(params, src, w, h, ox, oy, geometry, gx, gy, out)
+            is ExpansionParams -> {
+                val cx = geometry.cx
+                val cy = geometry.cy
+                val halfW = (geometry.content.width / 2f).coerceAtLeast(1f)
+                val halfH = (geometry.content.height / 2f).coerceAtLeast(1f)
+                val nx = ((gx - cx) / halfW).coerceIn(-1f, 1f)
+                val ny = ((gy - cy) / halfH).coerceIn(-1f, 1f)
+                val window = (1f - nx * nx) * (1f - ny * ny)
+                val k = 0.6f * window
+                sample(src, w, h, cx + (gx - cx) * (1f - k) - ox, cy + (gy - cy) * (1f - k) - oy, out)
+            }
+            is KaleidoscopeParams -> {
+                val cx = geometry.content.x0 + geometry.content.width * params.centerX.coerceIn(0f, 1f)
+                val cy = geometry.content.y0 + geometry.content.height * params.centerY.coerceIn(0f, 1f)
+                val dx = gx - cx
+                val dy = gy - cy
+                val r = hypot(dx, dy)
+                if (r < 1e-4f) {
+                    sample(src, w, h, gx - ox, gy - oy, out)
+                } else {
+                    val segments = params.segments.coerceIn(1, 12)
+                    val wedge = TWO_PI / segments
+                    val angle = atan2(dy, dx)
+                    var folded = angle - floor(angle / wedge) * wedge
+                    val half = wedge / 2f
+                    if (folded > half) folded = wedge - folded
+                    sample(src, w, h, cx + cos(folded) * r - ox, cy + sin(folded) * r - oy, out)
+                }
+            }
+            else -> sample(src, w, h, gx - ox, gy - oy, out)
+        }
+    }
+
+    /** Rectangular-to-polar and back; the disc uses the short side of the content. */
+    private fun polarPixel(
+        params: PolarCoordinatesParams,
+        src: FloatArray,
+        w: Int,
+        h: Int,
+        ox: Int,
+        oy: Int,
+        geometry: Geometry,
+        gx: Float,
+        gy: Float,
+        out: FloatArray,
+    ) {
+        val content = geometry.content
+        val cx = geometry.cx
+        val cy = geometry.cy
+        val radius = (min(content.width, content.height) / 2f).coerceAtLeast(1f)
+        if (params.variant.lowercase() == "polar-to-rect") {
+            val u = ((gx - content.x0) / content.width.coerceAtLeast(1)).coerceIn(0f, 1f)
+            val v = ((gy - content.y0) / content.height.coerceAtLeast(1)).coerceIn(0f, 1f)
+            val angle = u * TWO_PI - PI_F
+            val r = v * radius
+            sample(src, w, h, cx + cos(angle) * r - ox, cy + sin(angle) * r - oy, out)
+        } else {
+            val dx = gx - cx
+            val dy = gy - cy
+            val r = hypot(dx, dy)
+            if (r > radius) {
+                sample(src, w, h, gx - ox, gy - oy, out)
+            } else {
+                val angle = atan2(dy, dx)
+                val u = (angle + PI_F) / TWO_PI
+                val v = r / radius
+                sample(src, w, h, content.x0 + u * content.width - ox, content.y0 + v * content.height - oy, out)
+            }
+        }
     }
 
     /** `a·(1-t) + b·t` per channel, clamped to a non-negative premultiplied pixel. */
@@ -1054,6 +1353,235 @@ object Filters {
             out[i + 1] = (out[i + 1] + bg * 0.9f).coerceIn(0f, oa)
             out[i + 2] = (out[i + 2] + bb * 0.9f).coerceIn(0f, oa)
             out[i + 3] = oa
+        }
+        return out
+    }
+
+    // ---------------------------------------------------------------- M5 shape pixelation and pointillism
+
+    /** Accumulates premultiplied colour sums per cell, keyed by a canvas-aligned cell id. */
+    private class CellSums {
+        val cells = HashMap<Long, FloatArray>()
+
+        fun add(key: Long, src: FloatArray, i: Int) {
+            val v = cells.getOrPut(key) { FloatArray(5) }
+            v[0] += src[i]
+            v[1] += src[i + 1]
+            v[2] += src[i + 2]
+            v[3] += src[i + 3]
+            v[4] += 1f
+        }
+
+        /** Writes the average colour of [key] into [out], or returns false when the cell is absent. */
+        fun average(key: Long, out: FloatArray): Boolean {
+            val v = cells[key] ?: return false
+            val n = v[4]
+            if (n <= 0f) return false
+            out[0] = v[0] / n
+            out[1] = v[1] / n
+            out[2] = v[2] / n
+            out[3] = v[3] / n
+            return true
+        }
+    }
+
+    private fun pack2(a: Int, b: Int): Long =
+        (a.toLong() shl 32) xor (b.toLong() and 0xFFFFFFFFL)
+
+    private fun pack3(a: Int, b: Int, c: Int): Long =
+        (a.toLong() shl 33) xor ((b.toLong() and 0xFFFFFFFFL) shl 1) xor (c.toLong() and 1L)
+
+    /** Pointy-top axial hexagon of a canvas point; [size] is the circumradius in px. */
+    internal fun hexKey(gx: Float, gy: Float, size: Float): Long {
+        val qf = (SQRT3 / 3f * gx - gy / 3f) / size
+        val rf = (2f * gy / 3f) / size
+        var q = qf.roundToInt()
+        var r = rf.roundToInt()
+        var s = (-qf - rf).roundToInt()
+        val dq = abs(q - qf)
+        val dr = abs(r - rf)
+        val ds = abs(s + qf + rf)
+        if (dq > dr && dq > ds) {
+            q = -r - s
+        } else if (dr > ds) {
+            r = -q - s
+        } else {
+            s = -q - r
+        }
+        return pack2(q, r)
+    }
+
+    /** Triangle of an equilateral stride-[size] lattice, keyed by row, column and up/down. */
+    internal fun triangleKey(gx: Float, gy: Float, size: Float): Long {
+        val rowHeight = size * SQRT3_2
+        val row = floor(gy / rowHeight).toInt()
+        val offset = if (row and 1 == 1) size / 2f else 0f
+        val u = gx - offset
+        val col = floor(u / size).toInt()
+        val u0 = u - col * size
+        val v = ((gy - row * rowHeight) / rowHeight).coerceIn(0f, 1f)
+        val left = size / 2f * (1f - v)
+        val right = size / 2f * (1f + v)
+        return when {
+            u0 < left -> pack3(row, col - 1, 1)
+            u0 > right -> pack3(row, col, 1)
+            else -> pack3(row, col, 0)
+        }
+    }
+
+    /** Nearest jittered seed of a square lattice; [size] is the lattice pitch in px. */
+    internal fun crystalKey(gx: Float, gy: Float, size: Float): Long {
+        val bx = floor(gx / size).toInt()
+        val by = floor(gy / size).toInt()
+        var bestKey = pack2(bx, by)
+        var bestDistance = Float.MAX_VALUE
+        for (dy in -1..1) {
+            for (dx in -1..1) {
+                val cx = bx + dx
+                val cy = by + dy
+                val jx = hash(cx, cy, 0x51ED2701L) * 0.3f
+                val jy = hash(cx, cy, 0x7F4A7C15L) * 0.3f
+                val sx = (cx + 0.5f + jx) * size
+                val sy = (cy + 0.5f + jy) * size
+                val d = (gx - sx) * (gx - sx) + (gy - sy) * (gy - sy)
+                if (d < bestDistance - 1e-6f) {
+                    bestDistance = d
+                    bestKey = pack2(cx, cy)
+                }
+            }
+        }
+        return bestKey
+    }
+
+    /** Pointy-top hexagonal pixelation: one average colour per hexagon. */
+    private fun hexPixelate(
+        src: FloatArray,
+        w: Int,
+        h: Int,
+        ox: Int,
+        oy: Int,
+        p: HexPixelateParams,
+    ): FloatArray {
+        val size = p.size.coerceIn(2, 200).toFloat()
+        val sums = CellSums()
+        for (y in 0 until h) for (x in 0 until w) {
+            sums.add(hexKey(x + ox + 0.5f, y + oy + 0.5f, size), src, (y * w + x) * 4)
+        }
+        val out = src.copyOf()
+        val avg = FloatArray(4)
+        for (y in 0 until h) for (x in 0 until w) {
+            if (!sums.average(hexKey(x + ox + 0.5f, y + oy + 0.5f, size), avg)) continue
+            val i = (y * w + x) * 4
+            out[i] = avg[0]
+            out[i + 1] = avg[1]
+            out[i + 2] = avg[2]
+            out[i + 3] = avg[3]
+        }
+        return out
+    }
+
+    /** Triangular pixelation: one average colour per equilateral triangle. */
+    private fun trianglePixelate(
+        src: FloatArray,
+        w: Int,
+        h: Int,
+        ox: Int,
+        oy: Int,
+        p: TrianglePixelateParams,
+    ): FloatArray {
+        val size = p.size.coerceIn(2, 200).toFloat()
+        val sums = CellSums()
+        for (y in 0 until h) for (x in 0 until w) {
+            sums.add(triangleKey(x + ox + 0.5f, y + oy + 0.5f, size), src, (y * w + x) * 4)
+        }
+        val out = src.copyOf()
+        val avg = FloatArray(4)
+        for (y in 0 until h) for (x in 0 until w) {
+            if (!sums.average(triangleKey(x + ox + 0.5f, y + oy + 0.5f, size), avg)) continue
+            val i = (y * w + x) * 4
+            out[i] = avg[0]
+            out[i + 1] = avg[1]
+            out[i + 2] = avg[2]
+            out[i + 3] = avg[3]
+        }
+        return out
+    }
+
+    /** Crystallize: jittered Voronoi cells of the source, one flat colour each. */
+    private fun crystallize(
+        src: FloatArray,
+        w: Int,
+        h: Int,
+        ox: Int,
+        oy: Int,
+        p: CrystallizeParams,
+    ): FloatArray {
+        val size = p.size.coerceIn(2, 100).toFloat()
+        val sums = CellSums()
+        for (y in 0 until h) for (x in 0 until w) {
+            sums.add(crystalKey(x + ox + 0.5f, y + oy + 0.5f, size), src, (y * w + x) * 4)
+        }
+        val out = src.copyOf()
+        val avg = FloatArray(4)
+        for (y in 0 until h) for (x in 0 until w) {
+            if (!sums.average(crystalKey(x + ox + 0.5f, y + oy + 0.5f, size), avg)) continue
+            val i = (y * w + x) * 4
+            out[i] = avg[0]
+            out[i + 1] = avg[1]
+            out[i + 2] = avg[2]
+            out[i + 3] = avg[3]
+        }
+        return out
+    }
+
+    /** Pointillize: the source colour on a jittered dot grid over a flat background. */
+    private fun pointillize(
+        src: FloatArray,
+        w: Int,
+        h: Int,
+        ox: Int,
+        oy: Int,
+        p: PointillizeParams,
+    ): FloatArray {
+        val spacing = p.size.coerceIn(2, 64).toFloat()
+        val radius = spacing * 0.5f
+        val bg = ink(p.background)
+        val out = FloatArray(src.size)
+        for (i in out.indices step 4) {
+            out[i] = bg[0]
+            out[i + 1] = bg[1]
+            out[i + 2] = bg[2]
+            out[i + 3] = 1f
+        }
+        val minCx = floor((ox - radius) / spacing).toInt() - 1
+        val maxCx = floor((ox + w + radius) / spacing).toInt() + 1
+        val minCy = floor((oy - radius) / spacing).toInt() - 1
+        val maxCy = floor((oy + h + radius) / spacing).toInt() + 1
+        val s = FloatArray(4)
+        for (cy in minCy..maxCy) {
+            for (cx in minCx..maxCx) {
+                val jx = hash(cx, cy, 0x2C1B3C6DL) * 0.18f * spacing
+                val jy = hash(cx, cy, 0x1B873593L) * 0.18f * spacing
+                val px = (cx + 0.5f) * spacing + jx
+                val py = (cy + 0.5f) * spacing + jy
+                sample(src, w, h, px - ox, py - oy, s)
+                if (s[3] <= 0.002f) continue
+                val xa = max((px - radius).toInt(), ox)
+                val xb = min((px + radius).toInt() + 1, ox + w)
+                val ya = max((py - radius).toInt(), oy)
+                val yb = min((py + radius).toInt() + 1, oy + h)
+                if (xb <= xa || yb <= ya) continue
+                for (y in ya until yb) for (x in xa until xb) {
+                    val d = hypot(x + 0.5f - px, y + 0.5f - py)
+                    val cov = (radius + 0.5f - d).coerceIn(0f, 1f)
+                    if (cov <= 0f) continue
+                    val i = ((y - oy) * w + (x - ox)) * 4
+                    out[i] = s[0] * cov + out[i] * (1f - cov)
+                    out[i + 1] = s[1] * cov + out[i + 1] * (1f - cov)
+                    out[i + 2] = s[2] * cov + out[i + 2] * (1f - cov)
+                    out[i + 3] = s[3] * cov + out[i + 3] * (1f - cov)
+                }
+            }
         }
         return out
     }

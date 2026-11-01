@@ -22,7 +22,18 @@ import app.painter.core.filter.BlurParams
 import app.painter.core.filter.BokehParams
 import app.painter.core.filter.ChromaticParams
 import app.painter.core.filter.CrossFilterParams
+import app.painter.core.filter.CrystallizeParams
 import app.painter.core.filter.DilateParams
+import app.painter.core.filter.ExpansionParams
+import app.painter.core.filter.HexPixelateParams
+import app.painter.core.filter.KaleidoscopeParams
+import app.painter.core.filter.PolarCoordinatesParams
+import app.painter.core.filter.PointillizeParams
+import app.painter.core.filter.RippleParams
+import app.painter.core.filter.SphereLensParams
+import app.painter.core.filter.TrianglePixelateParams
+import app.painter.core.filter.TwirlParams
+import app.painter.core.filter.WaveParams
 import app.painter.core.filter.EdgesParams
 import app.painter.core.filter.ErodeParams
 import app.painter.core.filter.FilterParams
@@ -87,6 +98,17 @@ private enum class FilterKindUi(val label: Int) {
     LENS_FLARE(R.string.filter_lens_flare),
     GOD_RAYS(R.string.filter_god_rays),
     CROSS(R.string.filter_cross),
+    SPHERE(R.string.filter_sphere_lens),
+    WAVE(R.string.filter_wave),
+    RIPPLE(R.string.filter_ripple),
+    TWIRL(R.string.filter_twirl),
+    POLAR(R.string.filter_polar),
+    EXPANSION(R.string.filter_expansion),
+    KALEIDOSCOPE(R.string.filter_kaleidoscope),
+    CRYSTALLIZE(R.string.filter_crystallize),
+    HEX_PIXELATE(R.string.filter_hex_pixelate),
+    TRIANGLE_PIXELATE(R.string.filter_triangle_pixelate),
+    POINTILLIZE(R.string.filter_pointillize),
 }
 
 /**
@@ -126,6 +148,19 @@ fun FilterDialog(ink: Rgba, onDismiss: () -> Unit, onApply: (FilterParams) -> Un
     var centerX by remember { mutableStateOf(0.5f) }
     var centerY by remember { mutableStateOf(0.5f) }
     var crossRays by remember { mutableStateOf(4f) }
+    var sphereRadius by remember { mutableStateOf(120f) }
+    var amplitude by remember { mutableStateOf(12f) }
+    var wavelength by remember { mutableStateOf(64f) }
+    var frequency by remember { mutableStateOf(3f) }
+    var twirlAngle by remember { mutableStateOf(180f) }
+    var twirlRadius by remember { mutableStateOf(150f) }
+    var polarMode by remember { mutableStateOf("rect-to-polar") }
+    var segments by remember { mutableStateOf(6f) }
+    var crystallizeSize by remember { mutableStateOf(24f) }
+    var hexSize by remember { mutableStateOf(16f) }
+    var triangleSize by remember { mutableStateOf(16f) }
+    var pointSize by remember { mutableStateOf(8f) }
+    var pointUseInk by remember { mutableStateOf(false) }
     val inkHex = remember(ink) {
         "#%02X%02X%02X".format(
             (ink.r.coerceIn(0f, 1f) * 255).roundToInt(),
@@ -138,7 +173,8 @@ fun FilterDialog(ink: Rgba, onDismiss: () -> Unit, onApply: (FilterParams) -> Un
         radius, amount, distance, angle, cell, threshold, mono, scale, strength,
         count, thickness, inner, inkHex, strokeInner, strokeOuter, rows, cols, margin, gutter, toneShape,
         highlightBoost, bladeAngle, grainVariant, grainSize, bokehSize, flareSize, rayLength, crossLength,
-        centerX, centerY, crossRays,
+        centerX, centerY, crossRays, sphereRadius, amplitude, wavelength, frequency, twirlAngle, twirlRadius,
+        polarMode, segments, crystallizeSize, hexSize, triangleSize, pointSize, pointUseInk,
     )
     val percent = { v: Float -> "${(v * 100).roundToInt()}%" }
 
@@ -152,7 +188,7 @@ fun FilterDialog(ink: Rgba, onDismiss: () -> Unit, onApply: (FilterParams) -> Un
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                FilterKindUi.entries.chunked(5).forEach { row ->
+                FilterKindUi.entries.chunked(4).forEach { row ->
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         row.forEach { k ->
                             ToggleChip(
@@ -461,6 +497,121 @@ fun FilterDialog(ink: Rgba, onDismiss: () -> Unit, onApply: (FilterParams) -> Un
                             { crossRays = it }, step = 1f,
                         )
                     }
+                    FilterKindUi.SPHERE -> {
+                        ParamSlider(
+                            stringResource(R.string.radius), sphereRadius, 8f..300f,
+                            { it.roundToInt().toString() }, { sphereRadius = it }, step = 1f, unit = "px",
+                        )
+                        ParamSlider(
+                            stringResource(R.string.center_x), centerX, 0f..1f, percent,
+                            { centerX = it }, step = 0.01f,
+                        )
+                        ParamSlider(
+                            stringResource(R.string.center_y), centerY, 0f..1f, percent,
+                            { centerY = it }, step = 0.01f,
+                        )
+                    }
+                    FilterKindUi.WAVE -> {
+                        ParamSlider(
+                            stringResource(R.string.amplitude), amplitude, 0f..100f,
+                            { it.roundToInt().toString() }, { amplitude = it }, step = 1f, unit = "px",
+                        )
+                        ParamSlider(
+                            stringResource(R.string.wavelength), wavelength, 4f..400f,
+                            { it.roundToInt().toString() }, { wavelength = it }, step = 1f, unit = "px",
+                        )
+                        ParamSlider(
+                            stringResource(R.string.angle), angle, 0f..360f, { it.roundToInt().toString() },
+                            { angle = it }, step = 1f, unit = "°",
+                        )
+                    }
+                    FilterKindUi.RIPPLE -> {
+                        ParamSlider(
+                            stringResource(R.string.amplitude), amplitude, 0f..50f,
+                            { it.roundToInt().toString() }, { amplitude = it }, step = 1f, unit = "px",
+                        )
+                        ParamSlider(
+                            stringResource(R.string.frequency), frequency, 0.2f..20f,
+                            { "%.1f".format(it) }, { frequency = it }, step = 0.1f, unit = "/100px",
+                        )
+                        ParamSlider(
+                            stringResource(R.string.center_x), centerX, 0f..1f, percent,
+                            { centerX = it }, step = 0.01f,
+                        )
+                        ParamSlider(
+                            stringResource(R.string.center_y), centerY, 0f..1f, percent,
+                            { centerY = it }, step = 0.01f,
+                        )
+                    }
+                    FilterKindUi.TWIRL -> {
+                        ParamSlider(
+                            stringResource(R.string.angle), twirlAngle, -720f..720f,
+                            { it.roundToInt().toString() }, { twirlAngle = it }, step = 5f, unit = "°",
+                        )
+                        ParamSlider(
+                            stringResource(R.string.radius), twirlRadius, 8f..500f,
+                            { it.roundToInt().toString() }, { twirlRadius = it }, step = 1f, unit = "px",
+                        )
+                        ParamSlider(
+                            stringResource(R.string.center_x), centerX, 0f..1f, percent,
+                            { centerX = it }, step = 0.01f,
+                        )
+                        ParamSlider(
+                            stringResource(R.string.center_y), centerY, 0f..1f, percent,
+                            { centerY = it }, step = 0.01f,
+                        )
+                    }
+                    FilterKindUi.POLAR -> Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        ToggleChip(
+                            stringResource(R.string.polar_rect_to_polar),
+                            polarMode == "rect-to-polar",
+                        ) { polarMode = "rect-to-polar" }
+                        ToggleChip(
+                            stringResource(R.string.polar_polar_to_rect),
+                            polarMode == "polar-to-rect",
+                        ) { polarMode = "polar-to-rect" }
+                    }
+                    FilterKindUi.EXPANSION -> {}
+                    FilterKindUi.KALEIDOSCOPE -> {
+                        ParamSlider(
+                            stringResource(R.string.segments), segments, 1f..12f,
+                            { it.roundToInt().toString() }, { segments = it }, step = 1f,
+                        )
+                        ParamSlider(
+                            stringResource(R.string.center_x), centerX, 0f..1f, percent,
+                            { centerX = it }, step = 0.01f,
+                        )
+                        ParamSlider(
+                            stringResource(R.string.center_y), centerY, 0f..1f, percent,
+                            { centerY = it }, step = 0.01f,
+                        )
+                    }
+                    FilterKindUi.CRYSTALLIZE -> ParamSlider(
+                        stringResource(R.string.size), crystallizeSize, 2f..100f,
+                        { it.roundToInt().toString() }, { crystallizeSize = it }, step = 1f, unit = "px",
+                    )
+                    FilterKindUi.HEX_PIXELATE -> ParamSlider(
+                        stringResource(R.string.size), hexSize, 2f..100f,
+                        { it.roundToInt().toString() }, { hexSize = it }, step = 1f, unit = "px",
+                    )
+                    FilterKindUi.TRIANGLE_PIXELATE -> ParamSlider(
+                        stringResource(R.string.size), triangleSize, 2f..100f,
+                        { it.roundToInt().toString() }, { triangleSize = it }, step = 1f, unit = "px",
+                    )
+                    FilterKindUi.POINTILLIZE -> {
+                        ParamSlider(
+                            stringResource(R.string.size), pointSize, 2f..40f,
+                            { it.roundToInt().toString() }, { pointSize = it }, step = 1f, unit = "px",
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            ToggleChip(
+                                stringResource(R.string.white), !pointUseInk,
+                            ) { pointUseInk = false }
+                            ToggleChip(
+                                stringResource(R.string.color), pointUseInk,
+                            ) { pointUseInk = true }
+                        }
+                    }
                 }
                 ParamSlider(
                     stringResource(R.string.strength), strength, 0f..1f, percent,
@@ -508,6 +659,19 @@ private fun FilterKindUi.params(
     centerX: Float,
     centerY: Float,
     crossRays: Float,
+    sphereRadius: Float,
+    amplitude: Float,
+    wavelength: Float,
+    frequency: Float,
+    twirlAngle: Float,
+    twirlRadius: Float,
+    polarMode: String,
+    segments: Float,
+    crystallizeSize: Float,
+    hexSize: Float,
+    triangleSize: Float,
+    pointSize: Float,
+    pointUseInk: Boolean,
 ): FilterParams = when (this) {
     FilterKindUi.BLUR -> BlurParams(radius, strength)
     FilterKindUi.MOTION -> MotionBlurParams(distance, angle, strength)
@@ -563,5 +727,30 @@ private fun FilterKindUi.params(
     FilterKindUi.CROSS -> CrossFilterParams(
         threshold = threshold, length = crossLength, angleDeg = angle, rays = crossRays.roundToInt(),
         strength = strength,
+    )
+    FilterKindUi.SPHERE -> SphereLensParams(
+        radius = sphereRadius, centerX = centerX, centerY = centerY, strength = strength,
+    )
+    FilterKindUi.WAVE -> WaveParams(
+        amplitude = amplitude, wavelength = wavelength, angleDeg = angle, strength = strength,
+    )
+    FilterKindUi.RIPPLE -> RippleParams(
+        amplitude = amplitude, frequency = frequency, centerX = centerX, centerY = centerY,
+        strength = strength,
+    )
+    FilterKindUi.TWIRL -> TwirlParams(
+        angleDeg = twirlAngle, radius = twirlRadius, centerX = centerX, centerY = centerY,
+        strength = strength,
+    )
+    FilterKindUi.POLAR -> PolarCoordinatesParams(variant = polarMode, strength = strength)
+    FilterKindUi.EXPANSION -> ExpansionParams(strength = strength)
+    FilterKindUi.KALEIDOSCOPE -> KaleidoscopeParams(
+        segments = segments.roundToInt(), centerX = centerX, centerY = centerY, strength = strength,
+    )
+    FilterKindUi.CRYSTALLIZE -> CrystallizeParams(size = crystallizeSize.roundToInt(), strength = strength)
+    FilterKindUi.HEX_PIXELATE -> HexPixelateParams(size = hexSize.roundToInt(), strength = strength)
+    FilterKindUi.TRIANGLE_PIXELATE -> TrianglePixelateParams(size = triangleSize.roundToInt(), strength = strength)
+    FilterKindUi.POINTILLIZE -> PointillizeParams(
+        size = pointSize.roundToInt(), background = if (pointUseInk) ink else "#FFFFFF", strength = strength,
     )
 }

@@ -10,7 +10,10 @@
   selection and alpha lock aware.
 - **Implemented in the first M5 batch (2026-11-01):** smooth, lens blur, high-pass, frosted glass/scatter, grain,
   local contrast, bokeh, lens flare, god rays and cross filter — `core/filter/FilterParamsM5.kt` and
-  `core/filter/Filters.kt`, one undo step, selection and alpha lock aware. The rest below is still planned.
+  `core/filter/Filters.kt`, one undo step, selection and alpha lock aware.
+- **Implemented in the second M5 batch (2026-11-01):** sphere lens, wave, ripple, twirl, polar coordinates,
+  expansion, kaleidoscope, crystallize, hexagon pixelate, triangle pixelate and pointillize — the same files,
+  one undo step, selection and alpha lock aware, seam-free across tiles. The rest below is still planned.
 
 ## Color and tone (Adjust)
 | Filter | Parameters | live | Milestone |
