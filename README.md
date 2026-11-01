@@ -38,6 +38,7 @@ The app is completely free: no subscriptions, ads, watermarks or paid features.
 - Filters: blur, motion blur, pixelate, sharpen, glow, noise, find edges, chromatic aberration, fisheye, dilate, erode, zoom and spin blur, radial lines, speed lines, halftone, outline, drop shadow, outer glow and panel grid (M3)
 - More filters: smooth, lens blur, high-pass, frosted glass, grain, local contrast, bokeh, lens flare, god rays and cross filter (M5)
 - Geometric filters: sphere lens, wave, ripple, twirl, polar coordinates, expansion, kaleidoscope, crystallize, hexagon and triangle pixelate, pointillize (M5)
+- Stylization and material filters: gloom, sketch edges, trace, bevel, emboss, relief, satin, wet edge, waterdrop, extrude and clouds (M5)
 - Pattern fill with six seamless procedural patterns, two colours, tile size, rotation, phase offset, contrast, invert and opacity (M5)
 - Liquify and text stamp tools, hardware-keyboard shortcuts (M3)
 - Canvas crop, canvas size with anchors, straighten; curvilinear 5-point perspective (M3)

@@ -55,7 +55,18 @@
   every parameter class.
 - Tests: `FiltersM5GeometryTest` (11) — determinism, visible change, thread independence, selection, alpha lock,
   tile seams, cross-tile shape reads, control effects, pointillize background and codec round trips.
-- M5 so far: **647 JVM tests** (547 core, 100 app).
+
+### Third filter batch (2026-11-01)
+- Core: eleven stylization and material filters — gloom, sketch edges, trace, bevel inner/outer/both, emboss,
+  relief, satin, wet edge, waterdrop, extrude and clouds. Neighbourhood filters take a stable source snapshot so
+  live filter layers are thread-independent; clouds is a canvas-coordinate generator and waterdrop reads the full
+  content for its content-sized lens.
+- UI: a chip and only the relevant controls for each filter, including bevel variant, highlight/shadow colours,
+  satin colour, cloud seed and two-colour clouds; the common strength stays.
+- Tests: `FiltersM5StyleTest` (15) — determinism, visible change, live/history thread independence, selection,
+  alpha lock, premultiplied invariant, tile boundaries, cross-tile reads, 34 control-pair effects and codec
+  round trips.
+- M5 so far: **662 JVM tests** (562 core, 100 app).
 - Performance baseline: [PERFORMANCE-M5.md](PERFORMANCE-M5.md) — desktop JVM A–E numbers, 4K/filter probes and
   open risks; device measurements are still missing.
 
