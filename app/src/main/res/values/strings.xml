@@ -724,4 +724,25 @@
         <item quantity="one">%1$d backup found.</item>
         <item quantity="other">%1$d backups found.</item>
     </plurals>
+    <string name="filter_gloom">Gloom</string>
+    <string name="filter_sketch">Sketch</string>
+    <string name="filter_trace">Trace</string>
+    <string name="filter_bevel">Bevel</string>
+    <string name="filter_emboss">Emboss</string>
+    <string name="filter_relief">Relief</string>
+    <string name="filter_satin">Satin</string>
+    <string name="filter_wet_edge">Wet edge</string>
+    <string name="filter_waterdrop">Waterdrop</string>
+    <string name="filter_extrude">Extrude</string>
+    <string name="filter_clouds">Clouds</string>
+    <string name="sensitivity">Sensitivity</string>
+    <string name="depth">Depth</string>
+    <string name="soften">Soften</string>
+    <string name="gloss">Gloss</string>
+    <string name="shading">Shading</string>
+    <string name="detail">Detail</string>
+    <string name="seed">Seed</string>
+    <string name="both">Both</string>
+    <string name="black">Black</string>
+    <string name="gray">Gray</string>
 </resources>

@@ -728,4 +728,25 @@
         <item quantity="many">Найдено %1$d резервных копий.</item>
         <item quantity="other">Найдено %1$d резервных копий.</item>
     </plurals>
+    <string name="filter_gloom">Мрачность</string>
+    <string name="filter_sketch">Эскиз</string>
+    <string name="filter_trace">Обводка</string>
+    <string name="filter_bevel">Фаска</string>
+    <string name="filter_emboss">Барельеф</string>
+    <string name="filter_relief">Рельеф</string>
+    <string name="filter_satin">Атлас</string>
+    <string name="filter_wet_edge">Мокрый край</string>
+    <string name="filter_waterdrop">Капля</string>
+    <string name="filter_extrude">Выдавливание</string>
+    <string name="filter_clouds">Облака</string>
+    <string name="sensitivity">Чувствительность</string>
+    <string name="depth">Глубина</string>
+    <string name="soften">Смягчение</string>
+    <string name="gloss">Глянец</string>
+    <string name="shading">Затенение</string>
+    <string name="detail">Детализация</string>
+    <string name="seed">Зерно</string>
+    <string name="both">С обеих</string>
+    <string name="black">Чёрный</string>
+    <string name="gray">Серый</string>
 </resources>

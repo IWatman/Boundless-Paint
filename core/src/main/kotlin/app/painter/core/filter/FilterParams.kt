@@ -28,16 +28,16 @@ sealed class FilterParams {
     open val coversCanvas: Boolean get() = false
 
     /**
-     * True for warps that may read any pixel of the painted area (polar coordinates, twirl, kaleidoscope).
+     * True for warps that may read any pixel of the painted area (polar coordinates, twirl, waterdrop).
      * The engine snapshots the content once and samples that snapshot, so such a filter stays seam-free
      * without a padding large enough for the whole canvas.
      */
     open val needsFullSource: Boolean get() = false
 
     /**
-     * True for cell filters, whose tile patch must be read from one pre-filter snapshot: a worker that saw a
-     * neighbour cell after it was rewritten would average a different colour and leave a seam in a live
-     * filter layer, where no history snapshot exists yet.
+     * True for cell and neighbourhood filters, whose tile patch must be read from one pre-filter snapshot:
+     * a worker that saw a neighbour cell after it was rewritten would average a different colour and leave a
+     * seam in a live filter layer, where no history snapshot exists yet.
      */
     open val needsStableSource: Boolean get() = false
 }

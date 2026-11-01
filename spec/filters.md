@@ -13,7 +13,10 @@
   `core/filter/Filters.kt`, one undo step, selection and alpha lock aware.
 - **Implemented in the second M5 batch (2026-11-01):** sphere lens, wave, ripple, twirl, polar coordinates,
   expansion, kaleidoscope, crystallize, hexagon pixelate, triangle pixelate and pointillize — the same files,
-  one undo step, selection and alpha lock aware, seam-free across tiles. The rest below is still planned.
+  one undo step, selection and alpha lock aware, seam-free across tiles.
+- **Implemented in the third M5 batch (2026-11-01):** gloom, find edges (sketch), trace, bevel inner/outer,
+  emboss, relief, satin, wet edge, waterdrop, extrude and clouds — the same files, one undo step, selection and
+  alpha lock aware, seam-free across tiles. The rest below is still planned.
 
 ## Color and tone (Adjust)
 | Filter | Parameters | live | Milestone |

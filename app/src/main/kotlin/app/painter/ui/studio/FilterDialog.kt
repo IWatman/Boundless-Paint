@@ -18,22 +18,33 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import app.painter.R
+import app.painter.core.filter.BevelParams
 import app.painter.core.filter.BlurParams
 import app.painter.core.filter.BokehParams
 import app.painter.core.filter.ChromaticParams
+import app.painter.core.filter.CloudsParams
 import app.painter.core.filter.CrossFilterParams
 import app.painter.core.filter.CrystallizeParams
 import app.painter.core.filter.DilateParams
+import app.painter.core.filter.EmbossParams
 import app.painter.core.filter.ExpansionParams
+import app.painter.core.filter.ExtrudeParams
+import app.painter.core.filter.GloomParams
 import app.painter.core.filter.HexPixelateParams
 import app.painter.core.filter.KaleidoscopeParams
 import app.painter.core.filter.PolarCoordinatesParams
 import app.painter.core.filter.PointillizeParams
+import app.painter.core.filter.ReliefParams
 import app.painter.core.filter.RippleParams
+import app.painter.core.filter.SatinParams
+import app.painter.core.filter.SketchParams
 import app.painter.core.filter.SphereLensParams
+import app.painter.core.filter.TraceParams
 import app.painter.core.filter.TrianglePixelateParams
 import app.painter.core.filter.TwirlParams
+import app.painter.core.filter.WaterdropParams
 import app.painter.core.filter.WaveParams
+import app.painter.core.filter.WetEdgeParams
 import app.painter.core.filter.EdgesParams
 import app.painter.core.filter.ErodeParams
 import app.painter.core.filter.FilterParams
@@ -64,8 +75,9 @@ import app.painter.core.filter.ZoomBlurParams
 import app.painter.core.color.Rgba
 import app.painter.ui.components.ParamSlider
 import kotlin.math.roundToInt
+import kotlin.math.roundToLong
 
-/** The M3 filters the dialog offers, with their label. */
+/** The filters the dialog offers, with their label. */
 private enum class FilterKindUi(val label: Int) {
     BLUR(R.string.filter_blur),
     MOTION(R.string.filter_motion),
@@ -109,6 +121,17 @@ private enum class FilterKindUi(val label: Int) {
     HEX_PIXELATE(R.string.filter_hex_pixelate),
     TRIANGLE_PIXELATE(R.string.filter_triangle_pixelate),
     POINTILLIZE(R.string.filter_pointillize),
+    GLOOM(R.string.filter_gloom),
+    SKETCH(R.string.filter_sketch),
+    TRACE(R.string.filter_trace),
+    BEVEL(R.string.filter_bevel),
+    EMBOSS(R.string.filter_emboss),
+    RELIEF(R.string.filter_relief),
+    SATIN(R.string.filter_satin),
+    WET_EDGE(R.string.filter_wet_edge),
+    WATERDROP(R.string.filter_waterdrop),
+    EXTRUDE(R.string.filter_extrude),
+    CLOUDS(R.string.filter_clouds),
 }
 
 /**
@@ -161,6 +184,30 @@ fun FilterDialog(ink: Rgba, onDismiss: () -> Unit, onApply: (FilterParams) -> Un
     var triangleSize by remember { mutableStateOf(16f) }
     var pointSize by remember { mutableStateOf(8f) }
     var pointUseInk by remember { mutableStateOf(false) }
+    var sketchThickness by remember { mutableStateOf(2f) }
+    var sketchAmount by remember { mutableStateOf(0.6f) }
+    var sketchSensitivity by remember { mutableStateOf(0.5f) }
+    var bevelVariant by remember { mutableStateOf("inner") }
+    var bevelDepth by remember { mutableStateOf(60f) }
+    var bevelSize by remember { mutableStateOf(6f) }
+    var lightAngle by remember { mutableStateOf(225f) }
+    var bevelHighlightInk by remember { mutableStateOf(false) }
+    var bevelShadowInk by remember { mutableStateOf(false) }
+    var height by remember { mutableStateOf(50f) }
+    var soften by remember { mutableStateOf(2f) }
+    var satinInk by remember { mutableStateOf(false) }
+    var satinDistance by remember { mutableStateOf(24f) }
+    var satinSize by remember { mutableStateOf(8f) }
+    var wetWidth by remember { mutableStateOf(8f) }
+    var gloss by remember { mutableStateOf(0.6f) }
+    var extrudeLength by remember { mutableStateOf(24f) }
+    var extrudeShading by remember { mutableStateOf(0.5f) }
+    var extrudeInk by remember { mutableStateOf(false) }
+    var cloudScale by remember { mutableStateOf(64f) }
+    var cloudDetail by remember { mutableStateOf(4f) }
+    var cloudSeed by remember { mutableStateOf(1f) }
+    var cloudLightInk by remember { mutableStateOf(false) }
+    var cloudDarkInk by remember { mutableStateOf(false) }
     val inkHex = remember(ink) {
         "#%02X%02X%02X".format(
             (ink.r.coerceIn(0f, 1f) * 255).roundToInt(),
@@ -175,6 +222,10 @@ fun FilterDialog(ink: Rgba, onDismiss: () -> Unit, onApply: (FilterParams) -> Un
         highlightBoost, bladeAngle, grainVariant, grainSize, bokehSize, flareSize, rayLength, crossLength,
         centerX, centerY, crossRays, sphereRadius, amplitude, wavelength, frequency, twirlAngle, twirlRadius,
         polarMode, segments, crystallizeSize, hexSize, triangleSize, pointSize, pointUseInk,
+        sketchThickness, sketchAmount, sketchSensitivity, bevelVariant, bevelDepth, bevelSize,
+        bevelHighlightInk, bevelShadowInk, height, soften, satinInk, satinDistance, satinSize, wetWidth,
+        gloss, extrudeLength, extrudeShading, extrudeInk, cloudScale, cloudDetail, cloudSeed,
+        cloudLightInk, cloudDarkInk, lightAngle,
     )
     val percent = { v: Float -> "${(v * 100).roundToInt()}%" }
 
@@ -612,6 +663,176 @@ fun FilterDialog(ink: Rgba, onDismiss: () -> Unit, onApply: (FilterParams) -> Un
                             ) { pointUseInk = true }
                         }
                     }
+                    FilterKindUi.GLOOM -> {
+                        ParamSlider(
+                            stringResource(R.string.threshold), threshold, 0f..1f, percent,
+                            { threshold = it }, step = 0.01f,
+                        )
+                        ParamSlider(
+                            stringResource(R.string.radius), radius, 1f..32f, { it.roundToInt().toString() },
+                            { radius = it }, step = 1f, unit = "px",
+                        )
+                    }
+                    FilterKindUi.SKETCH -> {
+                        ParamSlider(
+                            stringResource(R.string.thickness), sketchThickness, 1f..8f,
+                            { it.roundToInt().toString() }, { sketchThickness = it }, step = 1f, unit = "px",
+                        )
+                        ParamSlider(
+                            stringResource(R.string.amount), sketchAmount, 0f..1f, percent,
+                            { sketchAmount = it }, step = 0.01f,
+                        )
+                        ParamSlider(
+                            stringResource(R.string.sensitivity), sketchSensitivity, 0f..1f, percent,
+                            { sketchSensitivity = it }, step = 0.01f,
+                        )
+                    }
+                    FilterKindUi.TRACE -> {}
+                    FilterKindUi.BEVEL -> {
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            ToggleChip(stringResource(R.string.inner), bevelVariant == "inner") {
+                                bevelVariant = "inner"
+                            }
+                            ToggleChip(stringResource(R.string.outer), bevelVariant == "outer") {
+                                bevelVariant = "outer"
+                            }
+                            ToggleChip(stringResource(R.string.both), bevelVariant == "both") {
+                                bevelVariant = "both"
+                            }
+                        }
+                        ParamSlider(
+                            stringResource(R.string.depth), bevelDepth, 0f..100f,
+                            { it.roundToInt().toString() }, { bevelDepth = it }, step = 1f,
+                        )
+                        ParamSlider(
+                            stringResource(R.string.size), bevelSize, 1f..64f,
+                            { it.roundToInt().toString() }, { bevelSize = it }, step = 1f, unit = "px",
+                        )
+                        ParamSlider(
+                            stringResource(R.string.angle), lightAngle, 0f..360f,
+                            { it.roundToInt().toString() }, { lightAngle = it }, step = 1f, unit = "°",
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            ToggleChip(stringResource(R.string.white), !bevelHighlightInk) {
+                                bevelHighlightInk = false
+                            }
+                            ToggleChip(stringResource(R.string.color), bevelHighlightInk) {
+                                bevelHighlightInk = true
+                            }
+                        }
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            ToggleChip(stringResource(R.string.black), !bevelShadowInk) {
+                                bevelShadowInk = false
+                            }
+                            ToggleChip(stringResource(R.string.color), bevelShadowInk) {
+                                bevelShadowInk = true
+                            }
+                        }
+                    }
+                    FilterKindUi.EMBOSS -> {
+                        ParamSlider(
+                            stringResource(R.string.height), height, 0f..100f,
+                            { it.roundToInt().toString() }, { height = it }, step = 1f,
+                        )
+                        ParamSlider(
+                            stringResource(R.string.angle), lightAngle, 0f..360f,
+                            { it.roundToInt().toString() }, { lightAngle = it }, step = 1f, unit = "°",
+                        )
+                    }
+                    FilterKindUi.RELIEF -> {
+                        ParamSlider(
+                            stringResource(R.string.height), height, 0f..100f,
+                            { it.roundToInt().toString() }, { height = it }, step = 1f,
+                        )
+                        ParamSlider(
+                            stringResource(R.string.angle), lightAngle, 0f..360f,
+                            { it.roundToInt().toString() }, { lightAngle = it }, step = 1f, unit = "°",
+                        )
+                        ParamSlider(
+                            stringResource(R.string.soften), soften, 0f..16f,
+                            { it.roundToInt().toString() }, { soften = it }, step = 1f, unit = "px",
+                        )
+                    }
+                    FilterKindUi.SATIN -> {
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            ToggleChip(stringResource(R.string.white), !satinInk) { satinInk = false }
+                            ToggleChip(stringResource(R.string.color), satinInk) { satinInk = true }
+                        }
+                        ParamSlider(
+                            stringResource(R.string.angle), angle, 0f..360f, { it.roundToInt().toString() },
+                            { angle = it }, step = 1f, unit = "°",
+                        )
+                        ParamSlider(
+                            stringResource(R.string.distance), satinDistance, 1f..100f,
+                            { it.roundToInt().toString() }, { satinDistance = it }, step = 1f, unit = "px",
+                        )
+                        ParamSlider(
+                            stringResource(R.string.size), satinSize, 1f..32f,
+                            { it.roundToInt().toString() }, { satinSize = it }, step = 1f, unit = "px",
+                        )
+                    }
+                    FilterKindUi.WET_EDGE -> ParamSlider(
+                        stringResource(R.string.width), wetWidth, 1f..64f,
+                        { it.roundToInt().toString() }, { wetWidth = it }, step = 1f, unit = "px",
+                    )
+                    FilterKindUi.WATERDROP -> {
+                        ParamSlider(
+                            stringResource(R.string.height), height, 0f..100f,
+                            { it.roundToInt().toString() }, { height = it }, step = 1f,
+                        )
+                        ParamSlider(
+                            stringResource(R.string.gloss), gloss, 0f..1f, percent,
+                            { gloss = it }, step = 0.01f,
+                        )
+                    }
+                    FilterKindUi.EXTRUDE -> {
+                        ParamSlider(
+                            stringResource(R.string.angle), angle, 0f..360f, { it.roundToInt().toString() },
+                            { angle = it }, step = 1f, unit = "°",
+                        )
+                        ParamSlider(
+                            stringResource(R.string.length), extrudeLength, 1f..100f,
+                            { it.roundToInt().toString() }, { extrudeLength = it }, step = 1f, unit = "px",
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            ToggleChip(stringResource(R.string.gray), !extrudeInk) { extrudeInk = false }
+                            ToggleChip(stringResource(R.string.color), extrudeInk) { extrudeInk = true }
+                        }
+                        ParamSlider(
+                            stringResource(R.string.shading), extrudeShading, 0f..1f, percent,
+                            { extrudeShading = it }, step = 0.01f,
+                        )
+                    }
+                    FilterKindUi.CLOUDS -> {
+                        ParamSlider(
+                            stringResource(R.string.scale), cloudScale, 1f..256f,
+                            { it.roundToInt().toString() }, { cloudScale = it }, step = 1f, unit = "px",
+                        )
+                        ParamSlider(
+                            stringResource(R.string.detail), cloudDetail, 1f..8f,
+                            { it.roundToInt().toString() }, { cloudDetail = it }, step = 1f,
+                        )
+                        ParamSlider(
+                            stringResource(R.string.seed), cloudSeed, 1f..64f,
+                            { it.roundToInt().toString() }, { cloudSeed = it }, step = 1f,
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            ToggleChip(stringResource(R.string.white), !cloudLightInk) {
+                                cloudLightInk = false
+                            }
+                            ToggleChip(stringResource(R.string.color), cloudLightInk) {
+                                cloudLightInk = true
+                            }
+                        }
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            ToggleChip(stringResource(R.string.black), !cloudDarkInk) {
+                                cloudDarkInk = false
+                            }
+                            ToggleChip(stringResource(R.string.color), cloudDarkInk) {
+                                cloudDarkInk = true
+                            }
+                        }
+                    }
                 }
                 ParamSlider(
                     stringResource(R.string.strength), strength, 0f..1f, percent,
@@ -672,6 +893,30 @@ private fun FilterKindUi.params(
     triangleSize: Float,
     pointSize: Float,
     pointUseInk: Boolean,
+    sketchThickness: Float,
+    sketchAmount: Float,
+    sketchSensitivity: Float,
+    bevelVariant: String,
+    bevelDepth: Float,
+    bevelSize: Float,
+    bevelHighlightInk: Boolean,
+    bevelShadowInk: Boolean,
+    height: Float,
+    soften: Float,
+    satinInk: Boolean,
+    satinDistance: Float,
+    satinSize: Float,
+    wetWidth: Float,
+    gloss: Float,
+    extrudeLength: Float,
+    extrudeShading: Float,
+    extrudeInk: Boolean,
+    cloudScale: Float,
+    cloudDetail: Float,
+    cloudSeed: Float,
+    cloudLightInk: Boolean,
+    cloudDarkInk: Boolean,
+    lightAngle: Float,
 ): FilterParams = when (this) {
     FilterKindUi.BLUR -> BlurParams(radius, strength)
     FilterKindUi.MOTION -> MotionBlurParams(distance, angle, strength)
@@ -752,5 +997,37 @@ private fun FilterKindUi.params(
     FilterKindUi.TRIANGLE_PIXELATE -> TrianglePixelateParams(size = triangleSize.roundToInt(), strength = strength)
     FilterKindUi.POINTILLIZE -> PointillizeParams(
         size = pointSize.roundToInt(), background = if (pointUseInk) ink else "#FFFFFF", strength = strength,
+    )
+    FilterKindUi.GLOOM -> GloomParams(threshold = threshold, radius = radius, strength = strength)
+    FilterKindUi.SKETCH -> SketchParams(
+        thickness = sketchThickness.roundToInt(), amount = sketchAmount,
+        sensitivity = sketchSensitivity, strength = strength,
+    )
+    FilterKindUi.TRACE -> TraceParams(strength = strength)
+    FilterKindUi.BEVEL -> BevelParams(
+        variant = bevelVariant, depth = bevelDepth, size = bevelSize.roundToInt(), angleDeg = lightAngle,
+        highlight = if (bevelHighlightInk) ink else "#FFFFFF",
+        shadow = if (bevelShadowInk) ink else "#000000",
+        strength = strength,
+    )
+    FilterKindUi.EMBOSS -> EmbossParams(height = height, angleDeg = lightAngle, strength = strength)
+    FilterKindUi.RELIEF -> ReliefParams(
+        height = height, angleDeg = lightAngle, soften = soften, strength = strength,
+    )
+    FilterKindUi.SATIN -> SatinParams(
+        color = if (satinInk) ink else "#FFFFFF", angleDeg = angle,
+        distance = satinDistance.roundToInt(), size = satinSize.roundToInt(), strength = strength,
+    )
+    FilterKindUi.WET_EDGE -> WetEdgeParams(width = wetWidth.roundToInt(), strength = strength)
+    FilterKindUi.WATERDROP -> WaterdropParams(height = height, gloss = gloss, strength = strength)
+    FilterKindUi.EXTRUDE -> ExtrudeParams(
+        angleDeg = angle, length = extrudeLength.roundToInt(),
+        color = if (extrudeInk) ink else "#808080", shading = extrudeShading, strength = strength,
+    )
+    FilterKindUi.CLOUDS -> CloudsParams(
+        scale = cloudScale, detail = cloudDetail.roundToInt(), seed = cloudSeed.roundToLong(),
+        colorA = if (cloudLightInk) ink else "#FFFFFF",
+        colorB = if (cloudDarkInk) ink else "#000000",
+        strength = strength,
     )
 }
