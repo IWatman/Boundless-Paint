@@ -7,6 +7,9 @@ import app.painter.core.doc.Document
 import app.painter.core.doc.GroupNode
 import app.painter.core.doc.Video
 import app.painter.core.doc.VideoAudio
+import app.painter.core.doc.VideoClip
+import app.painter.core.doc.VideoEdit
+import app.painter.core.doc.VideoTrack
 import java.io.File
 import java.util.zip.ZipFile
 import kotlin.io.path.createTempDirectory
@@ -54,6 +57,27 @@ class VideoProjectIOTest {
         return doc
     }
 
+    /** Adds a second frame group and track; the first track keeps the animation group. */
+    private fun withSecondTrack(doc: Document): Document {
+        val group = GroupNode("frames-b", "Frames B")
+        doc.root.add(group)
+        val first = doc.newRasterLayer("B1").also { group.add(it) }
+        val second = doc.newRasterLayer("B2").also { group.add(it) }
+        val track = VideoTrack(
+            id = "vtrack-b",
+            name = "Drawing 2",
+            groupId = group.id,
+            visible = false,
+            clips = listOf(
+                VideoClip("b-1", first.id, 0, 30),
+                VideoClip("b-2", second.id, 30, 60),
+            ),
+        )
+        doc.video = VideoEdit.addTrack(doc.video!!, track)
+        doc.activeId = first.id
+        return doc
+    }
+
     private fun writeManifest(dir: File, video: String) {
         dir.mkdirs()
         File(dir, "manifest.json").writeText(
@@ -87,6 +111,52 @@ class VideoProjectIOTest {
         // A second writer pass must not drift (ids, ordering and ticks are stable).
         ProjectIO.save(loaded, dir, null)
         assertEquals(doc.video, ProjectIO.load(dir).video)
+    }
+
+    @Test
+    fun secondDrawingTrackRoundTripsAndSurvivesSaveDelta() {
+        val doc = withAudio(withSecondTrack(videoDoc()))
+        val dir = File(root, "two-tracks")
+        ProjectIO.save(doc, dir, null)
+
+        val loaded = ProjectIO.load(dir)
+        assertEquals(2, loaded.video!!.tracks.size)
+        assertEquals(doc.video, loaded.video)
+        assertEquals(listOf("frames", "frames-b"), loaded.video!!.tracks.map { it.groupId })
+        assertFalse(loaded.video!!.tracks[1].visible)
+        assertEquals(listOf("b-1", "b-2"), loaded.video!!.tracks[1].clips.map { it.id })
+        assertEquals("B1", loaded.findNode(loaded.video!!.tracks[1].clips[0].frameId!!)!!.name)
+
+        // Autosave only paints the manifest; both tracks and the audio block must travel together.
+        val tracker = SaveTracker()
+        tracker.commitAll(doc)
+        doc.video = doc.video!!.copy(
+            tracks = doc.video!!.tracks.mapIndexed { i, track -> track.copy(name = "T$i") },
+        )
+        ProjectIO.saveDelta(doc, dir, tracker.collect(doc))
+        val afterDelta = ProjectIO.load(dir).video!!
+        assertEquals(2, afterDelta.tracks.size)
+        assertEquals(listOf("T0", "T1"), afterDelta.tracks.map { it.name })
+        assertEquals(2, afterDelta.audio!!.clips.size)
+    }
+
+    @Test
+    fun oneTrackManifestStillLoadsUnchanged() {
+        val dir = File(root, "one-track")
+        writeManifest(
+            dir,
+            """{"tracks":[{"id":"vt","name":"Drawing","groupId":"frames","visible":true,"clips":[
+                 {"id":"c1","frameId":"f1","startTick":0,"durationTicks":5},
+                 {"id":"c2","frameId":"f2","startTick":5,"durationTicks":5}]}]}""",
+        )
+        val video = assertNotNull(ProjectIO.load(dir).video)
+        assertEquals(1, video.tracks.size)
+        val track = video.tracks.single()
+        assertEquals("vt", track.id)
+        assertEquals("frames", track.groupId)
+        assertTrue(track.visible)
+        assertEquals(listOf("c1", "c2"), track.clips.map { it.id })
+        assertEquals(listOf(0L, 5L), track.clips.map { it.startTick })
     }
 
     @Test

@@ -722,6 +722,13 @@
     <string name="video_clip_missing_frame">Кадр отсутствует</string>
     <string name="video_track_visible">Дорожка видима</string>
     <string name="video_track_hidden">Дорожка скрыта</string>
+    <string name="video_track_drawing_number">Рисование %1$d</string>
+    <string name="video_tracks">Дорожки рисования</string>
+    <string name="video_track_add">Добавить дорожку рисования</string>
+    <string name="video_track_delete">Удалить дорожку рисования</string>
+    <string name="video_track_delete_title">Удалить дорожку рисования?</string>
+    <string name="video_track_delete_message">%1$s удаляется с таймлайна. Её клипы удаляются, а слои кадров остаются в списке слоёв скрытыми.</string>
+    <string name="animation_edit_track">Дорожка</string>
     <string name="video_not_available_hint">Сначала начните анимацию (Опции → Анимация).</string>
     <string name="video_convert_title">Режим видео</string>
     <string name="video_convert_message">Кадров: %1$d. Анимация становится таймлайном 60 кадр/с; каждый кадр сохранит длительность. Режим видео необратим в интерфейсе; слои кадров сохраняются.</string>

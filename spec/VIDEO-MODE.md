@@ -27,7 +27,7 @@ where the reference is silent or where Android cannot follow it.
 | Topic | Decision |
 |---|---|
 | Timebase | **60 ticks per second**. In a 60 fps export one tick = one output frame; the explicit 4K/30 fallback emits every second tick. The timeline has no user-facing fps control; only the export dialog offers the labelled 4K/30 fallback. |
-| Tracks in M5 | **One drawing track + one audio track** are shipped in the UI. The manifest, core model, compositor and exporter support N drawing tracks (S5 tests multi-track visibility), but S5 did not add add/delete-track UI; that remains a later slice and the format is already ready for it. |
+| Tracks in M5 | **Up to two drawing tracks + one audio track** ship in the UI. Each drawing track owns a frame group. The manifest, core model, compositor and exporter support N drawing tracks; the UI caps creation at two (`VideoEdit.MAX_TRACKS`). Adding or deleting a track edits timeline metadata only and is not undoable: deleting a track removes its clips but keeps its frame group as ordinary, hidden layers. |
 | Source frames | The existing animation frames stay the source of truth. A video clip is a **timed reference** to a frame layer, not a copy of its pixels. |
 | Conversion | Additive and one-way in the UI: `Document.video` is added, `Document.animation` is kept. Frames are not destroyed. No "leave video mode" command in M5. |
 | Project type | **No new `ProjectType` and no change to `Document.type`.** `video` presence defines video mode. |
@@ -92,8 +92,9 @@ the timelapse feature.
 ### 3.1 In scope for M5
 
 1. **Video timeline at 60 fps** with a playhead, a time ruler and clips.
-2. **One drawing track** (the animation frame group) with clips that reference frame layers. Track visibility
-   (eye) and per-track duration are editable.
+2. **Up to two drawing tracks** (each an animation frame group) with clips that reference frame layers. Add and
+   delete a track from the timeline; deleting keeps the frame layers. Track visibility (eye), per-track clips and
+   duration are editable.
 3. **One audio track**: import an audio file, record from the microphone, trim by duration, per-clip volume,
    track mute/volume, master volume. Audio is optional.
 4. **60 fps preview** on the canvas from the timeline (best effort; export is exact).
@@ -107,7 +108,7 @@ the timelapse feature.
 
 - MOV/QuickTime, HEVC, AV1, VP9/WebM, ProRes, HDR/10-bit, alpha video, 120 fps, variable frame rate.
 - Multiple audio tracks, audio effects (fade, ducking, EQ, pitch), audio from a video file, waveform editing.
-- Multiple drawing tracks in the shipped UI (the model supports them; see S5), per-track opacity/blend,
+- More than two drawing tracks in the shipped UI (the model supports N; see S5), per-track opacity/blend,
   multi-layer frames (a frame is still one raster/vector layer), layer property animation.
 - Transitions, filters or effects on the whole video, text overlays, motion blur/interpolation.
 - Range export, GIF/WebP animation, gallery video playback or video thumbnails, a New Project video type.
@@ -305,6 +306,19 @@ fps (approximate timing), and no frame data is destroyed.
   frame”.
 - Non-frame layers (backgrounds, overlays, adjustment layers, filter layers) keep their own visibility and are
   composited on every output frame. They are not animated by the timeline in M5.
+- **Track lifecycle.** `VideoEdit.addTrack` accepts at most `MAX_TRACKS = 2` tracks, each with a unique id and
+  frame group; the studio creates the group, its first frame layer and a one-second clip when the user adds a
+  track. Adding and deleting a track are timeline-metadata edits and are **not undoable** (same as the rest of
+  the video block).
+  Deleting a track removes its clips and the reference but keeps the frame group and its layers as ordinary,
+  hidden layers: the artwork is never destroyed by a timeline action. Deleting the track that holds
+  `AnimationMeta.frameGroupId` repoints the animation metadata at the surviving track, so the animation panel
+  keeps editing frames; the old group can be deleted from the layer panel. The last drawing track cannot be
+  deleted from the UI.
+- **Editing track.** The animation panel edits one drawing track at a time, chosen in its track picker when the
+  timeline has two tracks. Switching tracks restores the frame last selected on the target track; painting a
+  frame during video preview makes its track the editing track. Only that track's frame is visible while
+  editing, keeping the existing "one visible frame" invariant across tracks.
 - `Node.hideInRecording` is honored by the video renderer (a hidden node is excluded from every output frame),
   but **the UI to set it does not exist yet**. It is P1 in S3, with the compositor override; until then the flag
   stays dormant. If it is implemented, timelapse capture should honor the same flag in the same change, otherwise
@@ -482,6 +496,10 @@ The panel is a floating overlay above the canvas, like the animation panel. It d
 
 ### 5.4 Tracks and clips
 
+- **Tracks menu.** The edit bar's "Drawing tracks" menu lists the drawing tracks, selects one, adds a second
+  track and deletes the selected track. Add is disabled at two tracks or when the next frame layer would exceed
+  the document layer limit; delete is disabled for the last track and asks for confirmation. Track headers and
+  lanes highlight the selected track; tapping either selects it.
 - **Select** a clip by tap; the inspector opens. The selected clip gets an accent border.
 - **Add clip** (drawing track header): inserts after the selected clip with the same duration and ripples the
   following clips right; if nothing is selected, inserts at the playhead. It references the same frame as the
@@ -492,8 +510,8 @@ The panel is a floating overlay above the canvas, like the animation panel. It d
 - **Trim**: right edge changes `durationTicks` and ripples the following clips; dragging below one tick deletes
   the clip (the reference's “a clip with duration 0 is deleted”). Left-edge trim and magnetic ripple are P1.
 - **Move**: long-press drag within the same drawing track; the clip is removed and reinserted at the target
-  position, rippling the others. Moving across tracks is not available with one drawing track; the model/UI must
-  enforce “same type, same track” when more tracks exist.
+  position, rippling the others. Moving across tracks is not available; with two drawing tracks the UI moves the
+  clip only inside the selected track.
 - **Snap**: on by default; targets are the playhead, other clip edges, whole seconds and 0.5 s. The toggle is in
   the header overflow.
 - **Zero-length, overlapping, unsorted** data from a file is normalized on load (4.5), never rendered as
@@ -595,6 +613,8 @@ val videoPanelOpen: Boolean = false,
     val loopPreview: Boolean = false,
     val tracks: List<VideoTrackUi> = emptyList(),
     val audio: VideoAudioUi? = null,
+    val selectedTrackId: String? = null,
+    val canAddTrack: Boolean = false,
 )
 
 @Immutable data class VideoTrackUi(
@@ -630,6 +650,9 @@ fun deleteVideoClip(id: String) {}
 fun setVideoClipDuration(id: String, ticks: Long) {}
 fun moveVideoClip(id: String, startTick: Long) {}
 fun setVideoTrackVisible(id: String, visible: Boolean) {}
+fun selectVideoTrack(id: String) {}
+fun addVideoTrack() {}
+fun deleteVideoTrack(id: String) {}
 fun importAudio() {}
 fun startAudioRecording() {}
 fun stopAudioRecording() {}
@@ -949,11 +972,12 @@ Deliverable: 4K/30 and 4K/60 where supported, a memory guard, the row/YUV optimi
 (if time) the second drawing track UI.
 
 Status (2026-11-02): the 4K/60 and explicit 4K/30 chips, the 4K memory guard and the derived layer-limit warning
-shipped. The second drawing track UI was evaluated and **cut**: the model, `Video.visibleFrames`, the compositor
-and the exporter already composite every visible track (covered by a `VideoTest` case), but creating a second
-frame group, wiring it into the animation panel and layer rows is a larger change than S5 could ship safely. The
-UI therefore stays one-track and the format is ready for a later slice. No 4K throughput number is claimed; the
-instrumented 4K smoke skips an unsupported device.
+shipped. The optional second drawing track also shipped: the timeline can add a second track (each with its own
+frame group), show both lanes, edit clips on the selected track, toggle visibility per track, and delete a track
+without destroying its frame layers. The animation panel selects the editing track and restores that track's
+current frame. The UI caps creation at two tracks; the model, `Video.visibleFrames`, the compositor and the
+exporter continue to support N tracks and already composite every visible track. No 4K throughput number is
+claimed; the instrumented 4K smoke skips an unsupported device.
 
 Acceptance:
 
@@ -964,11 +988,14 @@ Acceptance:
   STATUS (no number is claimed here).
 - Derived 4K layer limits are shown in the export dialog when the timeline references more frame layers than
   the export size can hold; the current-canvas limit is also shown when it is exceeded.
-- The model/compositor stay multi-track-ready; the shipped UI is one drawing track and is documented as such.
+- The model/compositor stay multi-track-ready; the shipped UI offers up to two drawing tracks with per-track
+  clip editing, visibility and animation-panel selection.
 
-Tests: `VideoExportPlanTest` extended for the capability matrix, 4K/30 fallback, pixel cap and memory guard;
-`LayerLimitTest` covers the derived 4K/1080p limits; instrumented 4K smoke only on a supporting device (skipped
-otherwise, never failed on an unsupported device); manual performance notes in STATUS.
+Tests: `VideoEditTest` extended for add/delete track, per-track clip edits, the two-track cap, two-track
+normalization and visible-frame composition; `VideoProjectIOTest` and `SnapshotTest` cover two-track round-trip
+and autosave; `VideoExportPlanTest` extended for the capability matrix, 4K/30 fallback, pixel cap and memory
+guard; `LayerLimitTest` covers the derived 4K/1080p limits; instrumented 4K smoke only on a supporting device
+(skipped otherwise, never failed on an unsupported device); manual performance notes in STATUS.
 
 ## 8. First slice: file-level plan
 
@@ -1097,8 +1124,8 @@ Instrumented tests must be skippable on unsupported hardware (assume/`Assume` on
 
 - MOV/QuickTime, HEVC, AV1, VP9/WebM, ProRes, HDR, 10-bit, alpha, 120 fps, VFR.
 - More than one audio track; audio effects, waveform editing, audio from a video, pitch/tempo.
-- More than one drawing track in the M5 UI (model supports it; S5 optional), per-track opacity/blend,
-  multi-layer frames, layer property animation.
+- More than two drawing tracks in the M5 UI (the model supports N), per-track opacity/blend, multi-layer
+  frames, layer property animation.
 - Transitions, video filters/effects, text overlays, motion blur/interpolation, range export, GIF/WebP.
 - Gallery video playback/thumbnails, a New Project video type, cloud rendering, background export service.
 - Timelapse→video conversion; using timelapse frames as clips.
@@ -1121,8 +1148,9 @@ Assumptions (mark them in code/review if they change):
 
 Open questions for implementation review:
 
-- Is a second drawing track worth the animation-panel complexity in M5, or should it wait? The model is ready
-  either way.
+- ~~Is a second drawing track worth the animation-panel complexity in M5?~~ Resolved: up to two drawing tracks ship,
+  selected from the animation panel; the model still supports N tracks. Moving clips across tracks remains a
+  later slice.
 - Should `hideInRecording` be exposed together with the timelapse fix, or left dormant for M5?
 - Is 1440p worth a chip, or should the fallback be only 1080p60 / 4K30?
 - Does the platform encoder accept BT.709/limited-range keys on the reference devices? If not, fall back to the

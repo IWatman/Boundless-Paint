@@ -45,9 +45,11 @@ import app.painter.core.doc.Node
 import app.painter.core.doc.RasterLayer
 import app.painter.core.doc.VectorLayer
 import app.painter.core.doc.Video
+import app.painter.core.doc.VideoClip
 import app.painter.core.doc.VideoEdit
 import app.painter.core.doc.VideoMeta
 import app.painter.core.doc.VideoPlaybackCursor
+import app.painter.core.doc.VideoTrack
 import app.painter.core.doc.effectivelyLocked
 import app.painter.core.doc.newNodeId
 import app.painter.core.fill.BucketFill
@@ -362,6 +364,8 @@ class StudioViewModel(
     private var animForward = true
     /** Last frame shown, kept when the user paints a static layer outside the frame group. */
     private var animFrameId: String? = null
+    /** Per drawing track, the frame the animation panel restores when the track is selected again. */
+    private val videoEditFrameIds = HashMap<String, String>()
     /** Fingerprint of the frames an onion overlay was built from. */
     private var onionSignature: Long? = null
     private var onionCache: List<OnionFrameUi> = emptyList()
@@ -552,6 +556,7 @@ class StudioViewModel(
         animPlayJob?.cancel()
         animPlayJob = null
         animFrameId = null
+        videoEditFrameIds.clear()
         videoPlayToken++
         videoPlayJob?.cancel()
         videoPlayJob = null
@@ -2930,7 +2935,151 @@ class StudioViewModel(
     }
 
     override fun selectVideoClip(id: String?) {
+        val meta = doc.video
+        if (id != null && meta != null) {
+            // Selecting a drawing clip also selects the track that owns it, so the next edit applies there.
+            val track = VideoEdit.trackOfClip(meta, id)
+            if (track != null && _state.value.video?.selectedTrackId != track.id) {
+                rememberEditingFrame()
+                // The selected clip's frame becomes that track's editing frame, so Frames… opens on it.
+                val clipFrameId = track.clips.firstOrNull { it.id == id }?.frameId
+                if (clipFrameId != null && Video.frames(doc, track).any { it.id == clipFrameId }) {
+                    videoEditFrameIds[track.id] = clipFrameId
+                    animFrameId = clipFrameId
+                } else {
+                    animFrameId = videoEditFrameIds[track.id]
+                }
+                _state.update { s ->
+                    s.copy(
+                        video = s.video?.copy(
+                            selectedTrackId = track.id,
+                            selectedClipId = id,
+                        ),
+                    )
+                }
+                return
+            }
+        }
         _state.update { it.copy(video = it.video?.copy(selectedClipId = id)) }
+    }
+
+    override fun selectVideoTrack(id: String) {
+        val meta = doc.video ?: return
+        val track = meta.tracks.firstOrNull { it.id == id } ?: return
+        if (_state.value.video?.selectedTrackId == id) return
+        rememberEditingFrame()
+        animFrameId = videoEditFrameIds[id]
+        _state.update { s ->
+            val video = s.video ?: return@update s
+            s.copy(
+                video = video.copy(
+                    selectedTrackId = id,
+                    selectedClipId = video.selectedClipId?.takeIf { clipId ->
+                        track.clips.any { it.id == clipId } || video.audio?.clips?.any { it.id == clipId } == true
+                    },
+                ),
+            )
+        }
+        // While the preview runs, its visibility override stays in charge; otherwise show the track's frame.
+        if (videoPreviewActive) refreshVideo() else refreshLayers()
+    }
+
+    override fun addVideoTrack() {
+        val meta = doc.video ?: return
+        if (meta.tracks.size >= VideoEdit.MAX_TRACKS) return
+        if (_state.value.video?.recordingAudio == true) return
+        if (doc.layerCount() >= _state.value.layerLimit) return
+        stopVideoPlayback(restoreEditingFrame = false)
+        val name = nextDrawingTrackName(meta)
+        val group = GroupNode(newNodeId(), name)
+        val frame = doc.newRasterLayer(uiString(R.string.animation_frame_label, 1))
+        group.add(frame)
+        val anchor = meta.tracks.firstOrNull()?.let { doc.findNode(it.groupId) }
+        val parent = anchor?.parent ?: doc.root
+        val index = anchor?.let { parent.indexOf(it) + 1 } ?: parent.children.size
+        parent.add(group, index.coerceIn(0, parent.children.size))
+        val track = VideoTrack(
+            id = "vtrack-${group.id}",
+            name = name,
+            groupId = group.id,
+            clips = listOf(VideoClip(newNodeId(), frame.id, 0L, VideoEdit.DEFAULT_CLIP_TICKS)),
+        )
+        val updated = VideoEdit.addTrack(meta, track)
+        if (updated == meta) {
+            parent.remove(group)
+            return
+        }
+        doc.video = updated
+        doc.activeId = frame.id
+        doc.activeTarget = EditTarget.LAYER
+        animFrameId = frame.id
+        videoEditFrameIds[track.id] = frame.id
+        markDirty()
+        _state.update { s ->
+            s.copy(video = s.video?.copy(selectedTrackId = track.id, selectedClipId = null))
+        }
+        if (videoPreviewActive) {
+            refreshLayerRowsAfterPreview()
+            refreshVideo()
+            showVideoFrame(_state.value.video?.playheadTick ?: 0L)
+        } else {
+            refreshLayers()
+        }
+        invalidateAudioMix()
+        prepareAudioMix()
+        canvas?.invalidate(null, null)
+    }
+
+    override fun deleteVideoTrack(id: String) {
+        val meta = doc.video ?: return
+        if (meta.tracks.size <= 1) return
+        stopVideoPlayback(restoreEditingFrame = false)
+        val removed = meta.tracks.firstOrNull { it.id == id } ?: return
+        val updated = VideoEdit.deleteTrack(meta, id)
+        if (updated == meta) return
+        // The artwork is kept: only the timeline reference and its clips go. Hide the group and its frames so
+        // the orphaned group never composites into a preview or an export until the user edits it as a normal
+        // layer group.
+        for (frame in Video.frames(doc, removed)) frame.visible = false
+        (doc.findNode(removed.groupId) as? GroupNode)?.visible = false
+        doc.video = updated
+        val remaining = updated.tracks.first()
+        if (doc.animation?.frameGroupId == removed.groupId) {
+            // The animation panel follows the surviving track; the old group stays as ordinary layers.
+            doc.animation?.frameGroupId = remaining.groupId
+        }
+        videoEditFrameIds.remove(id)
+        markDirty()
+        _state.update { s ->
+            val video = s.video ?: return@update s
+            val selectedTrack = video.selectedTrackId?.takeIf { trackId ->
+                updated.tracks.any { it.id == trackId }
+            } ?: remaining.id
+            s.copy(
+                video = video.copy(
+                    selectedTrackId = selectedTrack,
+                    selectedClipId = video.selectedClipId?.takeIf { clipId ->
+                        updated.tracks.any { track -> track.clips.any { it.id == clipId } } ||
+                            video.audio?.clips?.any { it.id == clipId } == true
+                    },
+                ),
+            )
+        }
+        val selectedTrack = _state.value.video?.selectedTrackId
+            ?.let { trackId -> updated.tracks.firstOrNull { it.id == trackId } }
+            ?: remaining
+        animFrameId = videoEditFrameIds[selectedTrack.id]
+            ?: Video.frames(doc, selectedTrack).firstOrNull()?.id
+        if (videoPreviewActive) {
+            refreshLayerRowsAfterPreview()
+            refreshVideo()
+            showVideoFrame(_state.value.video?.playheadTick ?: 0L)
+        } else {
+            refreshLayers()
+        }
+        invalidateAudioMix()
+        prepareAudioMix()
+        canvas?.invalidate(null, null)
     }
 
     override fun setVideoPlaying(playing: Boolean) {
@@ -2961,8 +3110,12 @@ class StudioViewModel(
         stopVideoPlayback(restoreEditingFrame = false)
         val meta = doc.video ?: return
         val selectedId = _state.value.video?.selectedClipId
-        val selectedTrack = selectedId?.let { id -> meta.tracks.firstOrNull { t -> t.clips.any { it.id == id } } }
-        val track = selectedTrack ?: meta.tracks.firstOrNull() ?: return
+        val selectedTrack = _state.value.video?.selectedTrackId
+            ?.let { id -> meta.tracks.firstOrNull { it.id == id } }
+        val track = selectedTrack
+            ?: selectedId?.let { id -> VideoEdit.trackOfClip(meta, id) }
+            ?: meta.tracks.firstOrNull()
+            ?: return
         val selected = selectedId?.let { id -> track.clips.firstOrNull { it.id == id } }
         val frames = Video.frames(doc, track)
         val chosen = if (frameId == null) {
@@ -3797,28 +3950,182 @@ class StudioViewModel(
 
     /**
      * Painting stops the preview on the frame on screen and makes it the editing frame, so the stroke lands on
-     * the frame the user sees and closing the panel does not jump back to an older frame.
+     * the frame the user sees and closing the panel does not jump back to an older frame. If the frame belongs
+     * to another drawing track, that track becomes the editing track too.
      */
     private fun commitVideoPreviewFrame() {
         val frame = doc.activeNode as? RasterLayer
         if (frame != null && frame.visible) {
             videoEditingActiveId = frame.id
-            if (Animation.frames(doc).any { it.id == frame.id }) animFrameId = frame.id
+            val track = trackOfFrame(frame.id)
+            if (track != null) {
+                animFrameId = frame.id
+                videoEditFrameIds[track.id] = frame.id
+                if (_state.value.video?.selectedTrackId != track.id) {
+                    _state.update { s ->
+                        val video = s.video ?: return@update s
+                        s.copy(
+                            video = video.copy(
+                                selectedTrackId = track.id,
+                                selectedClipId = video.selectedClipId?.takeIf { clipId ->
+                                    track.clips.any { it.id == clipId } ||
+                                        video.audio?.clips?.any { it.id == clipId } == true
+                                },
+                            ),
+                        )
+                    }
+                }
+            } else if (isAnimationFrame(frame.id)) {
+                animFrameId = frame.id
+            }
         }
         if (videoPlayJob != null || _state.value.video?.playing == true) {
             stopVideoPlayback(restoreEditingFrame = false)
         }
     }
 
-    /** Restores the animation invariant of the frame active before the preview. */
+    /** Restores the animation invariant of the editing track's frame active before the preview. */
     private fun restoreVideoEditingFrame() {
-        val restore = videoEditingActiveId
-        if (restore != null && doc.findNode(restore) != null) doc.activeId = restore
-        Animation.normalize(doc, clearOrphaned = false)
-        val frames = Animation.frames(doc)
-        animFrameId = doc.activeId?.takeIf { id -> frames.any { it.id == id } } ?: frames.firstOrNull()?.id
+        val track = editingVideoTrack()
+        val frames = if (track != null) Video.frames(doc, track) else Animation.frames(doc)
+        val restore = animFrameId?.takeIf { id -> frames.any { it.id == id } }
+            ?: track?.let { videoEditFrameIds[it.id] }?.takeIf { id -> frames.any { it.id == id } }
+            ?: videoEditingActiveId?.takeIf { id -> frames.any { it.id == id } }
+            ?: frames.firstOrNull()?.id
+        if (restore != null) doc.activeId = restore
+        normalizeEditingAnimation(clearOrphaned = false)
+        val restored = doc.activeId?.takeIf { id -> frames.any { it.id == id } }
+            ?: frames.firstOrNull()?.id
+        animFrameId = restored
+        if (track != null && restored != null) videoEditFrameIds[track.id] = restored
         refreshLayers()
         canvas?.invalidate(null, null)
+    }
+
+    /** Drawing track owning layer [frameId], or null when the layer is not a frame of the timeline. */
+    private fun trackOfFrame(frameId: String): VideoTrack? =
+        doc.video?.tracks?.firstOrNull { track -> Video.frames(doc, track).any { it.id == frameId } }
+
+    /** The track the animation panel edits; falls back to the first drawing track with frames. */
+    private fun editingVideoTrack(meta: VideoMeta? = doc.video): VideoTrack? {
+        val tracks = meta?.tracks ?: return null
+        if (tracks.isEmpty()) return null
+        val selected = _state.value.video?.selectedTrackId
+        return tracks.firstOrNull { it.id == selected && Video.frames(doc, it).isNotEmpty() }
+            ?: tracks.firstOrNull { Video.frames(doc, it).isNotEmpty() }
+            ?: tracks.first()
+    }
+
+    /** Frames of the editing drawing track, or the animation frames when the document has no video block. */
+    private fun editingFrames(): List<RasterLayer> {
+        val track = editingVideoTrack()
+        return if (track != null) Video.frames(doc, track) else Animation.frames(doc)
+    }
+
+    /** Index of the frame the animation panel shows; [fallback] keeps it in range when the frame vanished. */
+    private fun activeAnimationIndex(frames: List<RasterLayer>, fallback: String? = animFrameId): Int {
+        val byActive = frames.indexOfFirst { it.id == doc.activeId }
+        if (byActive >= 0) return byActive
+        val byFallback = frames.indexOfFirst { it.id == fallback }
+        return if (byFallback >= 0) byFallback else 0
+    }
+
+    /** Frame to show for [track]: the last one remembered for it, else the document active frame, else the first. */
+    private fun frameForEditing(track: VideoTrack?, frames: List<RasterLayer>): RasterLayer {
+        val candidates = listOfNotNull(animFrameId, track?.let { videoEditFrameIds[it.id] }, doc.activeId)
+        val active = candidates.firstOrNull { id -> frames.any { it.id == id } }
+        return frames.firstOrNull { it.id == active } ?: frames.first()
+    }
+
+    /** Remembers the current frame of the editing track before the selection moves to another one. */
+    private fun rememberEditingFrame() {
+        val track = editingVideoTrack() ?: return
+        val frames = Video.frames(doc, track)
+        val current = doc.activeId?.takeIf { id -> frames.any { it.id == id } }
+            ?: animFrameId?.takeIf { id -> frames.any { it.id == id } }
+        if (current != null) videoEditFrameIds[track.id] = current
+    }
+
+    /**
+     * Restores the editing invariant across every drawing track: exactly [active] is visible in
+     * [frames], every other frame of the timeline is hidden, the editing group is visible and [Document.activeId]
+     * points at the frame. Non-frame layers keep their own visibility.
+     */
+    private fun applyEditingVisibility(
+        editingGroupId: String?,
+        frames: List<RasterLayer>,
+        active: RasterLayer?,
+    ) {
+        doc.video?.let { meta ->
+            for (track in meta.tracks) {
+                if (track.groupId == editingGroupId) continue
+                for (frame in Video.frames(doc, track)) frame.visible = false
+            }
+        }
+        val animationGroup = doc.animation?.frameGroupId
+        if (animationGroup != null && animationGroup != editingGroupId) {
+            for (frame in Animation.frames(doc)) frame.visible = false
+        }
+        for (frame in frames) frame.visible = active != null && frame.id == active.id
+        if (editingGroupId != null) (doc.findNode(editingGroupId) as? GroupNode)?.visible = true
+        if (active != null) doc.activeId = active.id
+    }
+
+    /**
+     * Applies the "one visible editing frame" invariant of the selected drawing track without publishing UI
+     * state. Used by save and by the preview exit. Returns false when there is no animation source at all.
+     */
+    private fun normalizeEditingAnimation(clearOrphaned: Boolean): Boolean {
+        val meta = doc.animation ?: return false
+        val track = editingVideoTrack()
+        if (track == null || track.groupId == meta.frameGroupId) {
+            if (!Animation.normalize(doc, clearOrphaned)) return false
+            val frames = Animation.frames(doc)
+            if (frames.isEmpty()) return false
+            val active = if (track != null) {
+                frameForEditing(track, frames)
+            } else {
+                frames.firstOrNull { it.id == doc.activeId } ?: frames.first()
+            }
+            applyEditingVisibility(meta.frameGroupId, frames, active)
+            animFrameId = active.id
+            if (track != null) videoEditFrameIds[track.id] = active.id
+            return true
+        }
+        val group = doc.findNode(track.groupId) as? GroupNode
+        val frames = group?.children?.filterIsInstance<RasterLayer>() ?: emptyList()
+        if (group == null || frames.isEmpty()) return Animation.normalize(doc, clearOrphaned)
+        if (Animation.group(doc) == null && clearOrphaned) {
+            // The original animation group was deleted; the surviving track keeps the animation editable.
+            meta.frameGroupId = track.groupId
+            meta.normalize()
+        }
+        val active = frameForEditing(track, frames)
+        applyEditingVisibility(track.groupId, frames, active)
+        animFrameId = active.id
+        videoEditFrameIds[track.id] = active.id
+        return true
+    }
+
+    /** Makes [frameId]'s track the editing track when it is not already selected; returns its frames. */
+    private fun editingFramesFor(frameId: String): List<RasterLayer> {
+        val track = trackOfFrame(frameId) ?: return editingFrames()
+        if (_state.value.video?.selectedTrackId != track.id) {
+            rememberEditingFrame()
+            _state.update { s -> s.copy(video = s.video?.copy(selectedTrackId = track.id)) }
+            animFrameId = videoEditFrameIds[track.id]
+        }
+        return Video.frames(doc, track)
+    }
+
+    /** "Drawing N" with the lowest suffix not already used by another track. */
+    private fun nextDrawingTrackName(meta: VideoMeta): String {
+        val used = meta.tracks.map { it.name }.toSet()
+        for (n in (meta.tracks.size + 1)..(meta.tracks.size + VideoEdit.MAX_TRACKS + 1)) {
+            val candidate = uiString(R.string.video_track_drawing_number, n)
+            if (candidate !in used) return candidate
+        }
+        return uiString(R.string.video_track_drawing_number, meta.tracks.size + 1)
     }
 
     /**
@@ -3853,12 +4160,12 @@ class StudioViewModel(
         canvas?.invalidate(null, null)
     }
 
-    /** Adds a copy of frame [sourceId] (default: the active frame) directly above it. */
+    /** Adds a copy of frame [sourceId] (default: the active frame) directly above it in its track. */
     private fun addFrame(sourceId: String?) {
         if (doc.animation == null) return
         if (doc.layerCount() >= _state.value.layerLimit) return
         stopAnimationPlayback()
-        val frames = Animation.frames(doc)
+        val frames = if (sourceId != null) editingFramesFor(sourceId) else editingFrames()
         val current = frames.firstOrNull { it.id == sourceId }
             ?: frames.firstOrNull { it.id == doc.activeId }
             ?: frames.firstOrNull { it.id == animFrameId }
@@ -3870,6 +4177,7 @@ class StudioViewModel(
         copy.name = getApplication<Application>().getString(R.string.animation_frame_label, frames.size + 1)
         doc.activeId = copy.id
         animFrameId = copy.id
+        trackOfFrame(copy.id)?.let { videoEditFrameIds[it.id] = copy.id }
         markDirty()
         refreshLayers()
         canvas?.invalidate(null, null)
@@ -3877,25 +4185,26 @@ class StudioViewModel(
 
     override fun addAnimationFrame() = addFrame(null)
 
-    /** Deletes frame [id] when at least one frame remains. */
+    /** Deletes frame [id] from its track when at least one frame remains there. */
     private fun deleteFrame(id: String) {
         stopAnimationPlayback()
-        val before = Animation.frames(doc)
+        val before = editingFramesFor(id)
         if (before.size <= 1) return
         val index = before.indexOfFirst { it.id == id }.coerceAtLeast(0)
         exec(DeleteNode(id))
-        val after = Animation.frames(doc)
+        val after = editingFrames()
         val next = after.getOrNull(index.coerceAtMost(after.lastIndex)) ?: after.lastOrNull() ?: return
         doc.activeId = next.id
         doc.activeTarget = EditTarget.LAYER
         animFrameId = next.id
+        trackOfFrame(next.id)?.let { videoEditFrameIds[it.id] = next.id }
         markDirty()
         refreshLayers()
         canvas?.invalidate(null, null)
     }
 
     override fun deleteAnimationFrame() {
-        val frames = Animation.frames(doc)
+        val frames = editingFrames()
         val current = frames.firstOrNull { it.id == doc.activeId }
             ?: frames.firstOrNull { it.id == animFrameId }
             ?: frames.firstOrNull()
@@ -3904,16 +4213,18 @@ class StudioViewModel(
     }
 
     override fun selectAnimationFrame(id: String) {
-        val frame = Animation.frames(doc).firstOrNull { it.id == id } ?: return
+        val frames = editingFramesFor(id)
+        val frame = frames.firstOrNull { it.id == id } ?: return
         if (_state.value.videoPanelOpen || videoPreviewActive) {
             leaveVideoPreview()
             _state.update { it.copy(videoPanelOpen = false) }
         }
-        if (doc.activeId == id && _state.value.animation?.playing != true &&
-            _state.value.animation?.activeIndex == Animation.activeIndex(doc, animFrameId)
+        val playing = _state.value.animation?.playing == true
+        if (doc.activeId == id && !playing &&
+            _state.value.animation?.activeIndex == activeAnimationIndex(frames, id)
         ) {
             if (!frame.visible) {
-                frame.visible = true
+                applyEditingVisibility(editingVideoTrack()?.groupId ?: doc.animation?.frameGroupId, frames, frame)
                 markDirty()
                 refreshLayers()
             }
@@ -3924,20 +4235,19 @@ class StudioViewModel(
         finishTransform(apply = true)
         finishGradient(apply = true)
         commitPendingOpacity()
-        val frames = Animation.frames(doc)
-        for (f in frames) f.visible = f.id == id
-        doc.activeId = id
+        applyEditingVisibility(editingVideoTrack()?.groupId ?: doc.animation?.frameGroupId, frames, frame)
         doc.activeTarget = EditTarget.LAYER
         animFrameId = id
+        trackOfFrame(id)?.let { videoEditFrameIds[it.id] = id }
         markDirty()
         refreshLayers()
         canvas?.invalidate(null, null)
     }
 
     override fun stepAnimationFrame(delta: Int) {
-        val frames = Animation.frames(doc)
+        val frames = editingFrames()
         if (frames.isEmpty()) return
-        val index = Animation.activeIndex(doc, animFrameId)
+        val index = activeAnimationIndex(frames)
         selectAnimationFrame(frames[Animation.step(index, delta, frames.size)].id)
     }
 
@@ -3951,12 +4261,12 @@ class StudioViewModel(
      */
     private fun startAnimationPlayback() {
         val meta = doc.animation ?: return
-        val frames = Animation.frames(doc)
+        val frames = editingFrames()
         if (frames.size < 2) return
         // Starting an already running loop only updates the rate, not the position.
         val alreadyPlaying = animPlayJob?.isActive == true
         if (!alreadyPlaying) stopAnimationPlayback()
-        var index = Animation.activeIndex(doc, animFrameId)
+        var index = activeAnimationIndex(frames)
         if (!alreadyPlaying && meta.playback == AnimationPlayback.ONCE && index >= frames.lastIndex) index = 0
         animForward = true
         animFrameId = frames[index].id
@@ -3970,9 +4280,9 @@ class StudioViewModel(
             try {
                 while (isActive) {
                     delay((1000L / meta.fps).coerceAtLeast(16L))
-                    val current = Animation.frames(doc)
+                    val current = editingFrames()
                     if (current.size < 2) break
-                    val cursor = Animation.activeIndex(doc, animFrameId)
+                    val cursor = activeAnimationIndex(current)
                     val step = Animation.nextStep(cursor, current.size, meta.playback, animForward) ?: break
                     animForward = step.forward
                     animFrameId = current[step.index].id
@@ -4004,9 +4314,12 @@ class StudioViewModel(
 
     /** Makes [frame] the only visible frame and paints on it; playback calls this without rebuilding rows. */
     private fun showFrame(frame: RasterLayer) {
-        for (f in Animation.frames(doc)) f.visible = f.id == frame.id
-        doc.activeId = frame.id
-        val index = Animation.activeIndex(doc, frame.id)
+        val frames = editingFrames()
+        val track = trackOfFrame(frame.id)
+        applyEditingVisibility(track?.groupId ?: doc.animation?.frameGroupId, frames, frame)
+        animFrameId = frame.id
+        if (track != null) videoEditFrameIds[track.id] = frame.id
+        val index = frames.indexOfFirst { it.id == frame.id }.coerceAtLeast(0)
         _state.update { s ->
             s.copy(
                 activeLayerId = frame.id,
@@ -4058,22 +4371,46 @@ class StudioViewModel(
     }
 
     /**
-     * Publishes the animation block and restores the "one visible frame" invariant. Onion frames are rendered
-     * from the frame pixels (not the whole composite) and cached by a version fingerprint, so painting on the
-     * active frame does not rebuild the overlay.
+     * Publishes the animation block and restores the "one visible frame" invariant of the editing drawing
+     * track. Onion frames are rendered from the frame pixels (not the whole composite) and cached by a version
+     * fingerprint, so painting on the active frame does not rebuild the overlay.
      */
     private fun refreshAnimation() {
         val meta = doc.animation
-        if (meta == null || !Animation.normalize(doc, clearOrphaned = false)) {
+        if (meta == null) {
             onionSignature = null
             onionCache = emptyList()
             animFrameId = null
             _state.update { it.copy(animation = null) }
             return
         }
-        val frames = Animation.frames(doc)
-        val index = Animation.activeIndex(doc, animFrameId)
-        animFrameId = frames[index].id
+        val track = editingVideoTrack()
+        val usesTrack = track != null &&
+            track.groupId != meta.frameGroupId &&
+            Video.frames(doc, track).isNotEmpty()
+        if (!normalizeEditingAnimation(clearOrphaned = false)) {
+            onionSignature = null
+            onionCache = emptyList()
+            animFrameId = null
+            _state.update { it.copy(animation = null) }
+            return
+        }
+        val frames = if (usesTrack) Video.frames(doc, track!!) else Animation.frames(doc)
+        if (frames.isEmpty()) {
+            onionSignature = null
+            onionCache = emptyList()
+            animFrameId = null
+            _state.update { it.copy(animation = null) }
+            return
+        }
+        val active = frames.firstOrNull { it.id == doc.activeId } ?: frames.first()
+        if (!usesTrack) {
+            // Animation.normalize only knows the animation group; hide the other drawing track's frames.
+            applyEditingVisibility(meta.frameGroupId, frames, active)
+        }
+        animFrameId = active.id
+        if (track != null) videoEditFrameIds[track.id] = active.id
+        val index = frames.indexOfFirst { it.id == active.id }.coerceAtLeast(0)
         val playing = _state.value.animation?.playing == true
         val frameUi = frames.mapIndexed { i, f -> AnimationFrameUi(f.id, i, thumbnailOf(f)) }
         val onion = if (meta.onionSkin && !playing) onionFrames(frames, index, meta) else emptyList()
@@ -4122,6 +4459,12 @@ class StudioViewModel(
         val duration = Video.durationTicks(meta)
         val previous = _state.value.video
         val playhead = (previous?.playheadTick ?: 0L).coerceIn(0L, duration)
+        val selectedTrackId = previous?.selectedTrackId
+            ?.takeIf { id ->
+                meta.tracks.any { it.id == id && Video.frames(doc, it).isNotEmpty() }
+            }
+            ?: meta.tracks.firstOrNull { Video.frames(doc, it).isNotEmpty() }?.id
+            ?: meta.tracks.firstOrNull()?.id
         val selected = previous?.selectedClipId?.takeIf { id ->
             meta.tracks.any { track -> track.clips.any { it.id == id } } ||
                 meta.audio?.clips?.any { it.id == id } == true
@@ -4176,6 +4519,9 @@ class StudioViewModel(
                     tracks = tracks,
                     audio = audio,
                     selectedClipId = selected,
+                    selectedTrackId = selectedTrackId,
+                    canAddTrack = meta.tracks.size < VideoEdit.MAX_TRACKS &&
+                        doc.layerCount() < _state.value.layerLimit,
                     playing = previous?.playing == true && videoPlayJob != null,
                     loopPreview = previous?.loopPreview ?: false,
                     snapEnabled = previous?.snapEnabled ?: true,
@@ -4240,9 +4586,14 @@ class StudioViewModel(
         return out
     }
 
-    /** True when [id] is a frame of the open animation. */
-    private fun isAnimationFrame(id: String): Boolean =
-        doc.animation != null && Animation.frames(doc).any { it.id == id }
+    /** True when [id] is a frame layer of the animation or of any drawing track in video mode. */
+    private fun isAnimationFrame(id: String): Boolean {
+        val video = doc.video
+        if (video != null) {
+            return video.tracks.any { track -> Video.frames(doc, track).any { it.id == id } }
+        }
+        return doc.animation != null && Animation.frames(doc).any { it.id == id }
+    }
 
     override fun setPaperColor(color: Rgba) {
         doc.paper.color = color
@@ -4563,7 +4914,8 @@ class StudioViewModel(
         autosaveJob = null
         commitPendingOpacity()
         // A frame group removed by undo leaves the metadata behind until redo; a save commits that removal.
-        if (doc.animation != null) Animation.normalize(doc)
+        // The selected drawing track keeps its own editing frame when the document is in video mode.
+        if (doc.animation != null) normalizeEditingAnimation(clearOrphaned = true)
         // Keep clips of a frame that an undo can still restore; the loader prunes them after a reload.
         doc.video = doc.video?.let { Video.normalize(it, doc, clearOrphaned = false) }
         if (!dirtySinceSave) {

@@ -25,6 +25,22 @@ class VideoEditTest {
 
     private fun track(meta: VideoMeta): VideoTrack = meta.tracks.single()
 
+    /** Adds a second frame group with [frames] layers and returns its track, without touching [meta]. */
+    private fun secondTrack(doc: Document, frames: Int = 2, name: String = "Drawing 2"): VideoTrack {
+        val group = GroupNode("frames-b", "Frames B")
+        doc.root.add(group)
+        repeat(frames) { i -> group.add(doc.newRasterLayer("B${i + 1}")) }
+        val layers = group.children.filterIsInstance<RasterLayer>()
+        return VideoTrack(
+            id = "vtrack-b",
+            name = name,
+            groupId = group.id,
+            clips = layers.mapIndexed { i, layer ->
+                VideoClip("b-$i", layer.id, i * 5L, 5L)
+            },
+        )
+    }
+
     private fun assertInvariant(meta: VideoMeta, buttJointed: Boolean = true) {
         val clips = track(meta).clips
         assertEquals(clips.sortedBy { it.startTick }, clips, "clips must stay sorted")
@@ -248,4 +264,145 @@ class VideoEditTest {
             VideoEdit.edges(track, excludeId = track.clips[1].id),
         )
     }
+
+    @Test
+    fun addTrackAddsASecondTrackOnlyOnce() {
+        val doc = animationDoc()
+        val meta = baseMeta(doc)
+        val second = secondTrack(doc)
+
+        val added = VideoEdit.addTrack(meta, second)
+        assertEquals(listOf(track(meta).id, second.id), added.tracks.map { it.id })
+        assertEquals(2, added.tracks.size)
+        assertEquals(second.clips, added.tracks[1].clips)
+        // The source block is untouched (copy-on-write).
+        assertEquals(1, meta.tracks.size)
+
+        // More than two is rejected, and a track must own a unique id and frame group.
+        val third = second.copy(id = "vtrack-c", groupId = "frames-c", name = "Drawing 3")
+        assertEquals(added, VideoEdit.addTrack(added, third))
+        assertEquals(added, VideoEdit.addTrack(added, second.copy(groupId = "frames-c")))
+        assertEquals(added, VideoEdit.addTrack(added, second.copy(id = "vtrack-c")))
+        assertEquals(VideoEdit.MAX_TRACKS, added.tracks.size)
+    }
+
+    @Test
+    fun deleteTrackKeepsTheOtherTrackAndItsClips() {
+        val doc = animationDoc()
+        val first = track(baseMeta(doc))
+        val second = secondTrack(doc)
+        val meta = VideoEdit.addTrack(baseMeta(doc), second)
+
+        val deleted = VideoEdit.deleteTrack(meta, second.id)
+        assertEquals(listOf(first.id), deleted.tracks.map { it.id })
+        assertEquals(first.clips, deleted.tracks.single().clips)
+
+        val last = VideoEdit.deleteTrack(deleted, first.id)
+        assertTrue(last.tracks.isEmpty())
+        // Unknown tracks and repeated deletion change nothing.
+        assertEquals(meta, VideoEdit.deleteTrack(meta, "missing"))
+        assertEquals(deleted, VideoEdit.deleteTrack(deleted, second.id))
+    }
+
+    @Test
+    fun clipEditsStayInsideTheirTrack() {
+        val doc = animationDoc()
+        val firstMeta = baseMeta(doc)
+        val first = track(firstMeta)
+        val second = secondTrack(doc)
+        val meta = VideoEdit.addTrack(firstMeta, second)
+
+        // An added clip belongs to the target track only.
+        val added = VideoEdit.add(meta, second.id, second.clips[0].id, "hold", second.clips[0].frameId, 5, 0)
+        assertEquals(first.clips, trackOf(added, first.id).clips)
+        assertEquals(listOf("b-0", "hold", "b-1"), trackOf(added, second.id).clips.map { it.id })
+        assertEquals(second.id, VideoEdit.trackOfClip(added, "hold")?.id)
+
+        // Delete, trim and move of a second-track clip leave the first track alone.
+        val deleted = VideoEdit.delete(added, second.id, "hold")
+        assertEquals(first.clips, trackOf(deleted, first.id).clips)
+        val trimmed = VideoEdit.trim(added, second.id, "b-0", 8)
+        assertEquals(first.clips, trackOf(trimmed, first.id).clips)
+        assertEquals(8L, trackOf(trimmed, second.id).clips.first().durationTicks)
+        val moved = VideoEdit.move(added, second.id, "b-1", 0)
+        assertEquals(first.clips, trackOf(moved, first.id).clips)
+        assertEquals(listOf("b-1", "b-0", "hold"), trackOf(moved, second.id).clips.map { it.id })
+
+        // Editing the first track leaves the second one alone.
+        val firstTrimmed = VideoEdit.trim(added, first.id, first.clips[0].id, 3)
+        assertEquals(trackOf(added, second.id).clips, trackOf(firstTrimmed, second.id).clips)
+        // A clip is owned by exactly one track.
+        assertEquals(first.id, VideoEdit.trackOfClip(firstTrimmed, first.clips[0].id)?.id)
+    }
+
+    @Test
+    fun normalizeKeepsBothTracksAndPrunesOnlyOrphanedOnLoad() {
+        val doc = animationDoc()
+        val firstMeta = baseMeta(doc)
+        val second = secondTrack(doc)
+        val meta = VideoEdit.addTrack(firstMeta, second).let { two ->
+            two.copy(
+                tracks = listOf(
+                    two.tracks[0].copy(
+                        clips = two.tracks[0].clips + VideoClip("late", two.tracks[0].clips[0].frameId, 20, 10),
+                    ),
+                    two.tracks[1],
+                ),
+            )
+        }
+
+        val normalized = assertNotNull(Video.normalize(meta, doc, clearOrphaned = false))
+        assertEquals(2, normalized.tracks.size)
+        assertEquals(listOf("late"), normalized.tracks[0].clips.drop(3).map { it.id })
+        assertEquals(second.clips, normalized.tracks[1].clips)
+        assertEquals(30L, Video.durationTicks(normalized))
+
+        // A track whose group vanished is kept while editing and dropped on load; the other track survives.
+        val broken = meta.copy(tracks = listOf(meta.tracks[0], meta.tracks[1].copy(groupId = "gone")))
+        assertEquals(2, Video.normalize(broken, doc, clearOrphaned = false)!!.tracks.size)
+        val loaded = assertNotNull(Video.normalize(broken, doc, clearOrphaned = true))
+        assertEquals(listOf(meta.tracks[0].id), loaded.tracks.map { it.id })
+    }
+
+    @Test
+    fun visibleFramesCompositesBothTracksAndKeepsGapsBlank() {
+        val doc = animationDoc()
+        val first = track(baseMeta(doc))
+        val second = secondTrack(doc)
+        val meta = VideoEdit.addTrack(VideoMeta(tracks = listOf(first)), second)
+        val firstFrame = first.clips[0].frameId!!
+        val secondFrame = second.clips[0].frameId!!
+
+        val both = Video.visibleFrames(doc, meta, 0)
+        assertEquals(true, both[firstFrame])
+        assertEquals(true, both[secondFrame])
+        assertEquals(true, both[first.groupId])
+        assertEquals(true, both[second.groupId])
+
+        // Hide track 1: its frame and group are hidden, track 2 stays visible.
+        val hiddenFirst = Video.visibleFrames(
+            doc,
+            meta.copy(tracks = listOf(meta.tracks[0].copy(visible = false), meta.tracks[1])),
+            0,
+        )
+        assertEquals(false, hiddenFirst[firstFrame])
+        assertEquals(false, hiddenFirst[first.groupId])
+        assertEquals(true, hiddenFirst[secondFrame])
+
+        // A gap on track 2 does not leak the first track's frame into it.
+        val gapped = Video.visibleFrames(
+            doc,
+            meta.copy(
+                tracks = listOf(
+                    meta.tracks[0],
+                    meta.tracks[1].copy(clips = listOf(VideoClip("gap", null, 0, 5))),
+                ),
+            ),
+            0,
+        )
+        assertEquals(true, gapped[firstFrame])
+        assertEquals(false, gapped[secondFrame])
+    }
+
+    private fun trackOf(meta: VideoMeta, id: String): VideoTrack = meta.tracks.first { it.id == id }
 }

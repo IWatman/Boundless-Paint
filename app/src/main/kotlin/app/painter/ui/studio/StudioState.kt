@@ -229,10 +229,13 @@ data class VideoAudioUi(
 
 /**
  * Video timeline state of the open document. [durationTicks] is the last tick covered by a drawing clip and
- * [playheadTick] is clamped to it. [playing], [loopPreview] and [snapEnabled] are preview-only switches: they
- * are not persisted in the manifest. [audioPreparing] is the offline mix of the audio track; while it runs the
- * preview plays frames silently and the panel says so. [recordingAudio]/[recordingMs] belong to the microphone
- * recording, [audioMessage] is a short localized import/record failure.
+ * [playheadTick] is clamped to it. [selectedTrackId] is the drawing track that receives new clips and whose
+ * frames the animation panel edits; [canAddTrack] is false at [app.painter.core.doc.VideoEdit.MAX_TRACKS] or
+ * when one more frame layer would exceed the document layer limit. [playing], [loopPreview] and [snapEnabled]
+ * are preview-only switches: they are not persisted in the manifest. [audioPreparing] is the offline mix of the
+ * audio track; while it runs the preview plays frames silently and the panel says so.
+ * [recordingAudio]/[recordingMs] belong to the microphone recording, [audioMessage] is a short localized
+ * import/record failure.
  */
 @Immutable
 data class VideoUi(
@@ -241,6 +244,8 @@ data class VideoUi(
     val tracks: List<VideoTrackUi> = emptyList(),
     val audio: VideoAudioUi? = null,
     val selectedClipId: String? = null,
+    val selectedTrackId: String? = null,
+    val canAddTrack: Boolean = false,
     val playing: Boolean = false,
     val loopPreview: Boolean = false,
     val snapEnabled: Boolean = true,
@@ -740,6 +745,28 @@ interface StudioActions {
 
     /** Shows or hides one drawing track; a hidden track renders nothing. */
     fun setVideoTrackVisible(id: String, visible: Boolean) {}
+
+    /**
+     * Marks [id] as the drawing track that receives new clips and whose frames the animation panel edits.
+     * Switching tracks restores the frame each track had selected. Preview keeps running; the panel's own
+     * preview is unaffected until it closes.
+     */
+    fun selectVideoTrack(id: String) {}
+
+    /**
+     * Adds a second drawing track with a new frame group, one frame and a one-second clip, and selects it.
+     * Limited to [app.painter.core.doc.VideoEdit.MAX_TRACKS] tracks and the document layer limit. Its frame
+     * layers are ordinary layers, so the operation is not undoable (video metadata is not undoable,
+     * spec/VIDEO-MODE.md §1).
+     */
+    fun addVideoTrack() {}
+
+    /**
+     * Removes drawing track [id] and its clips. The frame group and its layers stay in the document, hidden, so
+     * the artwork is not destroyed; delete the group in the layer panel to discard it. Disabled for the last
+     * track.
+     */
+    fun deleteVideoTrack(id: String) {}
 
     /** Opens the system audio picker; the chosen file is copied to `audio/` and inserted at the playhead. */
     fun importAudio() {}

@@ -196,17 +196,22 @@
 - Layer limit: the export dialog derives `LayerLimit.maxLayers` from the selected output size and the 40% heap
   budget (6 layers at 4K/512 MB, 24 at 1080p/512 MB) and explains the limit when the timeline references more
   frame layers. The current canvas limit is checked separately and shown as an error when exceeded.
-- Second drawing track: **not shipped**. The core model, `Video.visibleFrames`, compositor and exporter already
-  composite every visible track, and `VideoTest` now covers two tracks, but the UI to create and manage a second
-  frame group would also need animation-panel and layer-row work. The shipped UI remains one drawing track and
-  the format is ready for a later slice.
-- Tests: `VideoExportPlanTest` (19, matrix/4K30/memory/pixel cap), `VideoTest` +1 multi-track visibility,
-  `LayerLimitTest` +1 derived 4K/1080p limits; instrumented `VideoExporter4KTest` runs only when the selected
-  encoder advertises 4K and the heap passes the guard, otherwise it is skipped. The `painter_tab` AVD skipped
-  it, so no 4K hardware result is claimed.
+- Second drawing track: **shipped**. The timeline adds a second track with its own frame group, one frame and an
+  initial one-second clip, shows both lanes, edits clips on the selected track, toggles visibility per track and
+  deletes a track without destroying its frame layers (the group and frames stay in the layer list, hidden). The
+  animation panel selects the editing track and restores that track's current frame; painting during video
+  preview selects the painted frame's track. Track add/delete is timeline metadata and is not undoable. The UI
+  caps creation at two tracks; the model, compositor and exporter remain N-track and composite every visible
+  track.
+- Tests: `VideoExportPlanTest` (19, matrix/4K30/memory/pixel cap), `VideoTest` multi-track visibility,
+  `VideoEditTest` +5 (add/delete track, per-track clip edits, two-track cap/normalization, two-track visibility),
+  `VideoProjectIOTest` +2 (two-track round-trip/saveDelta, one-track manifest) and `SnapshotTest` +1 (two
+  tracks); `LayerLimitTest` +1 derived 4K/1080p limits; instrumented `VideoExporter4KTest` runs only when the
+  selected encoder advertises 4K and the heap passes the guard, otherwise it is skipped. The `painter_tab` AVD
+  skipped it, so no 4K hardware result is claimed.
 - Not measured: 4K/60 and 4K/30 throughput on the reference tablet; the instrumented 4K smoke is a capability
   check, not a benchmark. The 1080p60 timing remains unmeasured.
-- M5 now: **831 JVM tests** (723 core, 108 app).
+- M5 now: **839 JVM tests** (730 core, 109 app).
 
 ## M3: done (2026-10-31)
 ### Filters (2026-10-31)
