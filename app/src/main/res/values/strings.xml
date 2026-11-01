@@ -685,6 +685,27 @@
     <string name="animation_once">Play once</string>
     <string name="animation_frame_label">Frame %1$d</string>
     <string name="animation_frame_number">%1$d</string>
+    <!-- Video mode -->
+    <string name="video_title">Video</string>
+    <string name="video_fps">60 fps</string>
+    <string name="video_track_drawing">Drawing</string>
+    <string name="video_mode_menu">Video mode…</string>
+    <string name="video_timeline_menu">Video timeline</string>
+    <string name="video_frames_action">Frames…</string>
+    <string name="video_clip_blank">Blank</string>
+    <string name="video_clip_missing_frame">Frame missing</string>
+    <string name="video_track_visible">Track visible</string>
+    <string name="video_track_hidden">Track hidden</string>
+    <string name="video_not_available_hint">Start an animation first (Options → Animation).</string>
+    <string name="video_convert_title">Video mode</string>
+    <string name="video_convert_message">%1$d frames become a 60 fps timeline. Each frame keeps its duration from the animation. Video mode is one-way in the UI; the frame layers are kept.</string>
+    <string name="video_convert_pingpong">Ping-pong is expanded into a linear sequence.</string>
+    <string name="video_convert_confirm">Convert</string>
+    <string name="video_play_unavailable">Playback is not available yet</string>
+    <string name="video_readonly_note">Read-only timeline. Playback, editing and export arrive in later updates.</string>
+    <string name="video_time">%1$s / %2$s</string>
+    <string name="video_scrub">Timeline playhead</string>
+    <string name="video_clip_accessible">%1$s, %2$s</string>
     <string name="drive_title">Google Drive</string>
     <string name="drive_intro">Back up projects and save finished drawings to the Boundless Paint folder in your Google Drive. The app can only access files it creates.</string>
     <string name="drive_connect">Connect Google Drive</string>

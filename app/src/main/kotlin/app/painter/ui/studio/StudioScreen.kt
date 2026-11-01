@@ -30,12 +30,14 @@ import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Layers
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.Tune
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -51,6 +53,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
 import app.painter.R
+import app.painter.core.doc.AnimationPlayback
 import app.painter.core.perspective.PerspectiveType
 import app.painter.core.shape.ShapeTool
 import app.painter.core.symmetry.MirrorAxes
@@ -81,6 +84,7 @@ fun StudioScreen(
     var resizeOpen by remember { mutableStateOf(false) }
     var straightenOpen by remember { mutableStateOf(false) }
     var timelapseOpen by remember { mutableStateOf(false) }
+    var videoConfirmOpen by remember { mutableStateOf(false) }
     if (filtersOpen) {
         FilterDialog(
             ink = state.color,
@@ -164,6 +168,39 @@ fun StudioScreen(
     if (timelapseOpen) {
         TimelapseDialog(state = state, actions = actions, onDismiss = { timelapseOpen = false })
     }
+    if (videoConfirmOpen) {
+        val frames = state.animation?.frames?.size ?: 0
+        AlertDialog(
+            onDismissRequest = { videoConfirmOpen = false },
+            title = { Text(stringResource(R.string.video_convert_title)) },
+            text = {
+                Column {
+                    Text(stringResource(R.string.video_convert_message, frames))
+                    if (state.animation?.playback == AnimationPlayback.PINGPONG) {
+                        Text(
+                            stringResource(R.string.video_convert_pingpong),
+                            modifier = Modifier.padding(top = 8.dp),
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        videoConfirmOpen = false
+                        actions.startVideoMode()
+                    },
+                ) {
+                    Text(stringResource(R.string.video_convert_confirm))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { videoConfirmOpen = false }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            },
+        )
+    }
     Box(
         Modifier
             .fillMaxSize()
@@ -197,6 +234,7 @@ fun StudioScreen(
                 onResize = { resizeOpen = true },
                 onStraighten = { straightenOpen = true },
                 onTimelapse = { timelapseOpen = true },
+                onVideo = { videoConfirmOpen = true },
                 modifier = Modifier
                     .align(Alignment.TopStart)
                     .fillMaxWidth()
@@ -333,6 +371,17 @@ fun StudioScreen(
 
             if (state.animationPanelOpen) {
                 AnimationPanel(
+                    state = state,
+                    actions = actions,
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                        .padding(start = 8.dp, end = 8.dp, bottom = 64.dp),
+                )
+            }
+
+            if (state.videoPanelOpen && state.video != null) {
+                VideoPanel(
                     state = state,
                     actions = actions,
                     modifier = Modifier
@@ -739,6 +788,7 @@ private fun StudioTopBar(
     onResize: () -> Unit,
     onStraighten: () -> Unit,
     onTimelapse: () -> Unit,
+    onVideo: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Row(modifier, verticalAlignment = Alignment.CenterVertically) {
@@ -1004,6 +1054,34 @@ private fun StudioTopBar(
                         DropdownMenuItem(
                             text = { Text(stringResource(R.string.animation_title)) },
                             onClick = { menuOpen = false; actions.toggleAnimationPanel() },
+                        )
+                        val canStartVideo = state.animation?.frames?.isNotEmpty() == true
+                        DropdownMenuItem(
+                            text = {
+                                Column {
+                                    Text(
+                                        stringResource(
+                                            if (state.video == null) {
+                                                R.string.video_mode_menu
+                                            } else {
+                                                R.string.video_timeline_menu
+                                            },
+                                        ),
+                                    )
+                                    if (state.video == null && !canStartVideo) {
+                                        Text(
+                                            stringResource(R.string.video_not_available_hint),
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    }
+                                }
+                            },
+                            enabled = state.video != null || canStartVideo,
+                            onClick = {
+                                menuOpen = false
+                                if (state.video == null) onVideo() else actions.toggleVideoPanel()
+                            },
                         )
                         DropdownMenuItem(
                             text = { Text(stringResource(R.string.manuscript_guides)) },

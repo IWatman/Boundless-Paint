@@ -179,6 +179,60 @@ data class AnimationUi(
     val onion: List<OnionFrameUi> = emptyList(),
 )
 
+/** One clip of the read-only video timeline. [missing] marks a clip whose frame layer is gone. */
+@Immutable
+data class VideoClipUi(
+    val id: String,
+    val frameId: String?,
+    val startTick: Long,
+    val durationTicks: Long,
+    val label: String,
+    val thumbnail: ImageBitmap?,
+    val missing: Boolean,
+)
+
+/** One drawing track of the video timeline. */
+@Immutable
+data class VideoTrackUi(
+    val id: String,
+    val name: String,
+    val visible: Boolean,
+    val clips: List<VideoClipUi>,
+)
+
+/** One audio clip of the video timeline (S1 only carries the persisted data; audio ships in S4). */
+@Immutable
+data class AudioClipUi(
+    val id: String,
+    val name: String,
+    val startTick: Long,
+    val durationTicks: Long,
+    val volume: Float,
+    val missing: Boolean,
+)
+
+/** Audio track of the video timeline. */
+@Immutable
+data class VideoAudioUi(
+    val muted: Boolean,
+    val volume: Float,
+    val masterVolume: Float,
+    val clips: List<AudioClipUi>,
+)
+
+/**
+ * Read-only video timeline state of the open document. [durationTicks] is the last tick covered by a drawing
+ * clip and [playheadTick] is clamped to it. Selection only highlights a clip; there is no editor yet.
+ */
+@Immutable
+data class VideoUi(
+    val durationTicks: Long = 0,
+    val playheadTick: Long = 0,
+    val tracks: List<VideoTrackUi> = emptyList(),
+    val audio: VideoAudioUi? = null,
+    val selectedClipId: String? = null,
+)
+
 /**
  * Complete state rendered by [StudioScreen]. [brushSize] is the diameter in document pixels,
  * opacity/flow/hardness are 0..1. [layers] are in display order (top first).
@@ -206,6 +260,10 @@ data class StudioUiState(
     val animation: AnimationUi? = null,
     /** The bottom animation timeline is open (it also offers to start an animation). */
     val animationPanelOpen: Boolean = false,
+    /** Video timeline of the document, null when the document has no video block. */
+    val video: VideoUi? = null,
+    /** The bottom video timeline is open; the animation panel is closed while it is. */
+    val videoPanelOpen: Boolean = false,
     /** Stylus settings the [StylusSettingsPanel] shows (spec/tools/m2-brush.md §4.3). */
     val stylusSettings: StylusSettings = StylusSettings(),
     /** Pressure calibration of the pen the [StylusSettingsPanel] reports (spec/tools/m2-brush.md §4.3). */
@@ -559,6 +617,21 @@ interface StudioActions {
 
     /** Number of previous and following frames shown by the onion skin, each clamped to 0..4. */
     fun setAnimationOnionFrames(before: Int, after: Int) {}
+
+    /**
+     * Converts the animation into a 60 fps video timeline and opens the video panel. Does nothing when the
+     * document has no animation with frames; opening it closes the animation panel.
+     */
+    fun startVideoMode() {}
+
+    /** Opens or closes the read-only video timeline; opening it closes the animation panel. */
+    fun toggleVideoPanel() {}
+
+    /** Moves the video playhead to [tick], clamped to the timeline. UI state only: no history entry. */
+    fun seekVideo(tick: Long) {}
+
+    /** Selects a clip of the video timeline for highlighting; S1 has no clip editor yet. */
+    fun selectVideoClip(id: String?) {}
 
     fun addLayer()
 

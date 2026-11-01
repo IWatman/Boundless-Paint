@@ -31,6 +31,7 @@ import app.painter.core.doc.GroupNode
 import app.painter.core.doc.Node
 import app.painter.core.doc.RasterLayer
 import app.painter.core.doc.VectorLayer
+import app.painter.core.doc.Video
 import app.painter.core.doc.effectivelyLocked
 import app.painter.core.doc.newNodeId
 import app.painter.core.fill.BucketFill
@@ -159,6 +160,7 @@ import app.painter.ui.home.ProjectCardUi
 import app.painter.ui.studio.AdjustEditorUi
 import app.painter.ui.studio.AnimationFrameUi
 import app.painter.ui.studio.AnimationUi
+import app.painter.ui.studio.AudioClipUi
 import app.painter.ui.studio.BrushCategoryUi
 import app.painter.ui.studio.BrushItemUi
 import app.painter.ui.studio.BrushModeUi
@@ -185,6 +187,10 @@ import app.painter.ui.studio.StudioUiState
 import app.painter.ui.studio.ShapeUi
 import app.painter.ui.studio.SymmetryUi
 import app.painter.ui.studio.TransformUi
+import app.painter.ui.studio.VideoAudioUi
+import app.painter.ui.studio.VideoClipUi
+import app.painter.ui.studio.VideoTrackUi
+import app.painter.ui.studio.VideoUi
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -489,6 +495,8 @@ class StudioViewModel(
                 adjustmentEditor = null,
                 cloneSource = null,
                 cloneOffset = null,
+                video = null,
+                videoPanelOpen = false,
                 symmetry = symmetryUi(),
                 ruler = rulerUi(),
                 ellipse = ellipseUi(),
@@ -2602,7 +2610,58 @@ class StudioViewModel(
     // ---- animation ----
 
     override fun toggleAnimationPanel() {
-        _state.update { it.copy(animationPanelOpen = !it.animationPanelOpen) }
+        val open = !_state.value.animationPanelOpen
+        // One bottom timeline at a time: opening the animation closes the video panel.
+        _state.update {
+            it.copy(
+                animationPanelOpen = open,
+                videoPanelOpen = if (open) false else it.videoPanelOpen,
+            )
+        }
+    }
+
+    /**
+     * Converts the animation into a video timeline the first time and opens the read-only panel afterwards.
+     * The animation metadata and frames are kept; only the video block is added.
+     */
+    override fun startVideoMode() {
+        if (doc.video == null) {
+            if (doc.animation == null || Animation.frames(doc).isEmpty()) return
+            commitDocumentEdits()
+            val meta = Video.fromAnimation(doc, uiString(R.string.video_track_drawing)) ?: return
+            doc.video = meta
+            markDirty()
+        }
+        _state.update { it.copy(animationPanelOpen = false, videoPanelOpen = true) }
+        refreshVideo()
+    }
+
+    override fun toggleVideoPanel() {
+        if (doc.video == null) {
+            _state.update { it.copy(videoPanelOpen = false) }
+            return
+        }
+        val open = !_state.value.videoPanelOpen
+        // One bottom timeline at a time: opening the video closes the animation panel.
+        _state.update {
+            it.copy(
+                videoPanelOpen = open,
+                animationPanelOpen = if (open) false else it.animationPanelOpen,
+            )
+        }
+        if (open) refreshVideo()
+    }
+
+    override fun seekVideo(tick: Long) {
+        val video = _state.value.video ?: return
+        val clamped = tick.coerceIn(0L, video.durationTicks)
+        if (video.playheadTick == clamped) return
+        // Scrubbing is UI state only: no history entry, no timelapse frame and no canvas change.
+        _state.update { it.copy(video = it.video?.copy(playheadTick = clamped)) }
+    }
+
+    override fun selectVideoClip(id: String?) {
+        _state.update { it.copy(video = it.video?.copy(selectedClipId = id)) }
     }
 
     /**
@@ -2875,6 +2934,85 @@ class StudioViewModel(
                     onion = onion,
                 ),
                 activeLayerId = doc.activeId,
+            )
+        }
+    }
+
+    /**
+     * Publishes the read-only video timeline. The block is normalized with `clearOrphaned = false`, so a
+     * frame deleted by an undo that can still restore it keeps its clip ("Frame missing") instead of
+     * silently dropping it. No history entry, dirty flag or canvas change is made here.
+     */
+    private fun refreshVideo() {
+        val current = doc.video
+        if (current == null) {
+            _state.update { it.copy(video = null, videoPanelOpen = false) }
+            return
+        }
+        val meta = Video.normalize(current, doc, clearOrphaned = false)
+        if (meta == null) {
+            doc.video = null
+            _state.update { it.copy(video = null, videoPanelOpen = false) }
+            return
+        }
+        if (meta != current) doc.video = meta
+        val duration = Video.durationTicks(meta)
+        val previous = _state.value.video
+        val playhead = (previous?.playheadTick ?: 0L).coerceIn(0L, duration)
+        val selected = previous?.selectedClipId?.takeIf { id ->
+            meta.tracks.any { track -> track.clips.any { it.id == id } }
+        }
+        val tracks = meta.tracks.map { track ->
+            val frames = Video.frames(doc, track)
+            VideoTrackUi(
+                id = track.id,
+                name = track.name,
+                visible = track.visible,
+                clips = track.clips.map { clip ->
+                    val frame = clip.frameId?.let { id -> frames.firstOrNull { it.id == id } }
+                    VideoClipUi(
+                        id = clip.id,
+                        frameId = clip.frameId,
+                        startTick = clip.startTick,
+                        durationTicks = clip.durationTicks,
+                        label = when {
+                            clip.frameId == null -> uiString(R.string.video_clip_blank)
+                            frame == null -> uiString(R.string.video_clip_missing_frame)
+                            else -> frame.name
+                        },
+                        thumbnail = frame?.let(::thumbnailOf),
+                        missing = clip.frameId != null && frame == null,
+                    )
+                },
+            )
+        }
+        val audio = meta.audio?.let { track ->
+            VideoAudioUi(
+                muted = track.muted,
+                volume = track.volume,
+                masterVolume = track.masterVolume,
+                clips = track.clips.map { clip ->
+                    // The file lives in the project directory; probing it arrives with the audio slice (S4).
+                    AudioClipUi(
+                        id = clip.id,
+                        name = clip.name,
+                        startTick = clip.startTick,
+                        durationTicks = clip.durationTicks,
+                        volume = clip.volume,
+                        missing = false,
+                    )
+                },
+            )
+        }
+        _state.update {
+            it.copy(
+                video = VideoUi(
+                    durationTicks = duration,
+                    playheadTick = playhead,
+                    tracks = tracks,
+                    audio = audio,
+                    selectedClipId = selected,
+                ),
             )
         }
     }
@@ -3225,6 +3363,8 @@ class StudioViewModel(
         commitPendingOpacity()
         // A frame group removed by undo leaves the metadata behind until redo; a save commits that removal.
         if (doc.animation != null) Animation.normalize(doc)
+        // Keep clips of a frame that an undo can still restore; the loader prunes them after a reload.
+        doc.video = doc.video?.let { Video.normalize(it, doc, clearOrphaned = false) }
         if (!dirtySinceSave) {
             // Autosave may already have written the latest state; Home still needs fresh thumbnails. An explicit
             // save still backs the project up: the usual case is that autosave emptied the dirty flag first.
@@ -4137,6 +4277,7 @@ class StudioViewModel(
         refreshSelection()
         // Frames of an animation are ordinary layers: restoring their visibility first keeps the rows in sync.
         refreshAnimation()
+        refreshVideo()
         val rows = ArrayList<LayerUi>()
         fun visit(group: GroupNode, depth: Int) {
             for (n in group.children.asReversed()) {

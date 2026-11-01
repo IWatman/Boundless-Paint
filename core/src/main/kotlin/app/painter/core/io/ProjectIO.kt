@@ -8,6 +8,7 @@ import app.painter.core.doc.AdjustmentLayer
 import app.painter.core.doc.Animation
 import app.painter.core.doc.AnimationMeta
 import app.painter.core.doc.AnimationPlayback
+import app.painter.core.doc.AudioClip
 import app.painter.core.doc.ColorTag
 import app.painter.core.doc.Document
 import app.painter.core.doc.EditTarget
@@ -18,6 +19,11 @@ import app.painter.core.doc.Node
 import app.painter.core.doc.ProjectType
 import app.painter.core.doc.RasterLayer
 import app.painter.core.doc.VectorLayer
+import app.painter.core.doc.Video
+import app.painter.core.doc.VideoAudio
+import app.painter.core.doc.VideoClip
+import app.painter.core.doc.VideoMeta
+import app.painter.core.doc.VideoTrack
 import app.painter.core.vector.VectorCodec
 import app.painter.core.vector.VectorRenderService
 import app.painter.core.raster.MaskGrid
@@ -219,6 +225,8 @@ object ProjectIO {
         }
         // Drops the block when its frame group is gone and restores "one visible frame" after a load.
         Animation.normalize(doc)
+        // Load prunes broken references: there is no undo history after a reload.
+        doc.video = m.video?.let { dto -> Video.normalize(fromDto(dto), doc, clearOrphaned = true) }
         return doc
     }
 
@@ -606,6 +614,51 @@ object ProjectIO {
                 onionBefore = a.onionBefore,
                 onionAfter = a.onionAfter,
                 frameGroupId = a.frameGroupId,
+            )
+        },
+        video = doc.video?.let(::toDto),
+    )
+
+    private fun toDto(v: VideoMeta) = VideoDto(
+        tracks = v.tracks.map { t ->
+            VideoTrackDto(
+                id = t.id,
+                name = t.name,
+                groupId = t.groupId,
+                visible = t.visible,
+                clips = t.clips.map { c -> VideoClipDto(c.id, c.frameId, c.startTick, c.durationTicks) },
+            )
+        },
+        audio = v.audio?.let { a ->
+            VideoAudioDto(
+                clips = a.clips.map { c ->
+                    AudioClipDto(c.id, c.file, c.name, c.startTick, c.durationTicks, c.sourceOffsetTicks, c.volume)
+                },
+                volume = a.volume,
+                masterVolume = a.masterVolume,
+                muted = a.muted,
+            )
+        },
+    )
+
+    private fun fromDto(v: VideoDto) = VideoMeta(
+        tracks = v.tracks.map { t ->
+            VideoTrack(
+                id = t.id,
+                name = t.name,
+                groupId = t.groupId,
+                visible = t.visible,
+                clips = t.clips.map { c -> VideoClip(c.id, c.frameId, c.startTick, c.durationTicks) },
+            )
+        },
+        audio = v.audio?.let { a ->
+            VideoAudio(
+                clips = a.clips.map { c ->
+                    AudioClip(c.id, c.file, c.name, c.startTick, c.durationTicks, c.sourceOffsetTicks, c.volume)
+                },
+                volume = a.volume,
+                masterVolume = a.masterVolume,
+                muted = a.muted,
             )
         },
     )

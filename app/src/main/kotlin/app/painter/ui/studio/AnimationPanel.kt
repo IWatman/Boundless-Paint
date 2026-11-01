@@ -30,6 +30,7 @@ import androidx.compose.material.icons.outlined.Movie
 import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material.icons.outlined.Remove
 import androidx.compose.material.icons.outlined.Stop
+import androidx.compose.material.icons.outlined.Videocam
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
@@ -83,6 +84,16 @@ internal fun AnimationPanel(
                         stringResource(R.string.animation_onion_skin),
                         checked = animation.onionSkin,
                         onCheckedChange = actions::setAnimationOnionSkin,
+                    )
+                    PainterIconButton(
+                        Icons.Outlined.Videocam,
+                        stringResource(
+                            if (state.video == null) R.string.video_mode_menu else R.string.video_timeline_menu,
+                        ),
+                        onClick = {
+                            if (state.video == null) actions.startVideoMode() else actions.toggleVideoPanel()
+                        },
+                        modifier = Modifier.size(36.dp),
                     )
                 }
                 PainterIconButton(

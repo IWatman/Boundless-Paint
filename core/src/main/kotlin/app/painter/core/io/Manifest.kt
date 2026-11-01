@@ -42,6 +42,8 @@ internal data class ManifestDto(
      * live in `layers/` like every other layer and no extra file format is needed.
      */
     val animation: AnimationDto? = null,
+    /** Video timeline; absent for a document that has not been converted (spec/VIDEO-MODE.md). */
+    val video: VideoDto? = null,
 )
 
 @Serializable
@@ -54,6 +56,51 @@ internal data class AnimationDto(
     val onionAfter: Int = 1,
     /** Group whose raster children are the frames, in timeline order. */
     val frameGroupId: String = "",
+)
+
+@Serializable
+internal data class VideoDto(
+    val tracks: List<VideoTrackDto> = emptyList(),
+    val audio: VideoAudioDto? = null,
+)
+
+@Serializable
+internal data class VideoTrackDto(
+    val id: String,
+    val name: String = "",
+    /** Group whose raster children are the frames, in timeline order. */
+    val groupId: String = "",
+    val visible: Boolean = true,
+    val clips: List<VideoClipDto> = emptyList(),
+)
+
+@Serializable
+internal data class VideoClipDto(
+    val id: String,
+    /** Frame layer id, or null for a deliberate blank/pause clip. */
+    val frameId: String? = null,
+    val startTick: Long = 0,
+    val durationTicks: Long = 0,
+)
+
+@Serializable
+internal data class VideoAudioDto(
+    val clips: List<AudioClipDto> = emptyList(),
+    val volume: Float = 1f,
+    val masterVolume: Float = 1f,
+    val muted: Boolean = false,
+)
+
+@Serializable
+internal data class AudioClipDto(
+    val id: String,
+    /** Path relative to the project directory, e.g. `audio/8f3c….m4a`. */
+    val file: String = "",
+    val name: String = "",
+    val startTick: Long = 0,
+    val durationTicks: Long = 0,
+    val sourceOffsetTicks: Long = 0,
+    val volume: Float = 1f,
 )
 
 @Serializable

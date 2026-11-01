@@ -685,6 +685,27 @@
     <string name="animation_once">Один раз</string>
     <string name="animation_frame_label">Кадр %1$d</string>
     <string name="animation_frame_number">%1$d</string>
+    <!-- Video mode -->
+    <string name="video_title">Видео</string>
+    <string name="video_fps">60 кадр/с</string>
+    <string name="video_track_drawing">Рисование</string>
+    <string name="video_mode_menu">Режим видео…</string>
+    <string name="video_timeline_menu">Таймлайн видео</string>
+    <string name="video_frames_action">Кадры…</string>
+    <string name="video_clip_blank">Пусто</string>
+    <string name="video_clip_missing_frame">Кадр отсутствует</string>
+    <string name="video_track_visible">Дорожка видима</string>
+    <string name="video_track_hidden">Дорожка скрыта</string>
+    <string name="video_not_available_hint">Сначала начните анимацию (Опции → Анимация).</string>
+    <string name="video_convert_title">Режим видео</string>
+    <string name="video_convert_message">Из %1$d кадров получится таймлайн 60 кадр/с. Каждый кадр сохранит свою длительность из анимации. Режим видео необратим в интерфейсе; слои кадров сохраняются.</string>
+    <string name="video_convert_pingpong">Пинг-понг разворачивается в линейную последовательность.</string>
+    <string name="video_convert_confirm">Преобразовать</string>
+    <string name="video_play_unavailable">Воспроизведение пока недоступно</string>
+    <string name="video_readonly_note">Только просмотр. Воспроизведение, редактирование и экспорт появятся в следующих обновлениях.</string>
+    <string name="video_time">%1$s / %2$s</string>
+    <string name="video_scrub">Бегунок таймлайна</string>
+    <string name="video_clip_accessible">%1$s, %2$s</string>
     <string name="drive_title">Google Drive</string>
     <string name="drive_intro">Сохраняйте проекты и готовые рисунки в папку Boundless Paint на Google Drive. Приложение видит только созданные им файлы.</string>
     <string name="drive_connect">Подключить Google Drive</string>

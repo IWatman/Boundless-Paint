@@ -27,6 +27,8 @@ fun snapshotDocument(doc: Document, pixels: Boolean = true): Document {
     if (pixels) copy.selection.copyFrom(doc.selection)
     copy.guides = doc.guides
     copy.animation = doc.animation?.copy()
+    // VideoMeta is immutable, so sharing the reference with the live document is safe (spec/VIDEO-MODE.md §4.8).
+    copy.video = doc.video
     copy.gammaCorrect = doc.gammaCorrect
     copy.paper.color = doc.paper.color
     copy.paper.visible = doc.paper.visible
