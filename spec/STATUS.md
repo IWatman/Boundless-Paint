@@ -56,6 +56,8 @@
 - Tests: `FiltersM5GeometryTest` (11) — determinism, visible change, thread independence, selection, alpha lock,
   tile seams, cross-tile shape reads, control effects, pointillize background and codec round trips.
 - M5 so far: **647 JVM tests** (547 core, 100 app).
+- Performance baseline: [PERFORMANCE-M5.md](PERFORMANCE-M5.md) — desktop JVM A–E numbers, 4K/filter probes and
+  open risks; device measurements are still missing.
 
 ## M3: done (2026-10-31)
 ### Filters (2026-10-31)
