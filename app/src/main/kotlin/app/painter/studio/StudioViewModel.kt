@@ -41,7 +41,6 @@ import app.painter.core.fill.GradientStop
 import app.painter.core.fill.GradientType
 import app.painter.core.fill.LassoFill
 import app.painter.core.fill.PatternFill
-import app.painter.core.fill.PatternKind
 import app.painter.core.fill.PatternSpec
 import app.painter.core.fill.RefSource
 import app.painter.core.fill.Region
@@ -2229,10 +2228,11 @@ class StudioViewModel(
     }
 
     /**
-     * Pattern fill (spec §09): the pattern mask is generated on a worker over a private copy of the active
-     * layer and committed as one history step. The selection clips it and alpha lock keeps the old alpha.
+     * Pattern fill (spec §09): the two-colour pattern is generated on a worker over a private copy of the
+     * active layer and committed as one history step. The selection clips it and alpha lock keeps the old
+     * alpha.
      */
-    override fun patternFill(kind: PatternKind, tileSize: Float, rotationDeg: Float, opacity: Float) {
+    override fun patternFill(spec: PatternSpec, background: Rgba, ink: Rgba, opacity: Float) {
         if (filterBusy) return
         finishShape(commit = true)
         finishTransform(apply = true)
@@ -2246,13 +2246,11 @@ class StudioViewModel(
             it.locked = layer.locked
         }
         val selection = doc.selection.coverageOrNull()?.copy()
-        val color = _state.value.color
-        val spec = PatternSpec(kind, tileSize, rotationDeg)
         filterBusy = true
         _state.update { it.copy(filterBusy = true) }
         viewModelScope.launch {
             val patch = runCatching {
-                withContext(Dispatchers.Default) { PatternFill.patch(copy, selection, spec, color, opacity) }
+                withContext(Dispatchers.Default) { PatternFill.patch(copy, selection, spec, background, ink, opacity) }
             }.getOrNull()
             filterBusy = false
             _state.update { it.copy(filterBusy = false) }

@@ -14,10 +14,14 @@
 - Core: `core/fill/PatternFill.kt` generates six seamless procedural patterns (checks, dots, diagonal stripes,
   brick, herringbone, canvas grain) and fills a layer through the selection with alpha lock, reusing
   `maskedPatch`/`TilePatch`. The pattern cell rotates with its repeat lattice, so rotated fills stay seamless.
-- UI: Editing Tools → Pattern fill… opens a compact dialog with a preview per pattern, tile size, rotation and
-  opacity; the fill runs on a worker and lands as one undo step.
-- Tests: `PatternFillTest` (9) — wrap at tile edges for every pattern, determinism, scale/rotation, rotated
-  lattice, selection clipping, alpha lock, locked layers, opacity and undo/redo.
+  Coverage blends a background and an ink colour, with a phase offset in document pixels, a contrast curve
+  around 0.5 and an invert switch. Offsets are clamped to ±256 px; every parameter keeps the periodic lattice.
+- UI: Editing Tools → Pattern fill… opens a compact dialog with six live previews, two colour swatches backed by
+  HSB sliders, tile size, rotation, offset X/Y, contrast, invert and opacity; the fill runs on a worker and lands
+  as one undo step.
+- Tests: `PatternFillTest` (17) — wrap at tile edges for every pattern, determinism with every control, scale and
+  rotation, rotated lattice and phase-offset seams, phase shift, clamped range, contrast curve and rendered
+  direction, two-colour blend, invert, opacity, selection clipping, alpha lock, locked layers and undo/redo.
 
 ### First filter batch (2026-11-01)
 - Core: ten more destructive filters — smooth (edge-preserving), lens blur, high-pass, frosted glass/scatter,
@@ -32,7 +36,7 @@
   strength. Every control changes the result.
 - Tests: `FiltersM5Test` (8) — determinism and visible change, every control, cross-tile reads, boundary
   continuity probe, selection and alpha lock, grain variants and `FilterCodec` round trips.
-- M5 so far: **628 JVM tests** (528 core, 100 app).
+- M5 so far: **636 JVM tests** (536 core, 100 app).
 
 ## M3: done (2026-10-31)
 ### Filters (2026-10-31)

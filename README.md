@@ -37,7 +37,7 @@ The app is completely free: no subscriptions, ads, watermarks or paid features.
 - Undo and redo with buttons and gestures (two- and three-finger tap), two-finger navigation
 - Filters: blur, motion blur, pixelate, sharpen, glow, noise, find edges, chromatic aberration, fisheye, dilate, erode, zoom and spin blur, radial lines, speed lines, halftone, outline, drop shadow, outer glow and panel grid (M3)
 - More filters: smooth, lens blur, high-pass, frosted glass, grain, local contrast, bokeh, lens flare, god rays and cross filter (M5)
-- Pattern fill with six seamless procedural patterns, tile size, rotation and opacity (M5)
+- Pattern fill with six seamless procedural patterns, two colours, tile size, rotation, phase offset, contrast, invert and opacity (M5)
 - Liquify and text stamp tools, hardware-keyboard shortcuts (M3)
 - Canvas crop, canvas size with anchors, straighten; curvilinear 5-point perspective (M3)
 - Brush import/export (`.pbrush`, `.pbrushes`, MyPaint, GIMP, Krita, Procreate, PNG/JPG) (M3)

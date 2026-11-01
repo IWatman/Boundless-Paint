@@ -40,29 +40,42 @@ enum class PatternKind {
 }
 
 /**
- * Pattern fill settings: the built-in [kind], the [tileSize] in document pixels (one repeat of the motif)
- * and the [rotationDeg] of the pattern around the document origin. The pattern cell rotates with the
- * pattern, so its repeat lattice stays seamless; there is no axis-aligned tile edge to break it.
+ * Pattern fill settings: the built-in [kind], the [tileSize] in document pixels (one repeat of the motif),
+ * the [rotationDeg] of the pattern around the document origin and the phase [offsetX]/[offsetY] in document
+ * pixels. The pattern cell rotates with the pattern, so its repeat lattice stays seamless; there is no
+ * axis-aligned tile edge to break it, and a phase shift does not change the lattice either.
+ *
+ * [contrast] (0..1) pushes the coverage curve away from 0.5 before the two colours are blended, and
+ * [invert] swaps the coverage of the background and the ink. Both stay deterministic and periodic.
  */
 data class PatternSpec(
     val kind: PatternKind,
     val tileSize: Float = 64f,
     val rotationDeg: Float = 0f,
+    val offsetX: Float = 0f,
+    val offsetY: Float = 0f,
+    val contrast: Float = 0f,
+    val invert: Boolean = false,
 ) {
     companion object {
         const val MIN_TILE = 4f
         const val MAX_TILE = 2048f
+        const val MAX_OFFSET = 256f
     }
 }
 
 /**
  * Evaluates one [PatternSpec] in document space. The generator is deterministic and periodic: adding one
- * tile vector to a sample returns the same value, for every pattern and every rotation.
+ * tile vector to a sample returns the same value, for every pattern, rotation, phase and contrast.
  */
 class PatternSampler(spec: PatternSpec) {
     val kind: PatternKind = spec.kind
     val tileSize: Float = spec.tileSize.coerceIn(PatternSpec.MIN_TILE, PatternSpec.MAX_TILE)
     val rotationDeg: Float = ((spec.rotationDeg % 360f) + 360f) % 360f
+    val offsetX: Float = spec.offsetX.coerceIn(-PatternSpec.MAX_OFFSET, PatternSpec.MAX_OFFSET)
+    val offsetY: Float = spec.offsetY.coerceIn(-PatternSpec.MAX_OFFSET, PatternSpec.MAX_OFFSET)
+    val contrast: Float = spec.contrast.coerceIn(0f, 1f)
+    val invert: Boolean = spec.invert
 
     private val cosA: Float
     private val sinA: Float
@@ -77,9 +90,13 @@ class PatternSampler(spec: PatternSpec) {
 
     /** Coverage 0..1 at document point ([x], [y]). */
     fun at(x: Float, y: Float): Float {
-        val u = (cosA * x + sinA * y) / tileSize
-        val v = (-sinA * x + cosA * y) / tileSize
-        return PatternGenerator.coverage(kind, u, v, softness)
+        val dx = x - offsetX
+        val dy = y - offsetY
+        val u = (cosA * dx + sinA * dy) / tileSize
+        val v = (-sinA * dx + cosA * dy) / tileSize
+        var coverage = PatternGenerator.coverage(kind, u, v, softness)
+        if (contrast > 0f) coverage = PatternGenerator.contrastCurve(coverage, contrast)
+        return if (invert) 1f - coverage else coverage
     }
 }
 
@@ -100,6 +117,20 @@ object PatternGenerator {
             PatternKind.CANVAS -> canvas(u, v)
         }
         return value.coerceIn(0f, 1f)
+    }
+
+    /** Gain of the [PatternSpec.contrast] curve at 1: a coverage of 0.5 ± 0.025 already saturates. */
+    const val MAX_CONTRAST_GAIN = 19f
+
+    /**
+     * Pushes [coverage] away from 0.5 by [amount] 0..1: identity at 0, a near-binary threshold at 1.
+     * The curve is symmetric, so inverting before or after it gives the same result.
+     */
+    fun contrastCurve(coverage: Float, amount: Float): Float {
+        val a = amount.coerceIn(0f, 1f)
+        if (a <= 0f) return coverage.coerceIn(0f, 1f)
+        val gain = 1f + a * MAX_CONTRAST_GAIN
+        return ((coverage - 0.5f) * gain + 0.5f).coerceIn(0f, 1f)
     }
 
     /** Anti-aliased checkerboard: two cells per tile, blended around their shared edges. */
@@ -225,18 +256,26 @@ object PatternGenerator {
 
 /**
  * Pattern fill (spec §09): fills the active layer, or the selection when one is in effect, with a
- * procedural pattern mask multiplied by one color. Locked layers are left alone and alpha lock keeps the
- * original alpha, like the bucket fill.
+ * procedural pattern. The coverage blends [background] (coverage 0) and [ink] (coverage 1) before the
+ * result is composited over the layer at [opacity]. Locked layers are left alone and alpha lock keeps
+ * the original alpha, like the bucket fill.
  */
 object PatternFill {
     /**
-     * Fills [layerId] with [spec] in [color] at [opacity], clipped by the selection. Returns the patch
-     * already applied to the layer, or null when nothing changed.
+     * Fills [layerId] with [spec] between [background] and [ink] at [opacity], clipped by the selection.
+     * Returns the patch already applied to the layer, or null when nothing changed.
      */
-    fun apply(doc: Document, layerId: String, spec: PatternSpec, color: Rgba, opacity: Float): TilePatch? {
+    fun apply(
+        doc: Document,
+        layerId: String,
+        spec: PatternSpec,
+        background: Rgba,
+        ink: Rgba,
+        opacity: Float,
+    ): TilePatch? {
         val layer = doc.findNode(layerId) as? RasterLayer ?: return null
-        if (layer.locked || opacity <= 0f || color.a <= 0f) return null
-        val patch = patch(layer, doc.selection.coverageOrNull(), spec, color, opacity) ?: return null
+        if (layer.locked || opacity <= 0f || (background.a <= 0f && ink.a <= 0f)) return null
+        val patch = patch(layer, doc.selection.coverageOrNull(), spec, background, ink, opacity) ?: return null
         applyTiles(layer.pixels, patch.after)
         doc.touch()
         return patch
@@ -250,10 +289,11 @@ object PatternFill {
         layer: RasterLayer,
         selection: MaskGrid?,
         spec: PatternSpec,
-        color: Rgba,
+        background: Rgba,
+        ink: Rgba,
         opacity: Float,
     ): TilePatch? {
-        if (layer.locked || opacity <= 0f || color.a <= 0f) return null
+        if (layer.locked || opacity <= 0f || (background.a <= 0f && ink.a <= 0f)) return null
         val grid = layer.pixels
         val keys = when {
             selection == null -> IntRect(0, 0, grid.width, grid.height).tileKeys(grid.width, grid.height)
@@ -264,18 +304,22 @@ object PatternFill {
         if (keys.isEmpty()) return null
         val sampler = PatternSampler(spec)
         val o = opacity.coerceIn(0f, 1f)
-        val tiles = parallelTiles(keys) { k -> renderTile(sampler, grid.get(k), k, color, o) }
+        val tiles = parallelTiles(keys) { k -> renderTile(sampler, grid.get(k), k, background, ink, o) }
         val result = HashMap<TileKey, Tile?>(keys.size)
         for ((i, k) in keys.withIndex()) result[k] = tiles[i]
         return maskedPatch(layer, result, selection, preserveAlpha = layer.alphaLock)
     }
 
-    /** One tile of solid [color] cut by the pattern mask (normal OVER on the pixels below). */
+    /**
+     * One tile cut by the pattern, blending the two colours with straight alpha and compositing the result
+     * (multiplied by [opacity]) over the premultiplied pixels below.
+     */
     private fun renderTile(
         sampler: PatternSampler,
         before: Tile?,
         key: TileKey,
-        color: Rgba,
+        background: Rgba,
+        ink: Rgba,
         opacity: Float,
     ): Tile {
         val out = Tile()
@@ -286,16 +330,22 @@ object PatternFill {
             for (x in 0 until Tile.SIZE) {
                 val i = out.index(x, y)
                 val coverage = sampler.at(bx + x + 0.5f, by + y + 0.5f)
-                val k = (coverage * opacity * color.a).coerceIn(0f, 1f)
+                val invCoverage = 1f - coverage
+                // Premultiplied colour of the two straight-alpha pattern colours at this coverage.
+                val srcA = ((background.a * invCoverage + ink.a * coverage) * opacity).coerceIn(0f, 1f)
                 if (before != null) before.read(i, p) else p.fill(0f)
-                val inv = 1f - k
-                out.write(
-                    i,
-                    color.r * k + p[0] * inv,
-                    color.g * k + p[1] * inv,
-                    color.b * k + p[2] * inv,
-                    k + p[3] * inv,
-                )
+                val inv = 1f - srcA
+                if (srcA <= 0f) {
+                    out.write(i, p[0], p[1], p[2], p[3])
+                } else {
+                    out.write(
+                        i,
+                        (background.r * background.a * invCoverage + ink.r * ink.a * coverage) * opacity + p[0] * inv,
+                        (background.g * background.a * invCoverage + ink.g * ink.a * coverage) * opacity + p[1] * inv,
+                        (background.b * background.a * invCoverage + ink.b * ink.a * coverage) * opacity + p[2] * inv,
+                        srcA + p[3] * inv,
+                    )
+                }
             }
         }
         return out

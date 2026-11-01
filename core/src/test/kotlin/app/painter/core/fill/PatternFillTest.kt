@@ -2,10 +2,13 @@ package app.painter.core.fill
 
 import app.painter.core.color.Rgba
 import app.painter.core.doc.Document
+import app.painter.core.doc.RasterLayer
 import app.painter.core.history.History
 import app.painter.core.history.TilePatchCommand
 import app.painter.core.history.fillRect
+import app.painter.core.history.gridHash
 import app.painter.core.history.pixel
+import app.painter.core.raster.TileGrid
 import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.cos
@@ -19,6 +22,9 @@ import kotlin.test.assertTrue
 
 class PatternFillTest {
     private val kinds = PatternKind.entries
+    private val background = Rgba(1f, 0f, 0f)
+    private val ink = Rgba(0f, 0f, 1f)
+    private val clear = Rgba.TRANSPARENT
 
     @Test
     fun coverage_wrapsAtTileEdgesForEveryPattern() {
@@ -28,26 +34,47 @@ class PatternFillTest {
                 val base = PatternGenerator.coverage(kind, u, v, 0.01f)
                 assertEquals(base, PatternGenerator.coverage(kind, u + 1f, v, 0.01f), 2e-4f, "$kind wraps u at $u,$v")
                 assertEquals(base, PatternGenerator.coverage(kind, u, v + 1f, 0.01f), 2e-4f, "$kind wraps v at $u,$v")
-                assertEquals(base, PatternGenerator.coverage(kind, u - 1f, v - 1f, 0.01f), 2e-4f, "$kind wraps back at $u,$v")
+                assertEquals(
+                    base,
+                    PatternGenerator.coverage(kind, u - 1f, v - 1f, 0.01f),
+                    2e-4f,
+                    "$kind wraps back at $u,$v",
+                )
             }
         }
     }
 
     @Test
-    fun sampling_isDeterministic() {
+    fun sampling_isDeterministicWithEveryControl() {
         for (kind in kinds) {
-            val a = mask(kind, tile = 48f, rotation = 0f)
-            val b = mask(kind, tile = 48f, rotation = 0f)
-            for (i in a.indices) assertEquals(a[i], b[i], 0f, "$kind at $i")
+            val spec = PatternSpec(kind, 48f, 17f, 37.5f, -81.25f, 0.65f, invert = true)
+            assertContentEquals(mask(spec), mask(spec), "$kind is not deterministic")
         }
+    }
+
+    @Test
+    fun fillIsDeterministicWithEveryControl() {
+        val spec = PatternSpec(PatternKind.DIAGONAL_STRIPES, 48f, 23f, 37.5f, -81.25f, 0.7f, invert = true)
+        assertEquals(gridHash(fill(spec, background, ink, 0.8f)), gridHash(fill(spec, background, ink, 0.8f)))
+    }
+
+    @Test
+    fun samplingClampsOffsetsAndContrast() {
+        val sampler = PatternSampler(PatternSpec(PatternKind.CHECKS, 32f, 0f, 900f, -900f, 4f, invert = true))
+        assertEquals(PatternSpec.MAX_OFFSET, sampler.offsetX)
+        assertEquals(-PatternSpec.MAX_OFFSET, sampler.offsetY)
+        assertEquals(1f, sampler.contrast)
+        assertTrue(sampler.invert)
+        val bounded = PatternSampler(PatternSpec(PatternKind.CHECKS, 32f, 0f, 256f, -256f, 1f, invert = true))
+        assertEquals(bounded.at(10f, 20f), sampler.at(10f, 20f), 0f)
     }
 
     @Test
     fun rotationAndScaleChangeTheMask() {
         for (kind in kinds) {
-            val base = mask(kind, tile = 48f, rotation = 0f)
-            val scaled = mask(kind, tile = 24f, rotation = 0f)
-            val rotated = mask(kind, tile = 48f, rotation = 37f)
+            val base = mask(PatternSpec(kind, 48f, 0f))
+            val scaled = mask(PatternSpec(kind, 24f, 0f))
+            val rotated = mask(PatternSpec(kind, 48f, 37f))
             assertTrue(changed(base, scaled) > 10, "$kind ignores the tile size")
             assertTrue(changed(base, rotated) > 10, "$kind ignores the rotation")
         }
@@ -63,23 +90,124 @@ class PatternFillTest {
         val ex = -tile * sin(rad)
         val ey = tile * cos(rad)
         val points = listOf(3.2f to 1.7f, 17.5f to 9.25f, 30.1f to 33.3f, 41.3f to 8.9f)
+        val phases = listOf(0f to 0f, 37.5f to -81.25f, -PatternSpec.MAX_OFFSET to PatternSpec.MAX_OFFSET)
         for (kind in kinds) {
-            val sampler = PatternSampler(PatternSpec(kind, tile, rotation))
-            for ((x, y) in points) {
-                val base = sampler.at(x, y)
-                assertEquals(base, sampler.at(x + dx, y + dy), 1e-5f, "$kind does not wrap along u at $x,$y")
-                assertEquals(base, sampler.at(x + ex, y + ey), 1e-5f, "$kind does not wrap along v at $x,$y")
+            for ((offsetX, offsetY) in phases) {
+                val sampler = PatternSampler(PatternSpec(kind, tile, rotation, offsetX, offsetY, contrast = 0.35f))
+                for ((x, y) in points) {
+                    val base = sampler.at(x, y)
+                    assertEquals(base, sampler.at(x + dx, y + dy), 1e-4f, "$kind does not wrap along u at $x,$y")
+                    assertEquals(base, sampler.at(x + ex, y + ey), 1e-4f, "$kind does not wrap along v at $x,$y")
+                }
             }
         }
     }
 
     @Test
-    fun selectionClipsTheFill() {
+    fun offsetShiftsThePatternInDocumentSpace() {
+        val offsetX = 37.5f
+        val offsetY = -81.25f
+        val points = listOf(3.2f to 1.7f, 17.5f to 9.25f, 30.1f to 33.3f, 41.3f to 8.9f)
+        for (kind in kinds) {
+            val base = PatternSampler(PatternSpec(kind, 40f, 33f))
+            val shifted = PatternSampler(PatternSpec(kind, 40f, 33f, offsetX, offsetY))
+            for ((x, y) in points) {
+                assertEquals(
+                    base.at(x, y),
+                    shifted.at(x + offsetX, y + offsetY),
+                    2e-4f,
+                    "$kind ignores the phase offset at $x,$y",
+                )
+            }
+        }
+    }
+
+    @Test
+    fun contrastPushesCoverageAwayFromMidpoint() {
+        assertEquals(0.2f, PatternGenerator.contrastCurve(0.2f, 0f), 1e-6f)
+        assertEquals(0.5f, PatternGenerator.contrastCurve(0.5f, 1f), 1e-6f)
+        assertTrue(PatternGenerator.contrastCurve(0.2f, 0.5f) < 0.2f)
+        assertTrue(PatternGenerator.contrastCurve(0.8f, 0.5f) > 0.8f)
+        assertEquals(0f, PatternGenerator.contrastCurve(0.4f, 1f), 1e-6f)
+        assertEquals(1f, PatternGenerator.contrastCurve(0.6f, 1f), 1e-6f)
+    }
+
+    @Test
+    fun contrastAndInvertChangeTheSampledCoverage() {
+        val points = 40
+        for (kind in kinds) {
+            val base = PatternSampler(PatternSpec(kind, 64f, 11f))
+            val contrasted = PatternSampler(PatternSpec(kind, 64f, 11f, contrast = 0.65f))
+            val inverted = PatternSampler(PatternSpec(kind, 64f, 11f, invert = true))
+            var changedByContrast = 0
+            for (y in 0 until points) for (x in 0 until points) {
+                val px = x + 0.5f
+                val py = y + 0.5f
+                val c = base.at(px, py)
+                assertEquals(1f - c, inverted.at(px, py), 1e-6f, "$kind does not invert at $x,$y")
+                val d = contrasted.at(px, py)
+                if (abs(d - c) > 0.02f) changedByContrast++
+                if (c > 0.6f) assertTrue(d >= c - 1e-6f, "$kind lowers high coverage at $x,$y")
+                if (c < 0.4f) assertTrue(d <= c + 1e-6f, "$kind raises low coverage at $x,$y")
+            }
+            assertTrue(changedByContrast > 10, "$kind ignores the contrast")
+        }
+    }
+
+    @Test
+    fun contrastMovesPartialCoverageTowardsTheNearerColour() {
+        val sampler = PatternSampler(PatternSpec(PatternKind.DOTS, 32f))
+        val low = firstPoint(sampler) { it in 0.15f..0.45f }
+        val high = firstPoint(sampler) { it in 0.55f..0.85f }
+        val natural = fill(PatternSpec(PatternKind.DOTS, 32f), background, ink, 1f)
+        val contrasted = fill(PatternSpec(PatternKind.DOTS, 32f, contrast = 0.8f), background, ink, 1f)
+
+        val lowNatural = pixel(natural, low.first, low.second)
+        val lowContrasted = pixel(contrasted, low.first, low.second)
+        assertTrue(lowContrasted[0] > lowNatural[0] + 0.1f, "contrast did not push low coverage to the background")
+        assertTrue(lowContrasted[2] < lowNatural[2] - 0.1f, "contrast did not push low coverage away from the ink")
+
+        val highNatural = pixel(natural, high.first, high.second)
+        val highContrasted = pixel(contrasted, high.first, high.second)
+        assertTrue(highContrasted[2] > highNatural[2] + 0.1f, "contrast did not push high coverage to the ink")
+        assertTrue(
+            highContrasted[0] < highNatural[0] - 0.1f,
+            "contrast did not push high coverage away from the background",
+        )
+    }
+
+    @Test
+    fun patternBlendsBothColoursAndInvertSwapsThem() {
+        val natural = fill(PatternSpec(PatternKind.CHECKS, 32f), background, ink, 1f)
+        val inverted = fill(PatternSpec(PatternKind.CHECKS, 32f, invert = true), background, ink, 1f)
+        assertColor(ink, pixel(natural, 8, 8), "natural ink cell")
+        assertColor(background, pixel(natural, 24, 8), "natural background cell")
+        assertColor(background, pixel(inverted, 8, 8), "inverted ink cell")
+        assertColor(ink, pixel(inverted, 24, 8), "inverted background cell")
+    }
+
+    @Test
+    fun opacityAppliesToTheBackgroundColourToo() {
+        val grid = fill(PatternSpec(PatternKind.CHECKS, 32f), background, ink, 0.5f)
+        val gap = pixel(grid, 24, 8)
+        assertEquals(0.5f, gap[0], 1e-3f, "background red at half opacity")
+        assertEquals(0f, gap[1], 1e-3f)
+        assertEquals(0f, gap[2], 1e-3f)
+        assertEquals(0.5f, gap[3], 1e-3f)
+        val dot = pixel(grid, 8, 8)
+        assertEquals(0f, dot[0], 1e-3f)
+        assertEquals(0.5f, dot[2], 1e-3f, "ink blue at half opacity")
+        assertEquals(0.5f, dot[3], 1e-3f)
+    }
+
+    @Test
+    fun selectionClipsTheFillWithEveryControl() {
         val doc = Document.create(300, 300)
         val layer = doc.activeRaster!!
         val mask = doc.selection.mask
         for (y in 0 until 50) for (x in 0 until 50) mask.getOrCreate(0, 0).data[(y shl 8) + x] = -1
-        assertNotNull(PatternFill.apply(doc, layer.id, PatternSpec(PatternKind.CHECKS, 32f), Rgba(1f, 0f, 0f), 1f))
+        val spec = PatternSpec(PatternKind.CHECKS, 32f, 11f, 17f, -9f, 0.3f, invert = true)
+        assertNotNull(PatternFill.apply(doc, layer.id, spec, background, ink, 1f))
         var inside = false
         for (y in 0 until 100) for (x in 0 until 100) {
             val a = pixel(layer.pixels, x, y)[3]
@@ -97,12 +225,11 @@ class PatternFillTest {
         val layer = doc.activeRaster!!
         fillRect(layer.pixels, 0, 0, 20, 20, 0f, 0f, 1f, 0.5f)
         layer.alphaLock = true
-        assertNotNull(
-            PatternFill.apply(doc, layer.id, PatternSpec(PatternKind.CHECKS, 16f), Rgba(1f, 0f, 0f), 1f),
-        )
+        val spec = PatternSpec(PatternKind.CHECKS, 16f, 7f, 13f, -5f, 0.4f, invert = true)
+        assertNotNull(PatternFill.apply(doc, layer.id, spec, background, ink, 1f))
         val inside = pixel(layer.pixels, 5, 5)
         assertEquals(0.5f, inside[3], 1e-3f)
-        assertTrue(inside[0] > 0.1f, "the alpha-locked pixel did not take the pattern color")
+        assertTrue(inside[0] + inside[2] > 0.1f, "the alpha-locked pixel did not take the pattern colours")
         assertEquals(0f, pixel(layer.pixels, 40, 40)[3], 1e-6f)
     }
 
@@ -111,7 +238,8 @@ class PatternFillTest {
         val doc = Document.create(64, 64)
         val layer = doc.activeRaster!!
         layer.locked = true
-        assertNull(PatternFill.apply(doc, layer.id, PatternSpec(PatternKind.DOTS, 32f), Rgba.BLACK, 1f))
+        val spec = PatternSpec(PatternKind.DOTS, 32f, 0f, 21f, -3f, 0.5f, invert = true)
+        assertNull(PatternFill.apply(doc, layer.id, spec, background, ink, 1f))
         assertTrue(layer.pixels.keys().isEmpty())
     }
 
@@ -119,13 +247,8 @@ class PatternFillTest {
     fun fullLayerFillHonoursOpacity() {
         val doc = Document.create(300, 300)
         val layer = doc.activeRaster!!
-        val patch = PatternFill.apply(
-            doc,
-            layer.id,
-            PatternSpec(PatternKind.CHECKS, 32f),
-            Rgba(1f, 0f, 0f),
-            0.5f,
-        )
+        val spec = PatternSpec(PatternKind.CHECKS, 32f, 0f, 9f, -7f, 0.2f, invert = true)
+        val patch = PatternFill.apply(doc, layer.id, spec, clear, ink, 0.5f)
         assertNotNull(patch)
         assertEquals(4, patch.after.size)
         assertEquals(0.5f, pixel(layer.pixels, 8, 8)[3], 1e-3f)
@@ -138,13 +261,8 @@ class PatternFillTest {
         val layer = doc.activeRaster!!
         fillRect(layer.pixels, 10, 10, 40, 40, 0.2f, 0.4f, 0.6f, 1f)
         val before = pixel(layer.pixels, 20, 20)
-        val patch = PatternFill.apply(
-            doc,
-            layer.id,
-            PatternSpec(PatternKind.BRICK, 32f, 12f),
-            Rgba(1f, 0.2f, 0f),
-            1f,
-        )
+        val spec = PatternSpec(PatternKind.BRICK, 32f, 12f, 7f, -5f, 0.2f)
+        val patch = PatternFill.apply(doc, layer.id, spec, background, ink, 1f)
         assertNotNull(patch)
         val after = pixel(layer.pixels, 20, 20)
         assertFalse(same(before, after), "the pattern did not cover the painted square")
@@ -161,9 +279,31 @@ class PatternFillTest {
         assertEquals(1, history.undoSize)
     }
 
-    private fun mask(kind: PatternKind, tile: Float, rotation: Float): FloatArray {
-        val sampler = PatternSampler(PatternSpec(kind, tile, rotation))
+    private fun mask(spec: PatternSpec): FloatArray {
+        val sampler = PatternSampler(spec)
         return FloatArray(40 * 40) { i -> sampler.at((i % 40) + 0.5f, (i / 40) + 0.5f) }
+    }
+
+    private fun fill(spec: PatternSpec, bg: Rgba, fg: Rgba, opacity: Float): TileGrid {
+        val doc = Document.create(64, 64)
+        val layer: RasterLayer = doc.activeRaster!!
+        assertNotNull(PatternFill.apply(doc, layer.id, spec, bg, fg, opacity))
+        return layer.pixels
+    }
+
+    /** First integer pixel whose sampled coverage satisfies [predicate]. */
+    private fun firstPoint(sampler: PatternSampler, predicate: (Float) -> Boolean): Pair<Int, Int> {
+        for (y in 0 until 64) for (x in 0 until 64) {
+            if (predicate(sampler.at(x + 0.5f, y + 0.5f))) return x to y
+        }
+        error("no pixel matches the coverage predicate")
+    }
+
+    private fun assertColor(expected: Rgba, actual: FloatArray, message: String) {
+        assertEquals(expected.r * expected.a, actual[0], 1e-3f, "$message r")
+        assertEquals(expected.g * expected.a, actual[1], 1e-3f, "$message g")
+        assertEquals(expected.b * expected.a, actual[2], 1e-3f, "$message b")
+        assertEquals(expected.a, actual[3], 1e-3f, "$message a")
     }
 
     private fun changed(a: FloatArray, b: FloatArray): Int =
@@ -171,4 +311,9 @@ class PatternFillTest {
 
     private fun same(a: FloatArray, b: FloatArray): Boolean =
         a.indices.all { abs(a[it] - b[it]) <= 1e-5f }
+
+    private fun assertContentEquals(a: FloatArray, b: FloatArray, message: String) {
+        assertEquals(a.size, b.size, message)
+        for (i in a.indices) assertEquals(a[i], b[i], 0f, "$message at $i")
+    }
 }

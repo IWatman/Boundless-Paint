@@ -114,9 +114,9 @@ fun StudioScreen(
         PatternDialog(
             ink = state.color,
             onDismiss = { patternOpen = false },
-            onApply = { kind, tileSize, rotation, opacity ->
+            onApply = { spec, background, patternInk, opacity ->
                 patternOpen = false
-                actions.patternFill(kind, tileSize, rotation, opacity)
+                actions.patternFill(spec, background, patternInk, opacity)
             },
         )
     }

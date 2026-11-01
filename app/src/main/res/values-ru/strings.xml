@@ -374,6 +374,12 @@
     <string name="pattern_grain">Зерно</string>
     <string name="pattern_tile_size">Размер плитки</string>
     <string name="pattern_rotation">Поворот</string>
+    <string name="pattern_background">Фон</string>
+    <string name="pattern_ink">Краска</string>
+    <string name="pattern_offset_x">Смещение X</string>
+    <string name="pattern_offset_y">Смещение Y</string>
+    <string name="pattern_contrast">Контраст</string>
+    <string name="pattern_invert">Инверсия</string>
     <string name="tool_clone">Клон-кисть</string>
     <string name="clone_hint">Долгое нажатие — выбрать источник</string>
     <string name="gradient_linear">Линейный</string>

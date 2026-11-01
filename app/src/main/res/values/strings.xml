@@ -374,6 +374,12 @@
     <string name="pattern_grain">Grain</string>
     <string name="pattern_tile_size">Tile size</string>
     <string name="pattern_rotation">Rotation</string>
+    <string name="pattern_background">Background</string>
+    <string name="pattern_ink">Ink</string>
+    <string name="pattern_offset_x">Offset X</string>
+    <string name="pattern_offset_y">Offset Y</string>
+    <string name="pattern_contrast">Contrast</string>
+    <string name="pattern_invert">Invert</string>
     <string name="tool_clone">Clone</string>
     <!-- Clone tool -->
     <string name="clone_hint">Long-press to set the source</string>
