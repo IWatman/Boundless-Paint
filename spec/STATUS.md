@@ -110,7 +110,21 @@
   duration, ruler, tracks/clips, playhead, seeking and clip highlight; the Animation panel has a Video action.
   Playback, clip editing, export and audio are later slices and stay absent rather than faked.
 - Tests: `VideoTest` (13), `VideoProjectIOTest` (7), `SnapshotTest` (4, two new for video and autosave delta).
-- M5 now: **715 JVM tests** (613 core, 102 app). All filters in [filters.md](filters.md) are implemented.
+
+### Video mode S2 (2026-11-01)
+- Core: `VideoEdit` copy-on-write operations (add after selection or at playhead, blank, delete, right-edge trim
+  with zero deleting, ripple move, track visibility, snap edges) keep the single track sorted, butt-jointed and
+  non-overlapping. `VideoPlaybackCursor` owns the 60 Hz tick math, looping, end clamping and scrub clamping.
+- Preview: a 60 Hz coroutine clock drives play/pause/stop/scrub and shows the clip frame through
+  `Video.visibleFrames`; painting, undo/redo, filters, saving, panel close, animation switch, studio exit and
+  document switch stop preview and restore the editing frame as specified. Playback adds no history entry, no
+  timelapse frame and no dirty flag.
+- UI: wired transport, add/blank/delete, snap toggle, ruler scrubbing, clip selection, long-press move and
+  right-edge trim; no fake inspector fields.
+- Tests: `VideoEditTest` (10), `VideoPlaybackCursorTest` (6), `VideoTimelineTest` (5).
+- Pattern fill now ships twelve seamless patterns (the six M5 additions are zigzag, waves, triangles, stars,
+  hexagons and wood grain); `PatternFillTest` (22) covers their lattice wrap, rotations, offsets and shapes.
+- M5 now: **741 JVM tests** (634 core, 107 app). All filters in [filters.md](filters.md) are implemented.
 
 ## M3: done (2026-10-31)
 ### Filters (2026-10-31)
