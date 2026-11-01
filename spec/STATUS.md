@@ -142,6 +142,25 @@
   hexagons and wood grain); `PatternFillTest` (22) covers their lattice wrap, rotations, offsets and shapes.
 - M5 now: **741 JVM tests** (634 core, 107 app). All filters in [filters.md](filters.md) are implemented.
 
+### Video mode S3 (2026-11-02)
+- Export plan: `core/video/VideoExportPlan` maps the canvas aspect to 720p/1080p/1440p long sides, caps the area at
+  8,294,400 px, rounds to the encoder alignment, applies the 8/16/24 Mbps table and decides each preset against
+  a `VideoEncoderCaps` probe before the file picker opens.
+- Color: `core/video/Yuv` converts straight RGB to BT.709 limited-range I420 and `I420Frame` writes luma/chroma
+  planes with configurable row strides. The existing BT.601 timelapse encoder is unchanged.
+- Rendering/export: `Compositor.flatten` takes an optional visibility override, so the export renders each unique
+  tick without touching node flags. `VideoExporter` encodes H.264 at 60 fps with `MediaCodec`/`MediaMuxer` to a
+  cache temp file; the ViewModel streams that file to the SAF URI in 1 MiB chunks, reports frame progress, cancels
+  at frame boundaries and deletes the temp file on every path. No audio track, no 4K, no document/history change.
+- UI: a real export action in the video panel opens the MP4/size dialog with capability-disabled chips, missing
+  frame and size-estimate notes, then the modal progress/result dialog with Cancel/Close only.
+- Tests: `VideoExportPlanTest` (13), `YuvTest` (8), `CompositorTest` +1 for the visibility override, and
+  instrumented `VideoExporterTest` (3 on the `painter_tab` AVD): 1 s/60 access units with the document flags
+  unchanged, 5 s/300 frames with a one-frame duration tolerance, and cancel deleting the temp file.
+- Not measured: 1080p60 throughput on the reference tablet. The export renders and encodes on the CPU and may
+  take longer than real time; no performance number is claimed.
+- M5 now: **763 JVM tests** (656 core, 107 app); instrumented export tests green on the emulator.
+
 ## M3: done (2026-10-31)
 ### Filters (2026-10-31)
 - Core: `core/filter` — `FilterParams` (sealed, 9 kinds) and `Filters.apply`, which runs tile by tile with a patch

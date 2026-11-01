@@ -86,6 +86,7 @@ fun StudioScreen(
     var straightenOpen by remember { mutableStateOf(false) }
     var timelapseOpen by remember { mutableStateOf(false) }
     var videoConfirmOpen by remember { mutableStateOf(false) }
+    var videoExportOpen by remember { mutableStateOf(false) }
     if (filtersOpen) {
         FilterDialog(
             ink = state.color,
@@ -178,6 +179,26 @@ fun StudioScreen(
     }
     if (timelapseOpen) {
         TimelapseDialog(state = state, actions = actions, onDismiss = { timelapseOpen = false })
+    }
+    val videoForExport = state.video
+    if (videoExportOpen && videoForExport != null) {
+        VideoExportDialog(
+            video = videoForExport,
+            canvasWidth = state.canvasWidth,
+            canvasHeight = state.canvasHeight,
+            onDismiss = { videoExportOpen = false },
+            onConfirm = { options ->
+                videoExportOpen = false
+                actions.exportVideo(options)
+            },
+        )
+    }
+    state.videoExport?.let { export ->
+        VideoExportProgressDialog(
+            ui = export,
+            onCancel = actions::cancelVideoExport,
+            onDismiss = actions::dismissVideoExport,
+        )
     }
     if (videoConfirmOpen) {
         val frames = state.animation?.frames?.size ?: 0
@@ -400,6 +421,7 @@ fun StudioScreen(
                         .align(Alignment.BottomCenter)
                         .fillMaxWidth()
                         .padding(start = 8.dp, end = 8.dp, bottom = 64.dp),
+                    onExport = { videoExportOpen = true },
                 )
             }
 

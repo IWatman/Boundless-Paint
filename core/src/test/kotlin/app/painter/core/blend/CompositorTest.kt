@@ -160,4 +160,25 @@ class CompositorTest {
             }
         }
     }
+
+    @Test
+    fun visibilityOverrideShowsHiddenFramesAndHidesVisibleOnes() {
+        val d = doc()
+        val group = GroupNode(newNodeId(), "frames")
+        val first = layer(d, (5 to 5) to cb)
+        val second = layer(d, (5 to 5) to cs).apply { visible = false }
+        group.add(first)
+        group.add(second)
+        d.root.add(group)
+
+        assertPixel(Compositor.flatten(d, false), 5, 5, cb, "document visibility")
+        assertPixel(
+            Compositor.flatten(d, false, mapOf(first.id to false, second.id to true)),
+            5, 5,
+            cs,
+            "override shows the hidden frame",
+        )
+        assertPixel(Compositor.flatten(d, false, mapOf(group.id to false)), 5, 5, clear, "hidden group")
+        assertPixel(Compositor.flatten(d, false, null), 5, 5, cb, "null override keeps the default")
+    }
 }

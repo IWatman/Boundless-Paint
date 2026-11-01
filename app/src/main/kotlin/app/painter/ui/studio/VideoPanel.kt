@@ -28,6 +28,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.FileDownload
 import androidx.compose.material.icons.outlined.Loop
 import androidx.compose.material.icons.outlined.Movie
 import androidx.compose.material.icons.outlined.Pause
@@ -89,11 +90,12 @@ internal fun VideoPanel(
     state: StudioUiState,
     actions: StudioActions,
     modifier: Modifier = Modifier,
+    onExport: () -> Unit = {},
 ) {
     val video = state.video ?: return
     PanelSurface(modifier) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp)) {
-            VideoHeader(video, actions)
+            VideoHeader(video, actions, onExport)
             VideoTransport(video, actions)
             VideoEditBar(video, actions)
             Row(Modifier.fillMaxWidth().padding(top = 2.dp)) {
@@ -135,7 +137,7 @@ internal fun VideoPanel(
 
 /** Header: title, fixed 60 fps label, total duration, a way back to the frames and close. */
 @Composable
-private fun VideoHeader(video: VideoUi, actions: StudioActions) {
+private fun VideoHeader(video: VideoUi, actions: StudioActions, onExport: () -> Unit) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Icon(Icons.Outlined.Movie, contentDescription = null, modifier = Modifier.size(20.dp))
         Text(
@@ -158,6 +160,13 @@ private fun VideoHeader(video: VideoUi, actions: StudioActions) {
         TextButton(onClick = actions::toggleAnimationPanel) {
             Text(stringResource(R.string.video_frames_action))
         }
+        PainterIconButton(
+            Icons.Outlined.FileDownload,
+            stringResource(R.string.video_export_action),
+            onClick = onExport,
+            modifier = Modifier.size(36.dp),
+            enabled = video.durationTicks > 0L,
+        )
         PainterIconButton(
             Icons.Outlined.Close,
             stringResource(R.string.close),
@@ -600,7 +609,7 @@ private fun PlayheadOverlay(video: VideoUi, modifier: Modifier = Modifier) {
 }
 
 /** `m:ss.cc`; minutes are not split into hours, as the panel header asks for a short duration. */
-private fun formatVideoTime(ticks: Long): String {
+internal fun formatVideoTime(ticks: Long): String {
     val centis = (ticks.coerceAtLeast(0L) * 100L + VIDEO_TICKS_PER_SECOND / 2) / VIDEO_TICKS_PER_SECOND
     val minutes = centis / 6000L
     val seconds = (centis / 100L) % 60L

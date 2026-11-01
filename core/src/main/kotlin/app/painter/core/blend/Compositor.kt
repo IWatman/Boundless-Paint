@@ -138,22 +138,37 @@ object Compositor : NodeRenderer {
      * `opacity · mask` when either is partial); other groups are rendered offscreen and blended as one layer.
      * Adjustment layers act on the accumulator of their parent. With [includePaper] and a visible paper,
      * rendering starts from the opaque paper color.
+     *
+     * [visible] optionally overrides the visibility of a node by id; ids missing from the map keep the node's own
+     * flag. Video export uses it to render a timeline tick without changing the visibility of the live document.
      */
-    fun flatten(doc: Document, includePaper: Boolean): TileGrid =
-        flattenNodes(doc, doc.root.children, includePaper)
+    fun flatten(doc: Document, includePaper: Boolean, visible: Map<String, Boolean>? = null): TileGrid =
+        flattenNodes(doc, doc.root.children, includePaper, visible)
 
     /**
      * Composites only [nodes] (bottom-to-top, from the same document) onto the paper. Used by live filter layers,
-     * whose cache is the filtered result of the siblings below them.
+     * whose cache is the filtered result of the siblings below them. [visible] is the optional visibility override
+     * described on [flatten].
      */
-    fun flattenNodes(doc: Document, nodes: List<Node>, includePaper: Boolean): TileGrid {
+    fun flattenNodes(
+        doc: Document,
+        nodes: List<Node>,
+        includePaper: Boolean,
+        visible: Map<String, Boolean>? = null,
+    ): TileGrid {
         val acc = TileGrid(doc.width, doc.height)
-        flattenInto(doc, nodes, includePaper, acc)
+        flattenInto(doc, nodes, includePaper, acc, visible)
         return acc
     }
 
     /** Renders [nodes] into an existing [dst] grid, reusing its tiles where possible. */
-    fun flattenInto(doc: Document, nodes: List<Node>, includePaper: Boolean, dst: TileGrid) {
+    fun flattenInto(
+        doc: Document,
+        nodes: List<Node>,
+        includePaper: Boolean,
+        dst: TileGrid,
+        visible: Map<String, Boolean>? = null,
+    ) {
         dst.clear()
         if (includePaper && doc.paper.visible) {
             val p = doc.paper.color
@@ -166,7 +181,7 @@ object Compositor : NodeRenderer {
                 }
             }
         }
-        Stack(null, doc.gammaCorrect).render(nodes, dst, false, null)
+        Stack(null, doc.gammaCorrect, visible).render(nodes, dst, false, null)
     }
 
     /**
@@ -232,13 +247,17 @@ object Compositor : NodeRenderer {
     private fun Node.activeMask(): LayerMask? = mask?.takeIf { it.enabled }
 
     /** One render pass; [only] limits every grid to that tile (for [flattenTile]); [gamma] blends in linear light. */
-    private class Stack(val only: TileKey?, val gamma: Boolean) {
+    private class Stack(
+        val only: TileKey?,
+        val gamma: Boolean,
+        val visibility: Map<String, Boolean>? = null,
+    ) {
         private val prepared = HashMap<AdjustParams, PreparedAdjust>()
 
         fun render(children: List<Node>, acc: TileGrid, ignoreVisibility: Boolean, clipBase: TileGrid?) {
             var baseAlpha: TileGrid? = clipBase
             for ((index, node) in children.withIndex()) {
-                val visible = ignoreVisibility || node.visible
+                val visible = ignoreVisibility || (visibility?.get(node.id) ?: node.visible)
                 val mask = node.activeMask()
                 if (node.clipped) {
                     val base = baseAlpha ?: continue

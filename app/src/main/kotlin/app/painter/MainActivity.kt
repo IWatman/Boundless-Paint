@@ -227,6 +227,7 @@ private fun Studio(vm: StudioViewModel, drive: DriveUiState) {
     val exportRequest by vm.exportRequest.collectAsState()
     val shareRequest by vm.shareRequest.collectAsState()
     val exportOptions by vm.exportOptions.collectAsState()
+    val videoExportRequest by vm.videoExportRequest.collectAsState()
     val psdRequest by vm.psdRequest.collectAsState()
     val scope = rememberCoroutineScope()
     val context = androidx.compose.ui.platform.LocalContext.current
@@ -271,6 +272,21 @@ private fun Studio(vm: StudioViewModel, drive: DriveUiState) {
                 context.contentResolver.openOutputStream(uri)?.use { it.write(bytes) }
             }.isSuccess
             Toast.makeText(context, if (ok) R.string.psd_exported else R.string.psd_export_failed, Toast.LENGTH_LONG).show()
+        }
+    }
+
+    // The video dialog checked encoder capabilities before this picker opens. Encoding then streams a cache
+    // temp file to the picked document; the ViewModel owns progress, cancel and cleanup.
+    val videoLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("video/mp4"),
+    ) { uri ->
+        if (uri != null) vm.startVideoExport(uri) else vm.cancelVideoExportPick()
+    }
+
+    LaunchedEffect(videoExportRequest) {
+        if (videoExportRequest) {
+            vm.videoExportRequest.value = false
+            videoLauncher.launch("${vm.documentName}-video.mp4")
         }
     }
 
