@@ -425,7 +425,10 @@
     <!-- Materials -->
     <string name="materials">Материалы…</string>
     <string name="materials_title">Материалы</string>
-    <string name="material_hint">Один штамп в центре холста или выделения.</string>
+    <string name="material_hint">Проведите, чтобы рисовать материалом; коснитесь, чтобы поставить штамп.</string>
+    <string name="material_paint">Рисовать</string>
+    <string name="material_stamp">Штамп</string>
+    <string name="tool_material">Материал</string>
     <string name="material_balloon">Шар</string>
     <string name="material_fabric">Ткань</string>
     <string name="material_wood">Дерево</string>

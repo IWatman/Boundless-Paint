@@ -51,18 +51,25 @@ enum class MaterialKind {
 
 /**
  * One material stamp: the built-in [kind], the [size] of its square footprint in document pixels, its
- * [rotationDeg] around the stamp centre and the [opacity] applied to the whole stamp. Every value is clamped
- * by [MaterialSampler], so an out-of-range slider cannot create unbounded work.
+ * [rotationDeg] around the stamp centre, the [opacity] applied to the whole stamp and the [spacing] of a
+ * painted stroke as a fraction of the stamp size. Every value is clamped by [MaterialSampler] or
+ * [MaterialStroke], so an out-of-range slider cannot create unbounded work.
  */
 data class MaterialSpec(
     val kind: MaterialKind,
     val size: Float = 512f,
     val rotationDeg: Float = 0f,
     val opacity: Float = 1f,
+    val spacing: Float = DEFAULT_SPACING,
 ) {
     companion object {
         const val MIN_SIZE = 32f
         const val MAX_SIZE = 2048f
+
+        /** Default distance between two stamps of a stroke, as a fraction of the stamp size. */
+        const val DEFAULT_SPACING = 0.25f
+        const val MIN_SPACING = 0.1f
+        const val MAX_SPACING = 1f
     }
 }
 
@@ -199,35 +206,53 @@ object MaterialStamp {
         opacity: Float,
     ): Tile {
         val out = before?.copy(false) ?: Tile()
-        val bx = key.tx shl Tile.SHIFT
-        val by = key.ty shl Tile.SHIFT
-        val x0 = max(rect.x0, bx)
-        val y0 = max(rect.y0, by)
-        val x1 = minOf(rect.x1, bx + Tile.SIZE)
-        val y1 = minOf(rect.y1, by + Tile.SIZE)
-        val sample = FloatArray(2)
-        val pixel = FloatArray(4)
-        for (y in y0 until y1) {
-            for (x in x0 until x1) {
-                sampler.sample(x + 0.5f - centreX, y + 0.5f - centreY, sample)
-                val coverage = sample[0] * opacity
-                if (coverage <= 0f) continue
-                val sourceAlpha = (color.a * coverage).coerceIn(0f, 1f)
-                if (sourceAlpha <= 0f) continue
-                val tone = sample[1]
-                val i = out.index(x - bx, y - by)
-                if (before != null) before.read(i, pixel) else pixel.fill(0f)
-                val keep = 1f - sourceAlpha
-                out.write(
-                    i,
-                    (color.r * tone).coerceIn(0f, 1f) * sourceAlpha + pixel[0] * keep,
-                    (color.g * tone).coerceIn(0f, 1f) * sourceAlpha + pixel[1] * keep,
-                    (color.b * tone).coerceIn(0f, 1f) * sourceAlpha + pixel[2] * keep,
-                    sourceAlpha + pixel[3] * keep,
-                )
-            }
-        }
+        renderStampInto(sampler, out, key, rect, centreX, centreY, color, opacity)
         return out
+    }
+}
+
+/**
+ * Composites one material stamp over [out] inside [rect] and the [key] tile. [out] is both the destination
+ * and the shadow of what is painted so far, so several stamps of a stroke can be accumulated in order into
+ * one tile. Pixels outside [rect] keep their value.
+ */
+internal fun renderStampInto(
+    sampler: MaterialSampler,
+    out: Tile,
+    key: TileKey,
+    rect: IntRect,
+    centreX: Float,
+    centreY: Float,
+    color: Rgba,
+    opacity: Float,
+) {
+    val bx = key.tx shl Tile.SHIFT
+    val by = key.ty shl Tile.SHIFT
+    val x0 = max(rect.x0, bx)
+    val y0 = max(rect.y0, by)
+    val x1 = minOf(rect.x1, bx + Tile.SIZE)
+    val y1 = minOf(rect.y1, by + Tile.SIZE)
+    val sample = FloatArray(2)
+    val pixel = FloatArray(4)
+    for (y in y0 until y1) {
+        for (x in x0 until x1) {
+            sampler.sample(x + 0.5f - centreX, y + 0.5f - centreY, sample)
+            val coverage = sample[0] * opacity
+            if (coverage <= 0f) continue
+            val sourceAlpha = (color.a * coverage).coerceIn(0f, 1f)
+            if (sourceAlpha <= 0f) continue
+            val tone = sample[1]
+            val i = out.index(x - bx, y - by)
+            out.read(i, pixel)
+            val keep = 1f - sourceAlpha
+            out.write(
+                i,
+                (color.r * tone).coerceIn(0f, 1f) * sourceAlpha + pixel[0] * keep,
+                (color.g * tone).coerceIn(0f, 1f) * sourceAlpha + pixel[1] * keep,
+                (color.b * tone).coerceIn(0f, 1f) * sourceAlpha + pixel[2] * keep,
+                sourceAlpha + pixel[3] * keep,
+            )
+        }
     }
 }
 

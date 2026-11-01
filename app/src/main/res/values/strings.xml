@@ -424,7 +424,10 @@
     <!-- Materials -->
     <string name="materials">Materials…</string>
     <string name="materials_title">Materials</string>
-    <string name="material_hint">One stamp at the canvas or selection centre.</string>
+    <string name="material_hint">Drag to paint along the stroke; tap to stamp.</string>
+    <string name="material_paint">Paint</string>
+    <string name="material_stamp">Stamp</string>
+    <string name="tool_material">Material</string>
     <string name="material_balloon">Balloon</string>
     <string name="material_fabric">Fabric</string>
     <string name="material_wood">Wood</string>

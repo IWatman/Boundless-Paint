@@ -32,7 +32,8 @@ import app.painter.studio.VideoExportOptions
  * layer pixels (or the selected pixels when a selection exists) with the cage overlay. [FILL] taps a region
  * of the canvas and fills it on the active layer with the current color. [GRADIENT] drags the axis of a
  * two-stop gradient and applies it to the active layer. [SHAPE] drags, edits and stamps geometric shapes
- * of the selected [app.painter.core.shape.ShapeTool] on the active layer.
+ * of the selected [app.painter.core.shape.ShapeTool] on the active layer. [MATERIAL] paints the current
+ * procedural material along the gesture (a tap stamps it once at the pointer).
  */
 enum class ToolUi {
     BRUSH, SELECT_RECT, SELECT_ELLIPSE, SELECT_LASSO, SELECT_WAND, TRANSFORM, FILL, GRADIENT, SHAPE,
@@ -44,6 +45,8 @@ enum class ToolUi {
     LASSO_FILL,
     /** Freehand lasso that erases the enclosed area immediately (M4). */
     LASSO_ERASE,
+    /** Paints the material of [StudioUiState.materialSpec] along the gesture (spec §21). */
+    MATERIAL,
 }
 
 /** True for the lasso fill/erase tools that record a freehand contour and apply it on release. */
@@ -344,6 +347,8 @@ data class StudioUiState(
     val viewZoom: Float = 1f,
     /** Active tool; [ToolUi.BRUSH] paints, the SELECT_* tools drag a selection. */
     val tool: ToolUi = ToolUi.BRUSH,
+    /** Material the [ToolUi.MATERIAL] tool paints, null until a material is chosen from the dialog. */
+    val materialSpec: MaterialSpec? = null,
     /** Live selection rectangle while dragging a rectangle selection (document pixels), null when idle. */
     val selectionDraft: RectUi? = null,
     /** Live outline of an ellipse (bounding box) or lasso (trail) selection draft, null when idle. */
@@ -580,9 +585,15 @@ interface StudioActions {
 
     /**
      * Stamps one built-in procedural material at the canvas centre, or the selection centre, with the current
-     * colour as one undo step. The stamp size, rotation and opacity come from [spec].
+     * colour as one undo step. The stamp size, rotation, opacity and spacing come from [spec].
      */
     fun stampMaterial(spec: MaterialSpec) {}
+
+    /**
+     * Picks [spec] for the material tool and switches to [ToolUi.MATERIAL]: a drag paints the material along
+     * the gesture and a tap stamps it once at the pointer, each as one undo step.
+     */
+    fun selectMaterial(spec: MaterialSpec) {}
     fun setBrushSize(size: Float)
     fun setOpacity(opacity: Float)
     fun setFlow(flow: Float)

@@ -57,23 +57,28 @@ private fun MaterialKind.titleRes(): Int = when (this) {
 
 /**
  * Material library dialog (spec §21): eight built-in procedural materials shown as live previews in the
- * current colour and opacity, with the stamp size, rotation and opacity. Apply places one stamp at the canvas
- * or selection centre; there is no drag placement, stroke painting or library persistence in this slice.
+ * current colour and opacity, with the stamp size, rotation, opacity and stroke spacing. "Paint" selects the
+ * material tool: a drag paints along the gesture and a tap stamps once at the pointer. "Stamp" keeps the
+ * one-shot path and places a single stamp at the canvas or selection centre.
  */
 @Composable
 fun MaterialDialog(
     ink: Rgba,
+    initial: MaterialSpec? = null,
     onDismiss: () -> Unit,
-    onApply: (MaterialSpec) -> Unit,
+    onStamp: (MaterialSpec) -> Unit,
+    onPaint: (MaterialSpec) -> Unit,
 ) {
-    var kind by remember { mutableStateOf(MaterialKind.BALLOON) }
-    var size by remember { mutableStateOf(512f) }
-    var rotation by remember { mutableStateOf(0f) }
-    var opacity by remember { mutableStateOf(1f) }
+    var kind by remember(initial) { mutableStateOf(initial?.kind ?: MaterialKind.BALLOON) }
+    var size by remember(initial) { mutableStateOf(initial?.size ?: 512f) }
+    var rotation by remember(initial) { mutableStateOf(initial?.rotationDeg ?: 0f) }
+    var opacity by remember(initial) { mutableStateOf(initial?.opacity ?: 1f) }
+    var spacing by remember(initial) { mutableStateOf(initial?.spacing ?: MaterialSpec.DEFAULT_SPACING) }
     val previews = remember(ink, rotation, opacity) {
         MaterialKind.entries.associateWith { previewBitmap(it, ink, rotation, opacity) }
     }
     val percent = { v: Float -> "${(v * 100).roundToInt()}%" }
+    val spec = { MaterialSpec(kind, size, rotation, opacity, spacing) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -129,11 +134,24 @@ fun MaterialDialog(
                     onChange = { opacity = it },
                     step = 0.01f,
                 )
+                ParamSlider(
+                    label = stringResource(R.string.spacing),
+                    value = spacing,
+                    range = MaterialSpec.MIN_SPACING..MaterialSpec.MAX_SPACING,
+                    format = percent,
+                    onChange = { spacing = it },
+                    step = 0.01f,
+                )
             }
         },
         confirmButton = {
-            TextButton(onClick = { onApply(MaterialSpec(kind, size, rotation, opacity)) }) {
-                Text(stringResource(R.string.apply))
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                TextButton(onClick = { onPaint(spec()) }) {
+                    Text(stringResource(R.string.material_paint))
+                }
+                TextButton(onClick = { onStamp(spec()) }) {
+                    Text(stringResource(R.string.material_stamp))
+                }
             }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },

@@ -129,10 +129,15 @@ fun StudioScreen(
     if (materialsOpen) {
         MaterialDialog(
             ink = state.color,
+            initial = state.materialSpec,
             onDismiss = { materialsOpen = false },
-            onApply = { spec ->
+            onStamp = { spec ->
                 materialsOpen = false
                 actions.stampMaterial(spec)
+            },
+            onPaint = { spec ->
+                materialsOpen = false
+                actions.selectMaterial(spec)
             },
         )
     }
@@ -333,6 +338,19 @@ fun StudioScreen(
                 ) {
                     Text(
                         stringResource(R.string.clone_hint),
+                        style = MaterialTheme.typography.labelLarge,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                    )
+                }
+            }
+            if (state.tool == ToolUi.MATERIAL) {
+                PanelSurface(
+                    Modifier
+                        .align(Alignment.TopCenter)
+                        .padding(top = 64.dp),
+                ) {
+                    Text(
+                        stringResource(R.string.material_hint),
                         style = MaterialTheme.typography.labelLarge,
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
                     )
@@ -917,6 +935,15 @@ private fun StudioTopBar(
                                 onMaterials()
                             },
                         )
+                        if (state.materialSpec != null) {
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.tool_material)) },
+                                onClick = {
+                                    toolsMenu = false
+                                    actions.selectTool(ToolUi.MATERIAL)
+                                },
+                            )
+                        }
                         DropdownMenuItem(
                             text = { Text(stringResource(R.string.tool_clone)) },
                             onClick = {

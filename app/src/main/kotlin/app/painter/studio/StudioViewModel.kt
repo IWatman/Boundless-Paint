@@ -94,6 +94,7 @@ import app.painter.core.io.import.BrushImport
 import app.painter.core.liquify.LiquifySession
 import app.painter.core.material.MaterialSpec
 import app.painter.core.material.MaterialStamp
+import app.painter.core.material.MaterialStroke
 import app.painter.core.perspective.PerspectiveConfig
 import app.painter.core.perspective.PerspectiveOverlay
 import app.painter.core.perspective.PerspectiveType
@@ -1201,15 +1202,23 @@ class StudioViewModel(
         get() = _state.value.tool == ToolUi.TRANSFORM || _state.value.tool == ToolUi.FILL ||
             _state.value.tool == ToolUi.GRADIENT || _state.value.tool == ToolUi.SHAPE ||
             _state.value.tool == ToolUi.LIQUIFY || _state.value.tool.isSelectionTool ||
-            _state.value.tool.isLassoContent
+            _state.value.tool.isLassoContent ||
+            (_state.value.tool == ToolUi.MATERIAL && _state.value.materialSpec != null)
 
     override fun selectTool(tool: ToolUi) {
         if (tool != ToolUi.TRANSFORM) finishTransform(apply = true)
         if (tool != ToolUi.GRADIENT) finishGradient(apply = true)
         if (tool != ToolUi.SHAPE) finishShape(commit = true)
         if (tool != ToolUi.LIQUIFY) finishLiquify(commit = true)
+        if (tool != ToolUi.MATERIAL) materialCancel()
         _state.update { it.copy(tool = tool, selectionDraft = null, selectionDraftPath = null) }
         if (tool == ToolUi.TRANSFORM) startTransform()
+    }
+
+    /** Picks the material and enters its tool; the next drag paints and a tap stamps once. */
+    override fun selectMaterial(spec: MaterialSpec) {
+        _state.update { it.copy(materialSpec = spec) }
+        selectTool(ToolUi.MATERIAL)
     }
 
     private fun clampX(x: Float) = x.coerceIn(0f, doc.width.toFloat())
@@ -1230,6 +1239,10 @@ class StudioViewModel(
         if (doc.activeNode is FilterLayer &&
             (_state.value.tool == ToolUi.BRUSH || _state.value.tool == ToolUi.CLONE || _state.value.tool == ToolUi.LIQUIFY)
         ) return
+        if (_state.value.tool == ToolUi.MATERIAL) {
+            materialDown(x, y)
+            return
+        }
         if (_state.value.tool == ToolUi.LIQUIFY) {
             liquifyDown(x, y)
             return
@@ -1267,6 +1280,10 @@ class StudioViewModel(
     }
 
     override fun onToolMove(x: Float, y: Float) {
+        if (_state.value.tool == ToolUi.MATERIAL) {
+            materialMove(x, y)
+            return
+        }
         if (_state.value.tool == ToolUi.LIQUIFY) {
             liquifyMove(x, y)
             return
@@ -1310,6 +1327,10 @@ class StudioViewModel(
     }
 
     override fun onToolUp(x: Float, y: Float) {
+        if (_state.value.tool == ToolUi.MATERIAL) {
+            materialUp(x, y)
+            return
+        }
         if (_state.value.tool == ToolUi.LIQUIFY) {
             liquifyMove(x, y)
             liquify?.end()
@@ -1375,6 +1396,11 @@ class StudioViewModel(
     }
 
     override fun onToolCancel() {
+        // A cancelled material gesture paints nothing: its stamps only exist in the one patch built on release.
+        if (_state.value.tool == ToolUi.MATERIAL) {
+            materialCancel()
+            return
+        }
         // A cancelled shape gesture only stops the drag: the draft stays open.
         if (_state.value.tool == ToolUi.SHAPE) {
             shapeDrag = ShapeDrag.NONE
@@ -2368,6 +2394,81 @@ class StudioViewModel(
             history.execute(doc, TilePatchCommand(patch, "Material"))
             canvas?.invalidate(id, patch.after.keys)
         }
+    }
+
+    // ---- material stroke tool ----
+
+    /** Polyline of the open material gesture in document pixels; null while the tool is idle. */
+    private var materialPoints: ArrayList<Vec2>? = null
+
+    /** Layer the open material gesture belongs to, fixed at touch-down. */
+    private var materialLayerId: String? = null
+
+    /**
+     * Starts a material gesture at ([x], [y]). The stroke is built only on release, from the points collected
+     * here; a tap is a gesture of one point and stamps once at the pointer.
+     */
+    private fun materialDown(x: Float, y: Float) {
+        if (filterBusy) return
+        val layer = doc.activeRaster ?: return
+        if (!layer.visible || layer.effectivelyLocked || layer.locked) return
+        if (_state.value.materialSpec == null) return
+        commitPendingOpacity()
+        materialPoints = arrayListOf(Vec2(x, y))
+        materialLayerId = layer.id
+    }
+
+    /** Adds a point that moved far enough to matter for the spacing of the stroke. */
+    private fun materialMove(x: Float, y: Float) {
+        val points = materialPoints ?: return
+        val last = points.last()
+        val dx = x - last.x
+        val dy = y - last.y
+        if (dx * dx + dy * dy < MATERIAL_POINT_SLOP_SQ) return
+        points.add(Vec2(x, y))
+    }
+
+    /**
+     * Ends the material gesture: the whole polyline is rendered off the main thread into one patch and recorded
+     * as one history step. The selection and alpha lock are applied by the core, like the centre stamp.
+     */
+    private fun materialUp(x: Float, y: Float) {
+        materialMove(x, y)
+        val points = materialPoints ?: return
+        materialPoints = null
+        val id = materialLayerId ?: return
+        materialLayerId = null
+        if (filterBusy) return
+        val spec = _state.value.materialSpec ?: return
+        val layer = doc.findNode(id) as? RasterLayer ?: return
+        if (!layer.visible || layer.effectivelyLocked || layer.locked) return
+        val color = _state.value.color
+        val copy = RasterLayer(id, layer.name, layer.pixels.copy()).also {
+            it.alphaLock = layer.alphaLock
+            it.locked = layer.locked
+        }
+        val selection = doc.selection.coverageOrNull()?.copy()
+        filterBusy = true
+        _state.update { it.copy(filterBusy = true) }
+        viewModelScope.launch {
+            val patch = runCatching {
+                withContext(Dispatchers.Default) { MaterialStroke.patch(copy, selection, spec, color, points) }
+            }.getOrNull()
+            filterBusy = false
+            _state.update { it.copy(filterBusy = false) }
+            if (patch == null || patch.after.isEmpty()) return@launch
+            // The layer may have been deleted or locked while the stroke rendered; then the result is dropped.
+            val target = doc.findNode(id) as? RasterLayer ?: return@launch
+            if (!target.visible || target.effectivelyLocked || target.locked) return@launch
+            history.execute(doc, TilePatchCommand(patch, "Material stroke"))
+            canvas?.invalidate(id, patch.after.keys)
+        }
+    }
+
+    /** Drops the open material gesture without touching the layer. */
+    private fun materialCancel() {
+        materialPoints = null
+        materialLayerId = null
     }
 
     override fun deselect() {
@@ -4976,6 +5077,9 @@ private const val EDITOR_PREVIEW_DELAY_MS = 100L
 
 /** Longest side of the bitmap painted as onion skin; larger frames are sampled down. */
 private const val ONION_MAX_SIDE = 512
+
+/** Squared distance below which a material gesture point adds nothing to the stamp spacing (0.5 px). */
+private const val MATERIAL_POINT_SLOP_SQ = 0.25f
 
 /** Distance of the transform rotate handle from the top edge, in dp on screen. */
 private const val ROTATE_HANDLE_DP = 26f
