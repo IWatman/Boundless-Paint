@@ -1,5 +1,6 @@
 package app.painter.ui.studio
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -80,6 +81,7 @@ fun StudioScreen(
     var filterLayerOpen by remember { mutableStateOf(false) }
     var textOpen by remember { mutableStateOf(false) }
     var patternOpen by remember { mutableStateOf(false) }
+    var patternPathOpen by remember { mutableStateOf(false) }
     var materialsOpen by remember { mutableStateOf(false) }
     var cropOpen by remember { mutableStateOf(false) }
     var resizeOpen by remember { mutableStateOf(false) }
@@ -87,6 +89,8 @@ fun StudioScreen(
     var timelapseOpen by remember { mutableStateOf(false) }
     var videoConfirmOpen by remember { mutableStateOf(false) }
     var videoExportOpen by remember { mutableStateOf(false) }
+    // Back leaves the transient pattern path mode before it leaves the document.
+    BackHandler(enabled = state.patternPath != null) { actions.exitPatternPath() }
     if (filtersOpen) {
         FilterDialog(
             ink = state.color,
@@ -123,6 +127,16 @@ fun StudioScreen(
             onApply = { spec, background, patternInk, opacity ->
                 patternOpen = false
                 actions.patternFill(spec, background, patternInk, opacity)
+            },
+        )
+    }
+    if (patternPathOpen) {
+        PatternPathDialog(
+            ink = state.color,
+            onDismiss = { patternPathOpen = false },
+            onApply = { spec, background, patternInk ->
+                patternPathOpen = false
+                actions.selectPatternPath(spec, background, patternInk)
             },
         )
     }
@@ -271,6 +285,7 @@ fun StudioScreen(
                 onFilterLayer = { filterLayerOpen = true },
                 onText = { textOpen = true },
                 onPatternFill = { patternOpen = true },
+                onPatternPath = { patternPathOpen = true },
                 onMaterials = { materialsOpen = true },
                 onCrop = { cropOpen = true },
                 onResize = { resizeOpen = true },
@@ -358,6 +373,24 @@ fun StudioScreen(
                         style = MaterialTheme.typography.labelLarge,
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
                     )
+                }
+            }
+            if (state.tool == ToolUi.PATTERN_PATH && state.patternPath != null) {
+                PanelSurface(
+                    Modifier
+                        .align(Alignment.TopCenter)
+                        .padding(top = 64.dp),
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            stringResource(R.string.pattern_path_hint),
+                            style = MaterialTheme.typography.labelLarge,
+                            modifier = Modifier.padding(start = 12.dp, end = 4.dp, top = 6.dp, bottom = 6.dp),
+                        )
+                        TextButton(onClick = actions::exitPatternPath) {
+                            Text(stringResource(R.string.close))
+                        }
+                    }
                 }
             }
             val gradient = state.gradient
@@ -840,6 +873,7 @@ private fun StudioTopBar(
     onFilterLayer: () -> Unit,
     onText: () -> Unit,
     onPatternFill: () -> Unit,
+    onPatternPath: () -> Unit,
     onMaterials: () -> Unit,
     onCrop: () -> Unit,
     onResize: () -> Unit,
@@ -930,6 +964,13 @@ private fun StudioTopBar(
                             onClick = {
                                 toolsMenu = false
                                 onPatternFill()
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.pattern_path)) },
+                            onClick = {
+                                toolsMenu = false
+                                onPatternPath()
                             },
                         )
                         DropdownMenuItem(

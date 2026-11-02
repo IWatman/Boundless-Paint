@@ -60,6 +60,8 @@ import app.painter.core.fill.GradientStop
 import app.painter.core.fill.GradientType
 import app.painter.core.fill.LassoFill
 import app.painter.core.fill.PatternFill
+import app.painter.core.fill.PatternPath
+import app.painter.core.fill.PatternPathSpec
 import app.painter.core.fill.PatternSpec
 import app.painter.core.fill.RefSource
 import app.painter.core.fill.Region
@@ -201,6 +203,7 @@ import app.painter.ui.studio.EllipseUi
 import app.painter.ui.studio.GradientStopUi
 import app.painter.ui.studio.GradientUi
 import app.painter.ui.studio.HudUi
+import app.painter.ui.studio.PatternPathUi
 import app.painter.ui.studio.PointUi
 import app.painter.ui.studio.RectUi
 import app.painter.ui.studio.RulerUi
@@ -543,6 +546,8 @@ class StudioViewModel(
         finishTransform(apply = false)
         finishGradient(apply = false)
         finishLiquify(commit = false)
+        // The transient path mode belongs to the document that is being left.
+        exitPatternPath()
         // A recording belongs to the document that is being left; never insert it into the next one.
         abandonAudioRecording()
         // Leaving the studio is a preview exit: restore the frame the user was editing before saving.
@@ -1259,7 +1264,8 @@ class StudioViewModel(
             _state.value.tool == ToolUi.GRADIENT || _state.value.tool == ToolUi.SHAPE ||
             _state.value.tool == ToolUi.LIQUIFY || _state.value.tool.isSelectionTool ||
             _state.value.tool.isLassoContent ||
-            (_state.value.tool == ToolUi.MATERIAL && _state.value.materialSpec != null)
+            (_state.value.tool == ToolUi.MATERIAL && _state.value.materialSpec != null) ||
+            (_state.value.tool == ToolUi.PATTERN_PATH && _state.value.patternPath != null)
 
     override fun selectTool(tool: ToolUi) {
         if (tool != ToolUi.TRANSFORM) finishTransform(apply = true)
@@ -1267,10 +1273,45 @@ class StudioViewModel(
         if (tool != ToolUi.SHAPE) finishShape(commit = true)
         if (tool != ToolUi.LIQUIFY) finishLiquify(commit = true)
         if (tool != ToolUi.MATERIAL) materialCancel()
+        if (tool != ToolUi.PATTERN_PATH) clearPatternPath()
         // Choosing the tool from the menu after a restart brings back the material of the last session.
         if (tool == ToolUi.MATERIAL) restoreMaterialPrefs()
         _state.update { it.copy(tool = tool, selectionDraft = null, selectionDraftPath = null) }
         if (tool == ToolUi.TRANSFORM) startTransform()
+    }
+
+    /**
+     * Pattern path (spec §21): arms the transient path mode with [spec] and its two tile colours. A drag
+     * repeats the pattern along the gesture and a tap places one tile; each gesture is one history step.
+     */
+    override fun selectPatternPath(spec: PatternPathSpec, background: Rgba, ink: Rgba) {
+        if (filterBusy) return
+        finishShape(commit = true)
+        finishTransform(apply = true)
+        finishGradient(apply = true)
+        finishLiquify(commit = true)
+        materialCancel()
+        commitPendingOpacity()
+        patternPathPoints = null
+        patternPathLayerId = null
+        _state.update {
+            it.copy(tool = ToolUi.PATTERN_PATH, patternPath = PatternPathUi(spec, background, ink))
+        }
+    }
+
+    /** Leaves the pattern path mode; an open gesture is dropped and committed paths stay. */
+    override fun exitPatternPath() {
+        clearPatternPath()
+        if (_state.value.tool == ToolUi.PATTERN_PATH) {
+            _state.update { it.copy(tool = ToolUi.BRUSH) }
+        }
+    }
+
+    /** Drops the pattern path settings and any open gesture without touching the layer. */
+    private fun clearPatternPath() {
+        patternPathPoints = null
+        patternPathLayerId = null
+        if (_state.value.patternPath != null) _state.update { it.copy(patternPath = null) }
     }
 
     /** Picks the material and enters its tool; the next drag paints and a tap stamps once. */
@@ -1304,6 +1345,10 @@ class StudioViewModel(
         if (doc.activeNode is FilterLayer &&
             (_state.value.tool == ToolUi.BRUSH || _state.value.tool == ToolUi.CLONE || _state.value.tool == ToolUi.LIQUIFY)
         ) return
+        if (_state.value.tool == ToolUi.PATTERN_PATH) {
+            patternPathDown(x, y)
+            return
+        }
         if (_state.value.tool == ToolUi.MATERIAL) {
             materialDown(x, y)
             return
@@ -1345,6 +1390,10 @@ class StudioViewModel(
     }
 
     override fun onToolMove(x: Float, y: Float) {
+        if (_state.value.tool == ToolUi.PATTERN_PATH) {
+            patternPathMove(x, y)
+            return
+        }
         if (_state.value.tool == ToolUi.MATERIAL) {
             materialMove(x, y)
             return
@@ -1392,6 +1441,10 @@ class StudioViewModel(
     }
 
     override fun onToolUp(x: Float, y: Float) {
+        if (_state.value.tool == ToolUi.PATTERN_PATH) {
+            patternPathUp(x, y)
+            return
+        }
         if (_state.value.tool == ToolUi.MATERIAL) {
             materialUp(x, y)
             return
@@ -1461,6 +1514,11 @@ class StudioViewModel(
     }
 
     override fun onToolCancel() {
+        // A cancelled pattern path gesture paints nothing: its tiles only exist in the one patch built on release.
+        if (_state.value.tool == ToolUi.PATTERN_PATH) {
+            patternPathCancel()
+            return
+        }
         // A cancelled material gesture paints nothing: its stamps only exist in the one patch built on release.
         if (_state.value.tool == ToolUi.MATERIAL) {
             materialCancel()
@@ -2535,6 +2593,82 @@ class StudioViewModel(
     private fun materialCancel() {
         materialPoints = null
         materialLayerId = null
+    }
+
+    // ---- pattern path tool ----
+
+    /** Polyline of the open pattern path gesture in document pixels; null while the tool is idle. */
+    private var patternPathPoints: ArrayList<Vec2>? = null
+
+    /** Layer the open pattern path gesture belongs to, fixed at touch-down. */
+    private var patternPathLayerId: String? = null
+
+    /**
+     * Starts a pattern path gesture at ([x], [y]). The path is built only on release; a tap is a gesture of
+     * one point and places one tile at the pointer.
+     */
+    private fun patternPathDown(x: Float, y: Float) {
+        if (filterBusy) return
+        val layer = doc.activeRaster ?: return
+        if (!layer.visible || layer.effectivelyLocked || layer.locked) return
+        if (_state.value.patternPath == null) return
+        commitPendingOpacity()
+        patternPathPoints = arrayListOf(Vec2(x, y))
+        patternPathLayerId = layer.id
+    }
+
+    /** Adds a point that moved far enough to matter for the spacing of the path. */
+    private fun patternPathMove(x: Float, y: Float) {
+        val points = patternPathPoints ?: return
+        val last = points.last()
+        val dx = x - last.x
+        val dy = y - last.y
+        if (dx * dx + dy * dy < MATERIAL_POINT_SLOP_SQ) return
+        points.add(Vec2(x, y))
+    }
+
+    /**
+     * Ends the pattern path gesture: the whole polyline is rendered off the main thread into one patch and
+     * recorded as one history step. The selection and alpha lock are applied by the core, like the pattern fill.
+     */
+    private fun patternPathUp(x: Float, y: Float) {
+        patternPathMove(x, y)
+        val points = patternPathPoints ?: return
+        patternPathPoints = null
+        val id = patternPathLayerId ?: return
+        patternPathLayerId = null
+        if (filterBusy) return
+        val path = _state.value.patternPath ?: return
+        val layer = doc.findNode(id) as? RasterLayer ?: return
+        if (!layer.visible || layer.effectivelyLocked || layer.locked) return
+        val copy = RasterLayer(id, layer.name, layer.pixels.copy()).also {
+            it.alphaLock = layer.alphaLock
+            it.locked = layer.locked
+        }
+        val selection = doc.selection.coverageOrNull()?.copy()
+        filterBusy = true
+        _state.update { it.copy(filterBusy = true) }
+        viewModelScope.launch {
+            val patch = runCatching {
+                withContext(Dispatchers.Default) {
+                    PatternPath.patch(copy, selection, path.spec, path.background, path.ink, points)
+                }
+            }.getOrNull()
+            filterBusy = false
+            _state.update { it.copy(filterBusy = false) }
+            if (patch == null || patch.after.isEmpty()) return@launch
+            // The layer may have been deleted or locked while the path rendered; then the result is dropped.
+            val target = doc.findNode(id) as? RasterLayer ?: return@launch
+            if (!target.visible || target.effectivelyLocked || target.locked) return@launch
+            history.execute(doc, TilePatchCommand(patch, "Pattern path"))
+            canvas?.invalidate(id, patch.after.keys)
+        }
+    }
+
+    /** Drops the open pattern path gesture without touching the layer; the mode stays armed. */
+    private fun patternPathCancel() {
+        patternPathPoints = null
+        patternPathLayerId = null
     }
 
     override fun deselect() {

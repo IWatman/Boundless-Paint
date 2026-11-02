@@ -422,6 +422,14 @@
     <string name="pattern_offset_y">Смещение Y</string>
     <string name="pattern_contrast">Контраст</string>
     <string name="pattern_invert">Инверсия</string>
+    <!-- Pattern path -->
+    <string name="pattern_path">Узор по пути…</string>
+    <string name="pattern_path_title">Узор по пути</string>
+    <string name="pattern_path_hint">Проведите, чтобы разложить узор по пути; касание ставит одну плитку. Назад или Закрыть выходят из режима.</string>
+    <string name="pattern_path_dialog_hint">Нажмите «Применить», затем проведите путь на холсте.</string>
+    <string name="pattern_path_scale">Масштаб плитки</string>
+    <string name="pattern_path_follow">Вдоль пути</string>
+    <string name="pattern_path_fixed">Фиксированный угол</string>
     <!-- Materials -->
     <string name="materials">Материалы…</string>
     <string name="materials_title">Материалы</string>

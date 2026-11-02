@@ -5,8 +5,8 @@
 - **Date:** 2026-11-02.
 - **Scope:** documentation only. No production code, version bump, tag or push.
 - **Verdict:** the shipped M5 scope is code-complete on JVM/emulator evidence, but **M5 is not QA-closed**.
-  Pattern tools (path/quilt/tile) are still absent, and the real-tablet matrix, 4K, audio drift and throughput
-  measurements are pending.
+  The path pattern tool now ships; quilt and tile pattern tools are still absent, and the real-tablet matrix, 4K,
+  audio drift and throughput measurements are pending.
 
 This page separates three things that are easy to confuse:
 
@@ -41,7 +41,7 @@ performance."** The table expands it into the shipped scope.
 |---|---|---|---|---|
 | 1 | Remaining filters | All 52 filters marked M5 in [filters.md](filters.md), in five batches: smooth/lens/high-pass/scatter/grain/local contrast/bokeh/flare/god rays/cross; geometric warps; stylization/material filters; artistic/generative filters; manga/sketch/oil/frames/rain. Common strength and per-filter controls; one undo step; selection, alpha lock and tile seams covered. | JVM `FiltersM5Test` (8), `FiltersM5GeometryTest` (11), `FiltersM5StyleTest` (15), `FiltersM5ArtisticTest` (15), `FiltersM5FinalTest` (16) = 65 tests. | JVM covered. No device visual pass recorded. |
 | 2 | Pattern fill | Twelve seamless procedural patterns (checks, dots, diagonal stripes, brick, herringbone, canvas, zigzag, waves, triangles, stars, hexagons, wood grain), two colours, tile size, rotation, phase offset, contrast, invert and opacity; worker fill, one undo step. | JVM `PatternFillTest` (22): lattice wrap, rotation, offsets, controls, selection, alpha lock, undo. | JVM covered. Device visual/seam check pending. |
-| 3 | Pattern tools (path / quilt / tile) | **Not shipped.** Only pattern fill exists; no path, quilt or tile pattern tool is in the UI or core. README still lists these under "Next (M5)". | No implementation found. [FEATURE-MAP.md](FEATURE-MAP.md) §21 lists them as P2. | ⚠️ **Open M5 gap.** Must be implemented or explicitly deferred to M6 before the milestone is called closed. |
+| 3 | Pattern tools (path / quilt / tile) | **Path shipped; quilt and tile deferred.** Editing Tools → Pattern path… repeats one of the twelve patterns along a freehand path with stable arc-length spacing, tangent or fixed rotation, spacing and tile scale (8..256 px), two colours, invert and opacity; selection/alpha-lock clipping, worker render and one undo step. Quilt and tile are absent. | JVM `PatternPathTest` (20): sampling-independent spacing, tangents, fixed angle, scale/spacing clamps, selection, alpha lock, locked layer, undo/redo, tap, empty path, canvas clipping, invert and opacity. | JVM covered. Device visual pass pending. Quilt/tile still an open M5 gap. |
 | 4 | Materials | Eight procedural stamps (balloon, fabric, wood, metal, stone, foliage, sparkle, paper); Stamp and Paint modes; size, rotation, opacity and spacing; favourites, recents and settings persisted across restarts. | JVM `MaterialStampTest`, `MaterialStrokeTest`, `MaterialPrefsCodecTest`. | JVM covered. No import, user library or single-stamp drag placement; no device visual pass. |
 | 5 | Video S1 — model, persistence, timeline | 60 Hz tick model, tracks/clips/audio, animation conversion, manifest/`saveDelta`/snapshot persistence, read-only timeline with scrubbing. | JVM `VideoTest` (13), `VideoProjectIOTest` (7), `SnapshotTest` (+2). | JVM covered. Manual timeline pass pending. |
 | 6 | Video S2 — editing and preview | Add/blank/delete/trim/move, snapping, 60 Hz playback cursor, transport, canvas preview, stop on paint/undo/panel close; no history or timelapse entries. | JVM `VideoEditTest` (10), `VideoPlaybackCursorTest` (6), `VideoTimelineTest` (5). | JVM covered. 60 fps preview on hardware pending. |
@@ -107,7 +107,7 @@ M5 is closed only when all of E1–E7 are met. E8 is release hygiene for this do
 
 | ID | Criterion | Status | Evidence / action |
 |---|---|---|---|
-| E1 | Every M5 roadmap item is shipped or explicitly deferred: filters, pattern tools, materials, video S1–S5, localization, performance. | **Open** | Filters, pattern fill, materials, video and localization are shipped. Path/quilt/tile pattern tools are not; either implement them or record a formal M6 deferral in ROADMAP/README. |
+| E1 | Every M5 roadmap item is shipped or explicitly deferred: filters, pattern tools, materials, video S1–S5, localization, performance. | **Open** | Filters, pattern fill, pattern path, materials, video and localization are shipped. Quilt/tile pattern tools are not; either implement them or record a formal M6 deferral in ROADMAP/README. |
 | E2 | All JVM tests green, including the M5 suites; localization checker exits 0 with no missing/extra keys. | **Reported met; checker met** | 831 JVM tests reported green; checker run here: 891/890, exit 0. The full suite was not re-run in this docs-only closeout. |
 | E3 | Instrumented video/audio suites green on the `painter_tab` AVD; 4K skip is explicit, never a false pass. | **Reported met** | S3 `VideoExporterTest` 3/3 and S4 audio 8/8 reported green; `VideoExporter4KTest` skipped. |
 | E4 | D1–D4 pass on the XP-Pen: pressure/calibration, buttons/eraser, tilt, palm/finger. | **Pending** | Real-tablet rows 1–4 and 9.16. |
@@ -137,7 +137,7 @@ These are candidates, not commitments. The first item is the only direct M5 scop
 
 | Candidate | Why it remains | Suggested priority |
 |---|---|---|
-| Path, quilt and tile pattern tools | M5 roadmap says "pattern tools"; only pattern fill shipped. README lists them under "Next (M5)". | P2 — close the M5 gap first. |
+| Quilt and tile pattern tools | M5 roadmap says "pattern tools"; pattern fill and the path tool ship, quilt/tile do not. README lists them under "Next (M5)". | P2 — close the M5 gap first. |
 | Material import, user library and single-stamp drag placement | Current materials are eight built-ins with Stamp/Paint; no import or arbitrary placement. | P2 |
 | Second drawing-track UI | S5 cut it; the core model, `Video.visibleFrames`, compositor and exporter already handle multiple visible tracks. | P2 |
 | Async live-filter refresh | [PERFORMANCE-M5.md](PERFORMANCE-M5.md) §4.1: synchronous full-canvas refresh blocks the UI (0.86–1.14 s for 10 layers at 1080p on desktop). | P0 before large-document work |
@@ -150,8 +150,8 @@ These are candidates, not commitments. The first item is the only direct M5 scop
 
 ## 8. Gaps and documentation actions found in this closeout
 
-1. **Pattern tools are missing.** `filters.md`, pattern fill and materials are complete, but path/quilt/tile
-   pattern tools from FEATURE-MAP §21 are absent. This is the one clear roadmap gap.
+1. **Quilt and tile pattern tools are missing.** `filters.md`, pattern fill, the pattern path tool and materials
+   are complete, but quilt/tile pattern tools from FEATURE-MAP §21 are absent. This is the one clear roadmap gap.
 2. **Localization counts in STATUS are stale.** The 2026-11-01 note says 797 EN / 796 RU; the 2026-11-02 checker
    reports 891 EN (1 non-translatable) / 890 RU. The counts are updated with a dated note in STATUS.
 3. **Checklist item 6.7 was impossible.** It asked for "4K canvas, 10+ layers", while PERFORMANCE-M5 §4.8 derives
