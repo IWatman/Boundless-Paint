@@ -100,11 +100,6 @@ fun PatternDialog(
     val previews = remember(spec, background, patternInk, opacity) {
         PatternKind.entries.associateWith { previewBitmap(spec.copy(kind = it), background, patternInk, opacity) }
     }
-    val activeHsv = if (editing == PatternColorRole.BACKGROUND) backgroundHsv else inkHsv
-    val setActiveHsv: (HsvUi) -> Unit = { value ->
-        if (editing == PatternColorRole.BACKGROUND) backgroundHsv = value else inkHsv = value
-    }
-    val activeColor = if (editing == PatternColorRole.BACKGROUND) background else patternInk
     val percent = { v: Float -> "${(v * 100).roundToInt()}%" }
 
     AlertDialog(
@@ -129,64 +124,15 @@ fun PatternDialog(
                         }
                     }
                 }
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    PatternColorChoice(
-                        label = stringResource(R.string.pattern_background),
-                        color = background,
-                        selected = editing == PatternColorRole.BACKGROUND,
-                        onClick = { editing = PatternColorRole.BACKGROUND },
-                        modifier = Modifier.weight(1f),
-                    )
-                    PatternColorChoice(
-                        label = stringResource(R.string.pattern_ink),
-                        color = patternInk,
-                        selected = editing == PatternColorRole.INK,
-                        onClick = { editing = PatternColorRole.INK },
-                        modifier = Modifier.weight(1f),
-                    )
-                }
-                Row(
-                    Modifier.fillMaxWidth().padding(horizontal = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        stringResource(
-                            if (editing == PatternColorRole.BACKGROUND) R.string.pattern_background
-                            else R.string.pattern_ink,
-                        ),
-                        style = MaterialTheme.typography.labelLarge,
-                        modifier = Modifier.weight(1f),
-                    )
-                    Text(
-                        "#" + activeColor.toHexString(),
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                ParamSlider(
-                    label = stringResource(R.string.hue),
-                    value = activeHsv.h,
-                    range = 0f..360f,
-                    format = { it.roundToInt().toString() },
-                    onChange = { setActiveHsv(activeHsv.copy(h = it)) },
-                    step = 1f,
-                    unit = "°",
-                )
-                ParamSlider(
-                    label = stringResource(R.string.saturation),
-                    value = activeHsv.s,
-                    range = 0f..1f,
-                    format = percent,
-                    onChange = { setActiveHsv(activeHsv.copy(s = it)) },
-                    step = 0.01f,
-                )
-                ParamSlider(
-                    label = stringResource(R.string.brightness),
-                    value = activeHsv.v,
-                    range = 0f..1f,
-                    format = percent,
-                    onChange = { setActiveHsv(activeHsv.copy(v = it)) },
-                    step = 0.01f,
+                PatternColorEditor(
+                    backgroundHsv = backgroundHsv,
+                    inkHsv = inkHsv,
+                    editing = editing,
+                    onEditingChange = { editing = it },
+                    onBackgroundHsv = { backgroundHsv = it },
+                    onInkHsv = { inkHsv = it },
+                    background = background,
+                    ink = patternInk,
                 )
                 ParamSlider(
                     label = stringResource(R.string.pattern_tile_size),
@@ -287,6 +233,88 @@ internal fun PatternColorChoice(
             overflow = TextOverflow.Ellipsis,
         )
     }
+}
+
+/**
+ * The two pattern colour buttons followed by the HSB sliders of the selected role. [background] and [ink] are
+ * the colours the current HSV values resolve to, so each row shows the value that will be applied.
+ */
+@Composable
+internal fun PatternColorEditor(
+    backgroundHsv: HsvUi,
+    inkHsv: HsvUi,
+    editing: PatternColorRole,
+    onEditingChange: (PatternColorRole) -> Unit,
+    onBackgroundHsv: (HsvUi) -> Unit,
+    onInkHsv: (HsvUi) -> Unit,
+    background: Rgba,
+    ink: Rgba,
+) {
+    val activeHsv = if (editing == PatternColorRole.BACKGROUND) backgroundHsv else inkHsv
+    val setActiveHsv: (HsvUi) -> Unit = { value ->
+        if (editing == PatternColorRole.BACKGROUND) onBackgroundHsv(value) else onInkHsv(value)
+    }
+    val activeColor = if (editing == PatternColorRole.BACKGROUND) background else ink
+    val percent = { v: Float -> "${(v * 100).roundToInt()}%" }
+    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        PatternColorChoice(
+            label = stringResource(R.string.pattern_background),
+            color = background,
+            selected = editing == PatternColorRole.BACKGROUND,
+            onClick = { onEditingChange(PatternColorRole.BACKGROUND) },
+            modifier = Modifier.weight(1f),
+        )
+        PatternColorChoice(
+            label = stringResource(R.string.pattern_ink),
+            color = ink,
+            selected = editing == PatternColorRole.INK,
+            onClick = { onEditingChange(PatternColorRole.INK) },
+            modifier = Modifier.weight(1f),
+        )
+    }
+    Row(
+        Modifier.fillMaxWidth().padding(horizontal = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            stringResource(
+                if (editing == PatternColorRole.BACKGROUND) R.string.pattern_background
+                else R.string.pattern_ink,
+            ),
+            style = MaterialTheme.typography.labelLarge,
+            modifier = Modifier.weight(1f),
+        )
+        Text(
+            "#" + activeColor.toHexString(),
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+    ParamSlider(
+        label = stringResource(R.string.hue),
+        value = activeHsv.h,
+        range = 0f..360f,
+        format = { it.roundToInt().toString() },
+        onChange = { setActiveHsv(activeHsv.copy(h = it)) },
+        step = 1f,
+        unit = "°",
+    )
+    ParamSlider(
+        label = stringResource(R.string.saturation),
+        value = activeHsv.s,
+        range = 0f..1f,
+        format = percent,
+        onChange = { setActiveHsv(activeHsv.copy(s = it)) },
+        step = 0.01f,
+    )
+    ParamSlider(
+        label = stringResource(R.string.brightness),
+        value = activeHsv.v,
+        range = 0f..1f,
+        format = percent,
+        onChange = { setActiveHsv(activeHsv.copy(v = it)) },
+        step = 0.01f,
+    )
 }
 
 /** One pattern chooser card: a live mask preview tinted with both pattern colours above its name. */

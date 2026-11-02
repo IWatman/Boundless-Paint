@@ -428,6 +428,14 @@
     <string name="pattern_quilt_gap">Gap</string>
     <string name="pattern_quilt_scale">Pattern scale</string>
     <string name="pattern_quilt_hint">Cells fill the canvas, or the selection when one is active.</string>
+    <!-- Pattern path -->
+    <string name="pattern_path">Pattern path…</string>
+    <string name="pattern_path_title">Pattern path</string>
+    <string name="pattern_path_hint">Drag to lay the pattern along a path; a tap places one tile. Back or Close leaves the mode.</string>
+    <string name="pattern_path_dialog_hint">Apply, then drag a path on the canvas.</string>
+    <string name="pattern_path_scale">Tile scale</string>
+    <string name="pattern_path_follow">Follow path</string>
+    <string name="pattern_path_fixed">Fixed angle</string>
     <!-- Materials -->
     <string name="materials">Materials…</string>
     <string name="materials_title">Materials</string>

@@ -40,6 +40,23 @@
   and visible-shape checks for each new pattern (fold, antiphase waves, triangle orientation, five star tips,
   hexagon lattice gaps and wood grain bands).
 
+### Pattern path (2026-11-02)
+- Core: `core/fill/PatternPath.kt` repeats one of the twelve procedural patterns along a polyline. Tiles are
+  square, one motif repeat across `scale` document pixels, and placed at a stable arc-length spacing, so the
+  distance between them does not depend on how the gesture was sampled. Each tile follows the path tangent or a
+  fixed angle; the whole path blends the two pattern colours at one opacity, clips to the canvas and the
+  selection, keeps alpha under alpha lock and leaves a locked layer alone. All tiles of a gesture accumulate into
+  one `TilePatch`, so the caller records one history step.
+- UI: Editing Tools → Pattern path… opens the twelve live pattern previews with both colours and HSB sliders,
+  spacing and tile scale (8..256 px), Follow path / Fixed angle with the fixed angle slider, invert and opacity.
+  Apply arms the transient path mode: drag a path on the canvas and release to render it on a worker, or tap to
+  place one tile. A hint bar shows the gesture and closes the mode; Back also leaves it before the document.
+  A cancelled gesture paints nothing and already committed paths are ordinary undo steps.
+- Tests: `PatternPathTest` (20) covers sampling-independent arc-length spacing on straight and bent paths,
+  tangent and fixed angles, scale and spacing clamps, selection clipping, alpha lock, locked layers, one
+  undo/redo, tap and empty paths, canvas clipping, invert, opacity and determinism.
+- M5 now: **859 JVM tests** (750 core, 109 app).
+
 ### Materials library (2026-11-02)
 - Core: `core/material/MaterialStamp.kt` generates eight procedural stamps — balloon (soft satin sphere), fabric
   (plain weave), wood (grain), metal (brushed plate), stone (speckled slab), foliage (leaf cluster), sparkle
@@ -58,7 +75,6 @@
 - Persistence: `MaterialPrefsCodec` + `ToolPrefs` keep the last kind, size, rotation, opacity, spacing and
   Paint/Stamp mode, plus a favourites set and the last four used materials, across app restarts; values are
   clamped on restore. `MaterialPrefsCodecTest` (13) covers parsing, favourites, recents and clamping.
-- M5 now: **755 JVM tests** (648 core, 107 app).
 
 ### First filter batch (2026-11-01)
 - Core: ten more destructive filters — smooth (edge-preserving), lens blur, high-pass, frosted glass/scatter,

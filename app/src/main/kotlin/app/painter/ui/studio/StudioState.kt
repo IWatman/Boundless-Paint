@@ -9,6 +9,7 @@ import app.painter.core.doc.AnimationPlayback
 import app.painter.core.doc.ColorTag
 import app.painter.core.doc.EditTarget
 import app.painter.core.fill.GradientType
+import app.painter.core.fill.PatternPathSpec
 import app.painter.core.fill.PatternSpec
 import app.painter.core.fill.QuiltSpec
 import app.painter.core.fill.Spread
@@ -36,7 +37,9 @@ import app.painter.studio.VideoExportOptions
  * of the canvas and fills it on the active layer with the current color. [GRADIENT] drags the axis of a
  * two-stop gradient and applies it to the active layer. [SHAPE] drags, edits and stamps geometric shapes
  * of the selected [app.painter.core.shape.ShapeTool] on the active layer. [MATERIAL] paints the current
- * procedural material along the gesture (a tap stamps it once at the pointer).
+ * procedural material along the gesture (a tap stamps it once at the pointer). [PATTERN_PATH] repeats the
+ * pattern of [StudioUiState.patternPath] along the gesture (a tap places one tile); it is a transient mode
+ * entered from the Pattern path dialog and left with [StudioActions.exitPatternPath].
  */
 enum class ToolUi {
     BRUSH, SELECT_RECT, SELECT_ELLIPSE, SELECT_LASSO, SELECT_WAND, TRANSFORM, FILL, GRADIENT, SHAPE,
@@ -50,6 +53,8 @@ enum class ToolUi {
     LASSO_ERASE,
     /** Paints the material of [StudioUiState.materialSpec] along the gesture (spec §21). */
     MATERIAL,
+    /** Repeats the pattern of [StudioUiState.patternPath] along the gesture (spec §21). */
+    PATTERN_PATH,
 }
 
 /** True for the lasso fill/erase tools that record a freehand contour and apply it on release. */
@@ -370,6 +375,8 @@ data class StudioUiState(
     val materialFavourites: Set<MaterialKind> = emptySet(),
     /** Last materials confirmed in the dialog, newest first. */
     val materialRecent: List<MaterialKind> = emptyList(),
+    /** Pattern path settings while the transient path mode is active, null otherwise. */
+    val patternPath: PatternPathUi? = null,
     /** Live selection rectangle while dragging a rectangle selection (document pixels), null when idle. */
     val selectionDraft: RectUi? = null,
     /** Live outline of an ellipse (bounding box) or lasso (trail) selection draft, null when idle. */
@@ -421,6 +428,17 @@ data class StudioUiState(
     val editorBrushName: String = "",
     /** True when the edited brush references a texture image; without one the Texture tab cannot turn the grain on. */
     val editorHasTexture: Boolean = false,
+)
+
+/**
+ * Transient pattern path mode: the pattern [spec] and the [background]/[ink] colours of its tiles. Non-null
+ * only while the path tool is armed; [ToolUi.PATTERN_PATH] paints with it.
+ */
+@Immutable
+data class PatternPathUi(
+    val spec: PatternPathSpec,
+    val background: Rgba,
+    val ink: Rgba,
 )
 
 /**
@@ -625,6 +643,15 @@ interface StudioActions {
 
     /** Adds [kind] to the material favourites, or removes it when it is already starred. */
     fun toggleMaterialFavourite(kind: MaterialKind) {}
+
+    /**
+     * Picks [spec] with its two tile colours and switches to the transient pattern path mode: a drag repeats
+     * the pattern along the gesture and a tap places one tile, each as one undo step.
+     */
+    fun selectPatternPath(spec: PatternPathSpec, background: Rgba, ink: Rgba) {}
+
+    /** Leaves the pattern path mode, dropping an unfinished gesture; committed paths stay. */
+    fun exitPatternPath() {}
 
     fun setBrushSize(size: Float)
     fun setOpacity(opacity: Float)
