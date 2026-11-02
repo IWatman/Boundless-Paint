@@ -9,7 +9,7 @@
 - Release assets are named `boundless-paint-<version>.apk`; the updater reads the renamed
   `IWatman/Boundless-Paint` repository.
 
-## M5: in progress (2026-11-01)
+## M5: code-complete (2026-11-02, 0.6.0); real-tablet QA pending
 > QA closeout: [QA-M5.md](QA-M5.md) — feature evidence, the XP-Pen device matrix and the M5 exit criteria
 > (2026-11-02). Hardware rows, 4K, audio drift and throughput are still pending.
 

@@ -4,9 +4,8 @@
 - **Baseline:** `m5-qa` plus the quilt/path merges on `main`.
 - **Date:** 2026-11-02.
 - **Scope:** documentation only. No production code, version bump, tag or push.
-- **Verdict:** the shipped M5 scope is code-complete on JVM/emulator evidence, but **M5 is not QA-closed**.
-  Pattern fill, quilt and path tools now ship, so the pattern-tool gap is closed; the real-tablet matrix, 4K,
-  audio drift and throughput measurements are pending.
+- **Verdict:** M5 is **code-complete** on JVM/emulator evidence; the only open work is the **real-tablet QA pass**
+  (E4–E6). Pattern fill/quilt/path, all filters, materials, video S1–S5, localization and the performance baseline ship.
 
 This page separates three things that are easy to confuse:
 
@@ -37,7 +36,7 @@ Actions taken:
 The roadmap line is short: **"Remaining filters, pattern tools, materials, video mode, localization,
 performance."** The table expands it into the shipped scope.
 
-| # | M5 item | Shipped in 0.5.10 | Evidence | QA status |
+| # | M5 item | Shipped in 0.5.12 | Evidence | QA status |
 |---|---|---|---|---|
 | 1 | Remaining filters | All 52 filters marked M5 in [filters.md](filters.md), in five batches: smooth/lens/high-pass/scatter/grain/local contrast/bokeh/flare/god rays/cross; geometric warps; stylization/material filters; artistic/generative filters; manga/sketch/oil/frames/rain. Common strength and per-filter controls; one undo step; selection, alpha lock and tile seams covered. | JVM `FiltersM5Test` (8), `FiltersM5GeometryTest` (11), `FiltersM5StyleTest` (15), `FiltersM5ArtisticTest` (15), `FiltersM5FinalTest` (16) = 65 tests. | JVM covered. No device visual pass recorded. |
 | 2 | Pattern fill | Twelve seamless procedural patterns (checks, dots, diagonal stripes, brick, herringbone, canvas, zigzag, waves, triangles, stars, hexagons, wood grain), two colours, tile size, rotation, phase offset, contrast, invert and opacity; worker fill, one undo step. | JVM `PatternFillTest` (22): lattice wrap, rotation, offsets, controls, selection, alpha lock, undo. | JVM covered. Device visual/seam check pending. |
@@ -55,7 +54,7 @@ performance."** The table expands it into the shipped scope.
 
 | Level | What exists | Result | Re-run in this closeout? |
 |---|---|---|---|
-| JVM | **831 tests reported** (723 core, 108 app) at the end of S5, including the five M5 filter suites, `PatternFillTest`, the three material suites, `VideoTest`/`VideoProjectIOTest`/`VideoEditTest`/`VideoPlaybackCursorTest`/`VideoExportPlanTest`/`YuvTest`, `AudioMixTest`/`AudioTimelineTest`. | Reported green in [STATUS.md](STATUS.md). | No — counts are quoted, not re-run. |
+| JVM | **873 tests reported** (764 core, 109 app) at the end of the pattern-tool work, including the five M5 filter suites, `PatternFillTest`, `PatternQuiltTest`, `PatternPathTest`, the material suites, `VideoTest`/`VideoProjectIOTest`/`VideoEditTest`/`VideoPlaybackCursorTest`/`VideoExportPlanTest`/`YuvTest`, `AudioMixTest`/`AudioTimelineTest`. | Reported green in [STATUS.md](STATUS.md). | No - counts are quoted, not re-run. |
 | Instrumented | `VideoExporterTest` (3) and the S4 audio suites (8/8) on the `painter_tab` AVD. | Reported green. | No. |
 | Instrumented 4K | `VideoExporter4KTest`. | **Skipped** because the AVD encoder/heap did not qualify. Not a pass. | No. |
 | Emulator manual | No M5-specific manual UI pass is recorded; S3/S4 evidence is instrumented only. | — | No. |
@@ -161,12 +160,12 @@ These are candidates, not commitments. The pattern-tool M5 gap is closed by patt
    no audio-drift measurement and no real-tablet M5 pass.
 5. **No M5 manual emulator pass is recorded.** S3/S4 are instrumented; the filter/pattern/material/video dialogs
    have JVM coverage but no recorded visual pass.
-6. **README still says "Next (M5)"** for pattern tools and further material work. Resolve together with E1.
+6. **README "Next (M5)" is resolved.** The list now names only the real-tablet QA pass; optional material/pattern
+   variations moved to the M6 candidate list.
 
 ## 9. Closeout
 
-The M5 implementation is a credible release candidate for the **shipped** scope: the filter set is complete, the
-pattern fill and materials have direct JVM coverage, video S1–S5 are implemented with emulator evidence for
-export/audio, and the localization checker passes. It is not a QA-closed milestone until the XP-Pen matrix
-(D1–D18), the 4K/1080p timing, the audio import/record/mux and drift checks, and the big-project stability run
-produce recorded results — and until the pattern-tools gap is either implemented or formally deferred.
+The M5 implementation is **code-complete**: the filter set is complete, pattern fill/quilt/path and materials have
+direct JVM coverage, video S1–S5 are implemented with emulator evidence for export/audio, and the localization
+checker passes. Closing M5 now requires only the XP-Pen matrix (D1–D18), the 4K/1080p timing, the audio
+import/record/mux and drift checks, and the big-project stability run with recorded results.

@@ -3,7 +3,7 @@
 Each milestone = a working APK build + green JVM tests.
 
 > M0 and M1 were completed 2026-10-26, details and debt in spec/STATUS.md. Plan for M2: spec/PLAN-M2.md (scope changes are also recorded there).
-> M2 was completed 2026-10-31: engine S0–S9, 91-preset catalog, brush editor, stylus settings; acceptance in spec/STATUS.md. M3 is in progress.
+> M2 was completed 2026-10-31: engine S0–S9, 91-preset catalog, brush editor, stylus settings; acceptance in spec/STATUS.md. M3 and M4 are complete. M5 is code-complete; only the real-tablet QA pass remains.
 
 ## M0: Skeleton
 - [ ] Gradle project `app/` (Kotlin, Compose, minSdk 29, target 36), local GRADLE_USER_HOME.
@@ -38,4 +38,5 @@ Each milestone = a working APK build + green JVM tests.
 - Sync with Google Drive.
 
 ## M5: Polish
+- Code-complete 2026-11-02; only the real-tablet QA pass remains ([QA-M5.md](QA-M5.md)).
 - Remaining filters, pattern tools, materials, video mode, localization, performance.

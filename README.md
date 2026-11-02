@@ -16,7 +16,7 @@ The app is completely free: no subscriptions, ads, watermarks or paid features.
   <img src="docs/screenshots/update.png" width="49%" alt="In-app update">
 </p>
 
-> **Status:** M5 (polish) is in progress (November 2026); M4 is complete. The app has the full brush engine (texture, paint mixing, watercolor, particles, harmony, 3D, filter and clone brushes), a catalog of 91 presets in 17 categories, the brush editor, stylus settings with calibration, layers with masks and adjustment layers, selections, transform, fills, gradients, symmetry, guides, perspective grids, shapes, filters, PSD in/out, timelapse, vector layers, frame animation and Google Drive backup.
+> **Status:** M5 is code-complete (November 2026); the only remaining step is the real-tablet QA pass. M4 is complete. The app has the full brush engine (texture, paint mixing, watercolor, particles, harmony, 3D, filter and clone brushes), a catalog of 91 presets in 17 categories, the brush editor, stylus settings with calibration, layers with masks and adjustment layers, selections, transform, fills, gradients, symmetry, guides, perspective grids, shapes, filters, PSD in/out, timelapse, vector layers, frame animation, Google Drive backup and video export.
 
 ## Features
 
@@ -60,9 +60,8 @@ The app is completely free: no subscriptions, ads, watermarks or paid features.
 - Share the finished drawing to any app through the Android share sheet
 - In-app update from GitHub Releases
 
-**Next (M5)**
-- Further material library and optional pattern variations
-- Device performance and the real-tablet QA pass
+**Remaining for M5**
+- Real-tablet QA only: stylus, 4K/1080p export timing, audio import/record/mux, A/V sync and big-project stability. See [spec/QA-M5.md](spec/QA-M5.md) and [spec/qa/TABLET-CHECKLIST.md](spec/qa/TABLET-CHECKLIST.md).
 
 Full plan: [spec/ROADMAP.md](spec/ROADMAP.md), the finished M2 plan: [spec/PLAN-M2.md](spec/PLAN-M2.md), known issues: [spec/STATUS.md](spec/STATUS.md).
 
