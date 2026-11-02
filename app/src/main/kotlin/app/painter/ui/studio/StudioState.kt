@@ -10,6 +10,7 @@ import app.painter.core.doc.ColorTag
 import app.painter.core.doc.EditTarget
 import app.painter.core.fill.GradientType
 import app.painter.core.fill.PatternSpec
+import app.painter.core.fill.QuiltSpec
 import app.painter.core.fill.Spread
 import app.painter.core.filter.FilterParams
 import app.painter.core.guide.OverlayRole
@@ -602,6 +603,13 @@ interface StudioActions {
      * [background] is the coverage-0 colour and [ink] the coverage-1 colour.
      */
     fun patternFill(spec: PatternSpec, background: Rgba, ink: Rgba, opacity: Float) {}
+
+    /**
+     * Fills the active layer, or the selection, with a grid of pattern cells from [spec] as one undo step;
+     * [background] is the coverage-0 colour and [ink] the coverage-1 colour. The grid covers the canvas,
+     * or the selection bounds when a selection is active.
+     */
+    fun patternQuilt(spec: QuiltSpec, background: Rgba, ink: Rgba, opacity: Float) {}
 
     /**
      * Stamps one built-in procedural material at the canvas centre, or the selection centre, with the current

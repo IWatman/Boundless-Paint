@@ -80,6 +80,7 @@ fun StudioScreen(
     var filterLayerOpen by remember { mutableStateOf(false) }
     var textOpen by remember { mutableStateOf(false) }
     var patternOpen by remember { mutableStateOf(false) }
+    var quiltOpen by remember { mutableStateOf(false) }
     var materialsOpen by remember { mutableStateOf(false) }
     var cropOpen by remember { mutableStateOf(false) }
     var resizeOpen by remember { mutableStateOf(false) }
@@ -123,6 +124,19 @@ fun StudioScreen(
             onApply = { spec, background, patternInk, opacity ->
                 patternOpen = false
                 actions.patternFill(spec, background, patternInk, opacity)
+            },
+        )
+    }
+    if (quiltOpen) {
+        PatternQuiltDialog(
+            ink = state.color,
+            canvasWidth = state.canvasWidth,
+            canvasHeight = state.canvasHeight,
+            selection = state.selectionBounds,
+            onDismiss = { quiltOpen = false },
+            onApply = { spec, background, patternInk, opacity ->
+                quiltOpen = false
+                actions.patternQuilt(spec, background, patternInk, opacity)
             },
         )
     }
@@ -271,6 +285,7 @@ fun StudioScreen(
                 onFilterLayer = { filterLayerOpen = true },
                 onText = { textOpen = true },
                 onPatternFill = { patternOpen = true },
+                onPatternQuilt = { quiltOpen = true },
                 onMaterials = { materialsOpen = true },
                 onCrop = { cropOpen = true },
                 onResize = { resizeOpen = true },
@@ -840,6 +855,7 @@ private fun StudioTopBar(
     onFilterLayer: () -> Unit,
     onText: () -> Unit,
     onPatternFill: () -> Unit,
+    onPatternQuilt: () -> Unit,
     onMaterials: () -> Unit,
     onCrop: () -> Unit,
     onResize: () -> Unit,
@@ -930,6 +946,13 @@ private fun StudioTopBar(
                             onClick = {
                                 toolsMenu = false
                                 onPatternFill()
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.pattern_quilt)) },
+                            onClick = {
+                                toolsMenu = false
+                                onPatternQuilt()
                             },
                         )
                         DropdownMenuItem(

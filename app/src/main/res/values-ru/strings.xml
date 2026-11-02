@@ -422,6 +422,13 @@
     <string name="pattern_offset_y">Смещение Y</string>
     <string name="pattern_contrast">Контраст</string>
     <string name="pattern_invert">Инверсия</string>
+    <string name="pattern_quilt">Лоскутный узор…</string>
+    <string name="pattern_quilt_title">Лоскутный узор</string>
+    <string name="pattern_quilt_rows">Ряды</string>
+    <string name="pattern_quilt_columns">Столбцы</string>
+    <string name="pattern_quilt_gap">Зазор</string>
+    <string name="pattern_quilt_scale">Масштаб узора</string>
+    <string name="pattern_quilt_hint">Ячейки заполняют холст или выделение, если оно активно.</string>
     <!-- Materials -->
     <string name="materials">Материалы…</string>
     <string name="materials_title">Материалы</string>

@@ -33,6 +33,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import app.painter.R
 import app.painter.core.color.Rgba
@@ -50,10 +51,10 @@ import app.painter.ui.theme.PainterTheme
 import kotlin.math.roundToInt
 
 /** Which of the two pattern colours the sliders below the swatches edit. */
-private enum class PatternColorRole { BACKGROUND, INK }
+internal enum class PatternColorRole { BACKGROUND, INK }
 
 /** Display name of a built-in pattern. */
-private fun PatternKind.titleRes(): Int = when (this) {
+internal fun PatternKind.titleRes(): Int = when (this) {
     PatternKind.CHECKS -> R.string.pattern_checks
     PatternKind.DOTS -> R.string.pattern_dots
     PatternKind.DIAGONAL_STRIPES -> R.string.pattern_stripes
@@ -257,7 +258,7 @@ fun PatternDialog(
 
 /** One of the two pattern colour buttons: a swatch and its role, accent-highlighted while its sliders are open. */
 @Composable
-private fun PatternColorChoice(
+internal fun PatternColorChoice(
     label: String,
     color: Rgba,
     selected: Boolean,
@@ -290,15 +291,17 @@ private fun PatternColorChoice(
 
 /** One pattern chooser card: a live mask preview tinted with both pattern colours above its name. */
 @Composable
-private fun PatternTile(
+internal fun PatternTile(
     label: String,
     preview: ImageBitmap,
     selected: Boolean,
     onPick: () -> Unit,
+    width: Dp = 76.dp,
+    previewSize: Dp = 56.dp,
 ) {
     Column(
         Modifier
-            .width(76.dp)
+            .width(width)
             .clip(MaterialTheme.shapes.small)
             .background(if (selected) AccentFill else Color.Transparent)
             .border(
@@ -316,7 +319,7 @@ private fun PatternTile(
             contentDescription = label,
             contentScale = ContentScale.Crop,
             modifier = Modifier
-                .size(56.dp)
+                .size(previewSize)
                 .clip(MaterialTheme.shapes.small),
         )
         Text(
@@ -332,7 +335,7 @@ private fun PatternTile(
  * Small tile preview of [spec] blended between [background] and [ink] at [opacity] over a neutral sheet,
  * so transparency and the phase offset stay visible.
  */
-private fun previewBitmap(
+internal fun previewBitmap(
     spec: PatternSpec,
     background: Rgba,
     ink: Rgba,

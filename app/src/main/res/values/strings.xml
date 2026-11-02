@@ -421,6 +421,13 @@
     <string name="pattern_offset_y">Offset Y</string>
     <string name="pattern_contrast">Contrast</string>
     <string name="pattern_invert">Invert</string>
+    <string name="pattern_quilt">Pattern quilt…</string>
+    <string name="pattern_quilt_title">Pattern quilt</string>
+    <string name="pattern_quilt_rows">Rows</string>
+    <string name="pattern_quilt_columns">Columns</string>
+    <string name="pattern_quilt_gap">Gap</string>
+    <string name="pattern_quilt_scale">Pattern scale</string>
+    <string name="pattern_quilt_hint">Cells fill the canvas, or the selection when one is active.</string>
     <!-- Materials -->
     <string name="materials">Materials…</string>
     <string name="materials_title">Materials</string>
