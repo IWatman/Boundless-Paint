@@ -40,6 +40,17 @@
   and visible-shape checks for each new pattern (fold, antiphase waves, triangle orientation, five star tips,
   hexagon lattice gaps and wood grain bands).
 
+### Pattern quilt (2026-11-02)
+- Core: `core/fill/PatternQuilt.kt` lays a grid of pattern cells over the canvas or the selection bounds. Rows and
+  columns are 1..20, gaps 0..64 px are even and clamped to fit, and every cell restarts the motif through
+  `PatternSampler`, so scale, rotation, two colours, contrast and invert stay consistent. The whole grid is one
+  `TilePatch` with selection clipping, alpha-lock handling and locked-layer rejection.
+- UI: Editing Tools → Pattern quilt… has a live grid preview, pattern cards, rows/columns/gap/scale/rotation,
+  both colours with HSB, invert and opacity; Apply renders on a worker and records one undo step.
+- Tests: `PatternQuiltTest` (14) — row/column counts, even and clamped gaps, one-cell/empty layouts, motif restart,
+  selection bounds and irregular mask clipping, determinism, scale/rotation/opacity, alpha lock, locked layers,
+  transparent colours and undo/redo.
+
 ### Pattern path (2026-11-02)
 - Core: `core/fill/PatternPath.kt` repeats one of the twelve procedural patterns along a polyline. Tiles are
   square, one motif repeat across `scale` document pixels, and placed at a stable arc-length spacing, so the
@@ -55,7 +66,7 @@
 - Tests: `PatternPathTest` (20) covers sampling-independent arc-length spacing on straight and bent paths,
   tangent and fixed angles, scale and spacing clamps, selection clipping, alpha lock, locked layers, one
   undo/redo, tap and empty paths, canvas clipping, invert, opacity and determinism.
-- M5 now: **859 JVM tests** (750 core, 109 app).
+- M5 now: **873 JVM tests** (764 core, 109 app).
 
 ### Materials library (2026-11-02)
 - Core: `core/material/MaterialStamp.kt` generates eight procedural stamps — balloon (soft satin sphere), fabric

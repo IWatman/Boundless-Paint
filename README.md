@@ -43,6 +43,7 @@ The app is completely free: no subscriptions, ads, watermarks or paid features.
 - Final M5 filters: manga and manga background tones, anime background, pencil sketch, oil paint, blur frame, table frame and rain (M5)
 - Video timeline: converts frame animation to a 60 fps project with clip editing, playback, up to two drawing tracks, MP4 export at 720p/1080p/1440p/4K where the encoder allows, and an audio track with import, record, volume and AAC muxing (M5, slices 3–5)
 - Pattern fill with twelve seamless procedural patterns (checks, dots, stripes, brick, herringbone, grain, zigzag, waves, triangles, stars, hexagons, wood grain), two colours, tile size, rotation, phase offset, contrast, invert and opacity (M5)
+- Pattern quilt: a grid of pattern cells with rows, columns, gaps, scale and rotation over the canvas or selection (M5)
 - Pattern path that repeats any of those patterns along a freehand path with stable arc-length spacing, tangent or fixed rotation, spacing and tile scale, invert and opacity (M5)
 - Materials: eight procedural stamps - balloon, fabric, wood, metal, stone, foliage, sparkle and paper - with size, rotation and opacity, stamped or painted along a stroke, with favourites, recents and persisted settings (M5)
 - Liquify and text stamp tools, hardware-keyboard shortcuts (M3)
@@ -60,7 +61,7 @@ The app is completely free: no subscriptions, ads, watermarks or paid features.
 - In-app update from GitHub Releases
 
 **Next (M5)**
-- Quilt and tile pattern tools, plus further material library work
+- Further material library and optional pattern variations
 - Device performance and the real-tablet QA pass
 
 Full plan: [spec/ROADMAP.md](spec/ROADMAP.md), the finished M2 plan: [spec/PLAN-M2.md](spec/PLAN-M2.md), known issues: [spec/STATUS.md](spec/STATUS.md).
