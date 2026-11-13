@@ -6,6 +6,7 @@ import app.painter.core.doc.AdjustmentLayer
 import app.painter.core.doc.Document
 import app.painter.core.doc.GroupNode
 import app.painter.core.doc.RasterLayer
+import app.painter.core.doc.effectivelyLocked
 import app.painter.core.doc.newNodeId
 import app.painter.core.fill.BucketFill
 import app.painter.core.fill.MaskMath
@@ -200,7 +201,7 @@ object SelectionEdits {
 
     private fun deletePatch(doc: Document): TilePatch? {
         val layer = doc.activeRaster ?: return null
-        if (layer.locked) return null
+        if (layer.effectivelyLocked) return null
         val mask = doc.selection.coverageOrNull()
         val result = HashMap<TileKey, Tile?>()
         for (k in layer.pixels.keys()) if (mask == null || mask.get(k) != null) result[k] = null

@@ -104,6 +104,7 @@ import app.painter.core.history.VectorStrokeCommand
 import app.painter.core.history.snapshotTiles
 import app.painter.core.io.BrushIO
 import app.painter.core.io.ProjectIO
+import app.painter.core.history.VectorOperationException
 import app.painter.core.io.ProjectStore
 import app.painter.core.io.PsdIO
 import app.painter.core.io.SaveTracker
@@ -283,10 +284,26 @@ class StudioViewModel(
 
     private val store = ProjectStore(app.filesDir.resolve("projects").apply { mkdirs() })
     private val ioLock = Mutex()
+    private val transitionLock = Mutex()
 
     /** Local Drive link and the sync-account state; separate from [state] so syncs do not recompose the canvas. */
     private val driveSettings = DriveSettings(app)
-    private val drive = driveTokens?.let { DriveRepository(it, driveSettings, app.cacheDir) }
+    private var driveTokenRequester: DriveTokenRequester? = driveTokens
+    private val tokenRouter = object : DriveTokenRequester {
+        override suspend fun requestToken(): String =
+            (driveTokenRequester ?: throw DriveException(0, "Google authorization is unavailable")).requestToken()
+
+        override suspend fun invalidateToken(token: String) {
+            driveTokenRequester?.invalidateToken(token)
+        }
+    }
+    private val drive = driveTokens?.let { DriveRepository(tokenRouter, driveSettings, app.cacheDir, projectIoLock = ioLock) }
+
+    fun bindDriveTokens(requester: DriveTokenRequester) { driveTokenRequester = requester }
+
+    fun unbindDriveTokens(requester: DriveTokenRequester) {
+        if (driveTokenRequester === requester) driveTokenRequester = null
+    }
     private val _driveState = MutableStateFlow(
         DriveUiState(
             account = driveSettings.account?.toUi(),
@@ -297,6 +314,7 @@ class StudioViewModel(
     val driveState: StateFlow<DriveUiState> = _driveState
     /** Upload started by [scheduleDriveAutoSync]; one at a time so a quick Save does not race itself. */
     private var autoSyncJob: Job? = null
+    private val pendingAutoSync = LinkedHashMap<String, String>()
 
     /** Pressure calibration of every input device seen so far, keyed by `InputDevice.descriptor`. */
     private val calibrations = HashMap<String, InputCalibration>()
@@ -319,6 +337,10 @@ class StudioViewModel(
     private var canvas: CanvasView? = null
     private var stroke: StrokeEngine? = null
     private var dirtySinceSave = false
+    private var editRevision = 0L
+    private var savedRevision = 0L
+    private var lastSaveSucceeded = true
+    val saveError = MutableStateFlow<String?>(null)
     /** Size the GL canvas was last reset to; undo/redo of a canvas command resets it when it differs. */
     private var lastCanvasWidth = 1
     private var lastCanvasHeight = 1
@@ -530,17 +552,35 @@ class StudioViewModel(
     }
 
     fun newDocument(name: String, width: Int, height: Int) {
+        viewModelScope.launch { createDocument(name, width, height) }
+    }
+
+    suspend fun createDocument(name: String, width: Int, height: Int): Boolean = transitionLock.withLock {
+        if (!flushBeforeTransition()) return@withLock false
         val d = Document.create(width, height, name.ifBlank { uiString(R.string.untitled) }, defaultLayerName(1))
         // The first layer already carries the localized default name; the layers panel opens collapsed.
         setDocument(d, onDisk = false)
         _state.update { it.copy(layerPanelOpen = false) }
         dirtySinceSave = true
+        editRevision++
         save()
+        true
     }
 
-    suspend fun openDocument(id: String) {
-        val loaded = withContext(Dispatchers.IO) { ioLock.withLock { ProjectIO.load(store.dirFor(id)) } }
-        setDocument(loaded, onDisk = true)
+    suspend fun openDocument(id: String) = transitionLock.withLock {
+        while (true) {
+            if (!flushBeforeTransition()) throw java.io.IOException(uiString(R.string.save_project_failed))
+            val source = doc
+            val revision = editRevision
+            val loaded = withContext(Dispatchers.IO) { ioLock.withLock { ProjectIO.load(store.dirFor(id)) } }
+            // Edits made during disk I/O must be saved before replacing the document. Reload the target
+            // as it can be the same project, in which case that save changes its on-disk state.
+            if (doc !== source || editRevision != revision || dirtySinceSave || saveJob?.isActive == true ||
+                stroke != null || filterBusy
+            ) continue
+            setDocument(loaded, onDisk = true)
+            break
+        }
     }
 
     private fun setDocument(d: Document, onDisk: Boolean) {
@@ -554,7 +594,6 @@ class StudioViewModel(
         abandonAudioRecording()
         // Leaving the studio is a preview exit: restore the frame the user was editing before saving.
         stopVideoPlayback(restoreEditingFrame = true)
-        save(refreshList = false) // flush pending changes of the previous document
         doc = d
         timelapseJob?.cancel()
         timelapseJob = null
@@ -593,6 +632,8 @@ class StudioViewModel(
         autosaveJob?.cancel()
         autosaveJob = null
         dirtySinceSave = false
+        editRevision = 0L
+        savedRevision = 0L
         stroke = null
         lastCanvasWidth = d.width
         lastCanvasHeight = d.height
@@ -673,6 +714,10 @@ class StudioViewModel(
         if (!maskTarget && node !is RasterLayer) return // groups and adjustment layers have no pixels to paint
         val layer = if (maskTarget) null else doc.activeRaster ?: return
         val s = _state.value
+        if (layer is VectorLayer && (s.tool == ToolUi.CLONE || s.mode == BrushModeUi.BLEND)) {
+            saveError.value = uiString(R.string.vector_operation_unsupported)
+            return
+        }
         val clone = if (s.tool == ToolUi.CLONE) cloneStroke(layer, p.x, p.y) else null
         if (s.tool == ToolUi.CLONE && clone == null) return // no source yet: the hint asks for a long-press
         val mode = if (clone != null) StrokeMode.CLONE else when (s.mode) {
@@ -1332,6 +1377,16 @@ class StudioViewModel(
     private fun clampX(x: Float) = x.coerceIn(0f, doc.width.toFloat())
     private fun clampY(y: Float) = y.coerceIn(0f, doc.height.toFloat())
 
+    private fun rejectVectorRasterEdit(): Boolean {
+        if (doc.activeNode !is VectorLayer) return false
+        saveError.value = uiString(R.string.vector_operation_unsupported)
+        return true
+    }
+
+    private fun ToolUi.modifiesRasterPixels(): Boolean = this == ToolUi.LIQUIFY || this == ToolUi.SHAPE ||
+        this == ToolUi.GRADIENT || this == ToolUi.MATERIAL || this == ToolUi.PATTERN_PATH ||
+        this == ToolUi.LASSO_FILL || this == ToolUi.LASSO_ERASE
+
     /** Outline of the ellipse inscribed in the bounding box of two document-space corners. */
     private fun ellipseOutline(x0: Float, y0: Float, x1: Float, y1: Float): List<PointUi> {
         val poly = EllipseShape(
@@ -1344,6 +1399,8 @@ class StudioViewModel(
     }
 
     override fun onToolDown(x: Float, y: Float) {
+        if (filterBusy) return
+        if (_state.value.tool.modifiesRasterPixels() && rejectVectorRasterEdit()) return
         if (doc.activeNode is FilterLayer &&
             (_state.value.tool == ToolUi.BRUSH || _state.value.tool == ToolUi.CLONE || _state.value.tool == ToolUi.LIQUIFY)
         ) return
@@ -1443,6 +1500,7 @@ class StudioViewModel(
     }
 
     override fun onToolUp(x: Float, y: Float) {
+        if (_state.value.tool.modifiesRasterPixels() && rejectVectorRasterEdit()) return
         if (_state.value.tool == ToolUi.PATTERN_PATH) {
             patternPathUp(x, y)
             return
@@ -1585,6 +1643,10 @@ class StudioViewModel(
      */
     private fun startTransform() {
         finishTransform(apply = false)
+        if (rejectVectorRasterEdit()) {
+            _state.update { it.copy(tool = ToolUi.BRUSH, transform = null) }
+            return
+        }
         val node = doc.activeId?.let { doc.findNode(it) } as? RasterLayer
         if (node == null || node.locked) {
             _state.update { it.copy(tool = ToolUi.BRUSH, transform = null) }
@@ -2390,17 +2452,28 @@ class StudioViewModel(
 
     /** The latest fill while it is the top history entry; color changes recolor it in place (spec §4.3). */
     private var lastFill: FillCommand? = null
+    private var regionRequest = 0L
+    private var regionJob: Job? = null
 
     /** Fills the region at ([x], [y]) of the canvas on the active layer; the region is computed off the main thread. */
     private fun bucketAt(x: Float, y: Float) {
+        if (rejectVectorRasterEdit()) return
         val d = doc
-        val layerId = (d.activeId?.let { d.findNode(it) } as? RasterLayer)?.takeIf { !it.locked }?.id ?: return
+        val layer = d.activeRaster?.takeIf {
+            it !is VectorLayer && it !is FilterLayer && it.visible && !it.effectivelyLocked
+        } ?: return
+        val layerId = layer.id
         val px = x.toInt().coerceIn(0, d.width - 1)
         val py = y.toInt().coerceIn(0, d.height - 1)
         val color = _state.value.color
-        viewModelScope.launch {
-            val cov = withContext(Dispatchers.Default) { Region.compute(d, RefSource.Canvas, px, py, bucketParams) }
-            if (d !== doc || cov == null || stroke != null) return@launch
+        val revision = d.modified
+        val token = ++regionRequest
+        val snapshot = snapshotDocument(d)
+        regionJob = viewModelScope.launch {
+            val cov = withContext(Dispatchers.Default) { Region.compute(snapshot, RefSource.Canvas, px, py, bucketParams) }
+            if (token != regionRequest || d !== doc || d.modified != revision || d.activeId != layerId ||
+                d.findNode(layerId) !== layer || layer.effectivelyLocked || !layer.visible || cov == null || stroke != null
+            ) return@launch
             val cmd = BucketFill.command(d, layerId, cov, color, 1f, erase = false) ?: return@launch
             commitPendingOpacity()
             history.push(cmd)
@@ -2417,11 +2490,16 @@ class StudioViewModel(
         val d = doc
         val px = x.toInt().coerceIn(0, d.width - 1)
         val py = y.toInt().coerceIn(0, d.height - 1)
-        viewModelScope.launch {
-            val cmd = withContext(Dispatchers.Default) {
-                SelectionEdits.wand(d, px, py, wandParams, RefSource.Current, SelectMode.NEW)
+        val revision = d.modified
+        val activeId = d.activeId
+        val token = ++regionRequest
+        val snapshot = snapshotDocument(d)
+        regionJob = viewModelScope.launch {
+            val coverage = withContext(Dispatchers.Default) {
+                Region.compute(snapshot, RefSource.Current, px, py, wandParams) ?: MaskGrid(d.width, d.height)
             }
-            if (d === doc) cmd?.let { exec(it) }
+            if (token != regionRequest || d !== doc || d.modified != revision || d.activeId != activeId || stroke != null) return@launch
+            SelectionEdits.combineWith(d, coverage, SelectMode.NEW, "Magic wand")?.let { exec(it) }
         }
     }
 
@@ -2442,11 +2520,13 @@ class StudioViewModel(
     }
 
     override fun fillSelection(erase: Boolean) {
+        if (rejectVectorRasterEdit()) return
         val cmd = if (erase) SelectionEdits.delete(doc) else SelectionEdits.fill(doc, _state.value.color)
         cmd?.let { exec(it) }
     }
 
     override fun fillOutsideSelection() {
+        if (rejectVectorRasterEdit()) return
         SelectionEdits.fillOutside(doc, _state.value.color)?.let { exec(it) }
     }
 
@@ -2456,32 +2536,23 @@ class StudioViewModel(
      * alpha.
      */
     override fun patternFill(spec: PatternSpec, background: Rgba, ink: Rgba, opacity: Float) {
-        if (filterBusy) return
+        if (rejectVectorRasterEdit()) return
+        if (filterBusy || stroke != null) return
         finishShape(commit = true)
         finishTransform(apply = true)
         finishGradient(apply = true)
+        finishLiquify(commit = true)
         commitPendingOpacity()
         val layer = doc.activeRaster ?: return
-        if (layer.locked) return
+        if (layer is FilterLayer || !layer.visible || layer.effectivelyLocked) return
         val id = layer.id
         val copy = RasterLayer(id, layer.name, layer.pixels.copy()).also {
             it.alphaLock = layer.alphaLock
             it.locked = layer.locked
         }
         val selection = doc.selection.coverageOrNull()?.copy()
-        filterBusy = true
-        _state.update { it.copy(filterBusy = true) }
-        viewModelScope.launch {
-            val patch = runCatching {
-                withContext(Dispatchers.Default) { PatternFill.patch(copy, selection, spec, background, ink, opacity) }
-            }.getOrNull()
-            filterBusy = false
-            _state.update { it.copy(filterBusy = false) }
-            if (patch == null || patch.after.isEmpty()) return@launch
-            // The layer may have been deleted while the pattern rendered; then the result is dropped.
-            if (doc.findNode(id) !is RasterLayer) return@launch
-            history.execute(doc, TilePatchCommand(patch, "Pattern fill"))
-            canvas?.invalidate(id, patch.after.keys)
+        renderRasterEdit(layer, "Pattern fill") {
+            PatternFill.patch(copy, selection, spec, background, ink, opacity)
         }
     }
 
@@ -2491,34 +2562,23 @@ class StudioViewModel(
      * bounds when a selection is active; alpha lock keeps the old alpha and a locked layer is left alone.
      */
     override fun patternQuilt(spec: QuiltSpec, background: Rgba, ink: Rgba, opacity: Float) {
-        if (filterBusy) return
+        if (rejectVectorRasterEdit()) return
+        if (filterBusy || stroke != null) return
         finishShape(commit = true)
         finishTransform(apply = true)
         finishGradient(apply = true)
+        finishLiquify(commit = true)
         commitPendingOpacity()
         val layer = doc.activeRaster ?: return
-        if (!layer.visible || layer.effectivelyLocked || layer.locked) return
+        if (layer is FilterLayer || !layer.visible || layer.effectivelyLocked) return
         val id = layer.id
         val copy = RasterLayer(id, layer.name, layer.pixels.copy()).also {
             it.alphaLock = layer.alphaLock
             it.locked = layer.locked
         }
         val selection = doc.selection.coverageOrNull()?.copy()
-        filterBusy = true
-        _state.update { it.copy(filterBusy = true) }
-        viewModelScope.launch {
-            val patch = runCatching {
-                withContext(Dispatchers.Default) {
-                    PatternQuilt.patch(copy, selection, spec, background, ink, opacity)
-                }
-            }.getOrNull()
-            filterBusy = false
-            _state.update { it.copy(filterBusy = false) }
-            if (patch == null || patch.after.isEmpty()) return@launch
-            // The layer may have been deleted while the quilt rendered; then the result is dropped.
-            if (doc.findNode(id) !is RasterLayer) return@launch
-            history.execute(doc, TilePatchCommand(patch, "Pattern quilt"))
-            canvas?.invalidate(id, patch.after.keys)
+        renderRasterEdit(layer, "Pattern quilt") {
+            PatternQuilt.patch(copy, selection, spec, background, ink, opacity)
         }
     }
 
@@ -2528,14 +2588,16 @@ class StudioViewModel(
      * one history step; the selection clips it and alpha lock keeps the old alpha.
      */
     override fun stampMaterial(spec: MaterialSpec) {
-        if (filterBusy) return
+        if (rejectVectorRasterEdit()) return
+        if (filterBusy || stroke != null) return
         rememberMaterial(spec, MaterialMode.STAMP)
         finishShape(commit = true)
         finishTransform(apply = true)
         finishGradient(apply = true)
+        finishLiquify(commit = true)
         commitPendingOpacity()
         val layer = doc.activeRaster ?: return
-        if (!layer.visible || layer.effectivelyLocked) return
+        if (layer is FilterLayer || !layer.visible || layer.effectivelyLocked) return
         val id = layer.id
         val color = _state.value.color
         val copy = RasterLayer(id, layer.name, layer.pixels.copy()).also {
@@ -2543,19 +2605,8 @@ class StudioViewModel(
             it.locked = layer.locked
         }
         val selection = doc.selection.coverageOrNull()?.copy()
-        filterBusy = true
-        _state.update { it.copy(filterBusy = true) }
-        viewModelScope.launch {
-            val patch = runCatching {
-                withContext(Dispatchers.Default) { MaterialStamp.patch(copy, selection, spec, color) }
-            }.getOrNull()
-            filterBusy = false
-            _state.update { it.copy(filterBusy = false) }
-            if (patch == null || patch.after.isEmpty()) return@launch
-            // The layer may have been deleted while the stamp rendered; then the result is dropped.
-            if (doc.findNode(id) !is RasterLayer) return@launch
-            history.execute(doc, TilePatchCommand(patch, "Material"))
-            canvas?.invalidate(id, patch.after.keys)
+        renderRasterEdit(layer, "Material") {
+            MaterialStamp.patch(copy, selection, spec, color)
         }
     }
 
@@ -2574,7 +2625,7 @@ class StudioViewModel(
     private fun materialDown(x: Float, y: Float) {
         if (filterBusy) return
         val layer = doc.activeRaster ?: return
-        if (!layer.visible || layer.effectivelyLocked || layer.locked) return
+        if (layer is FilterLayer || !layer.visible || layer.effectivelyLocked) return
         if (_state.value.materialSpec == null) return
         commitPendingOpacity()
         materialPoints = arrayListOf(Vec2(x, y))
@@ -2604,27 +2655,15 @@ class StudioViewModel(
         if (filterBusy) return
         val spec = _state.value.materialSpec ?: return
         val layer = doc.findNode(id) as? RasterLayer ?: return
-        if (!layer.visible || layer.effectivelyLocked || layer.locked) return
+        if (layer is FilterLayer || !layer.visible || layer.effectivelyLocked) return
         val color = _state.value.color
         val copy = RasterLayer(id, layer.name, layer.pixels.copy()).also {
             it.alphaLock = layer.alphaLock
             it.locked = layer.locked
         }
         val selection = doc.selection.coverageOrNull()?.copy()
-        filterBusy = true
-        _state.update { it.copy(filterBusy = true) }
-        viewModelScope.launch {
-            val patch = runCatching {
-                withContext(Dispatchers.Default) { MaterialStroke.patch(copy, selection, spec, color, points) }
-            }.getOrNull()
-            filterBusy = false
-            _state.update { it.copy(filterBusy = false) }
-            if (patch == null || patch.after.isEmpty()) return@launch
-            // The layer may have been deleted or locked while the stroke rendered; then the result is dropped.
-            val target = doc.findNode(id) as? RasterLayer ?: return@launch
-            if (!target.visible || target.effectivelyLocked || target.locked) return@launch
-            history.execute(doc, TilePatchCommand(patch, "Material stroke"))
-            canvas?.invalidate(id, patch.after.keys)
+        renderRasterEdit(layer, "Material stroke") {
+            MaterialStroke.patch(copy, selection, spec, color, points)
         }
     }
 
@@ -2649,7 +2688,7 @@ class StudioViewModel(
     private fun patternPathDown(x: Float, y: Float) {
         if (filterBusy) return
         val layer = doc.activeRaster ?: return
-        if (!layer.visible || layer.effectivelyLocked || layer.locked) return
+        if (layer is FilterLayer || !layer.visible || layer.effectivelyLocked) return
         if (_state.value.patternPath == null) return
         commitPendingOpacity()
         patternPathPoints = arrayListOf(Vec2(x, y))
@@ -2679,28 +2718,14 @@ class StudioViewModel(
         if (filterBusy) return
         val path = _state.value.patternPath ?: return
         val layer = doc.findNode(id) as? RasterLayer ?: return
-        if (!layer.visible || layer.effectivelyLocked || layer.locked) return
+        if (layer is FilterLayer || !layer.visible || layer.effectivelyLocked) return
         val copy = RasterLayer(id, layer.name, layer.pixels.copy()).also {
             it.alphaLock = layer.alphaLock
             it.locked = layer.locked
         }
         val selection = doc.selection.coverageOrNull()?.copy()
-        filterBusy = true
-        _state.update { it.copy(filterBusy = true) }
-        viewModelScope.launch {
-            val patch = runCatching {
-                withContext(Dispatchers.Default) {
-                    PatternPath.patch(copy, selection, path.spec, path.background, path.ink, points)
-                }
-            }.getOrNull()
-            filterBusy = false
-            _state.update { it.copy(filterBusy = false) }
-            if (patch == null || patch.after.isEmpty()) return@launch
-            // The layer may have been deleted or locked while the path rendered; then the result is dropped.
-            val target = doc.findNode(id) as? RasterLayer ?: return@launch
-            if (!target.visible || target.effectivelyLocked || target.locked) return@launch
-            history.execute(doc, TilePatchCommand(patch, "Pattern path"))
-            canvas?.invalidate(id, patch.after.keys)
+        renderRasterEdit(layer, "Pattern path") {
+            PatternPath.patch(copy, selection, path.spec, path.background, path.ink, points)
         }
     }
 
@@ -2757,7 +2782,7 @@ class StudioViewModel(
     // ---- history ----
 
     override fun undo() {
-        if (videoExportBusy) return
+        if (videoExportBusy || filterBusy) return
         // Undo is a document edit: leave the preview on the frame the user was editing.
         stopVideoPlayback(restoreEditingFrame = true)
         // An open shape draft has pixels only in its preview: undo drops it instead of a history step.
@@ -2774,7 +2799,7 @@ class StudioViewModel(
     }
 
     override fun redo() {
-        if (videoExportBusy) return
+        if (videoExportBusy || filterBusy) return
         stopVideoPlayback(restoreEditingFrame = true)
         if (shapeDraft != null) return
         if (transformSession != null || gradientLayerId != null) return
@@ -2917,7 +2942,11 @@ class StudioViewModel(
         val parent = node.parent ?: return
         val below = parent.children.getOrNull(parent.indexOf(node) - 1)
         if (below !is RasterLayer) return
-        exec(MergeDown(id, Compositor))
+        try {
+            exec(MergeDown(id, Compositor))
+        } catch (_: VectorOperationException) {
+            saveError.value = uiString(R.string.vector_operation_unsupported)
+        }
     }
 
     override fun selectLayer(id: String) {
@@ -3873,7 +3902,6 @@ class StudioViewModel(
                     )
                 }
             } catch (cancelled: VideoExportCancelled) {
-                runCatching { getApplication<Application>().contentResolver.delete(uri, null, null) }
                 _state.update { s ->
                     s.copy(
                         videoExport = s.videoExport?.copy(
@@ -3883,10 +3911,8 @@ class StudioViewModel(
                     )
                 }
             } catch (cancelled: CancellationException) {
-                runCatching { getApplication<Application>().contentResolver.delete(uri, null, null) }
                 throw cancelled
             } catch (t: Throwable) {
-                runCatching { getApplication<Application>().contentResolver.delete(uri, null, null) }
                 val reason = when (t) {
                     is AudioMixFailure -> audioFailureMessage(t)
                     is AudioImportFailure -> audioFailureMessage(t)
@@ -4809,12 +4835,14 @@ class StudioViewModel(
      * whole filter is a single undo step.
      */
     override fun applyFilter(params: FilterParams) {
-        if (filterBusy) return
+        if (rejectVectorRasterEdit()) return
+        if (filterBusy || stroke != null) return
         // A filter edits the frame on screen: stop the preview without jumping to another frame.
         if (videoPreviewActive || _state.value.video?.playing == true) commitVideoPreviewFrame()
         finishShape(commit = true)
         finishTransform(apply = true)
         finishGradient(apply = true)
+        finishLiquify(commit = true)
         commitPendingOpacity()
         val layer = doc.activeRaster ?: return
         if (layer is FilterLayer) return
@@ -4824,19 +4852,49 @@ class StudioViewModel(
         val selection = doc.selection.coverageOrNull()?.copy()
         val alphaLock = layer.alphaLock
         val threads = STROKE_THREADS
-        filterBusy = true
-        _state.update { it.copy(filterBusy = true) }
+        renderRasterEdit(layer, "Filter: ${params.kind}") {
+            Filters.apply(id, copy, params, selection, alphaLock, threads)
+        }
+    }
+
+    /** All worker patches share the same stale-result and history rules, including patterns and materials. */
+    private fun renderRasterEdit(layer: RasterLayer, name: String, render: () -> TilePatch?) {
+        val document = doc
+        val revision = document.modified
+        val pixels = layer.pixels
+        val width = doc.width
+        val height = doc.height
+        val alphaLock = layer.alphaLock
+        setFilterBusy(true)
         viewModelScope.launch {
-            val patch = runCatching {
-                withContext(Dispatchers.Default) { Filters.apply(id, copy, params, selection, alphaLock, threads) }
-            }.getOrDefault(TilePatch(id, emptyMap(), emptyMap()))
-            filterBusy = false
-            _state.update { it.copy(filterBusy = false) }
-            if (patch.after.isEmpty()) return@launch
-            // The layer may have been deleted while the filter ran; then the result is dropped.
-            if (doc.findNode(id) !is RasterLayer) return@launch
-            history.execute(doc, TilePatchCommand(patch, "Filter: ${params.kind}"))
-            canvas?.invalidate(id, patch.after.keys)
+            val patch = try {
+                withContext(Dispatchers.Default) { render() }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                return@launch
+            } finally {
+                setFilterBusy(false)
+            }
+            if (patch == null || patch.after.isEmpty()) return@launch
+            // A patch contains before-pixels too: applying it after another edit corrupts undo as well.
+            if (doc !== document || doc.modified != revision || doc.width != width || doc.height != height ||
+                doc.findNode(layer.id) !== layer || layer.pixels !== pixels || layer.alphaLock != alphaLock ||
+                !layer.visible || layer.effectivelyLocked
+            ) return@launch
+            history.execute(doc, TilePatchCommand(patch, name))
+            canvas?.invalidate(layer.id, patch.after.keys)
+        }
+    }
+
+    private fun setFilterBusy(busy: Boolean) {
+        filterBusy = busy
+        _state.update {
+            it.copy(
+                filterBusy = busy,
+                canUndo = !busy && !videoExportBusy && history.canUndo,
+                canRedo = !busy && !videoExportBusy && history.canRedo,
+            )
         }
     }
 
@@ -5050,8 +5108,36 @@ class StudioViewModel(
         // Leaving the studio restores the editing frame before the project is written.
         leaveVideoPreview()
         _state.update { it.copy(videoPanelOpen = false) }
-        save()
-        homeRequest.value = true
+        viewModelScope.launch {
+            transitionLock.withLock {
+                if (flushBeforeTransition()) {
+                    save(refreshList = true, autoSync = true)
+                    if (flushBeforeTransition()) homeRequest.value = true
+                }
+            }
+        }
+    }
+
+    /** Wait for every queued write and keep the current document open on failure. */
+    private suspend fun flushBeforeTransition(): Boolean {
+        if (_state.value.video?.recordingAudio == true) stopAudioRecording()
+        if (stroke != null || filterBusy) {
+            saveError.value = uiString(R.string.save_project_busy)
+            return false
+        }
+        commitDocumentEdits()
+        while (true) {
+            if (dirtySinceSave) save(refreshList = false)
+            val pending = saveJob
+            pending?.join()
+            if (pending !== saveJob) continue
+            if (!lastSaveSucceeded) return false
+            if (stroke != null || filterBusy) {
+                saveError.value = uiString(R.string.save_project_busy)
+                return false
+            }
+            if (!dirtySinceSave && savedRevision == editRevision) return true
+        }
     }
 
     override fun save() {
@@ -5063,6 +5149,8 @@ class StudioViewModel(
 
     /** Commits the interactive tools so their pixels are part of the document before it is written. */
     private fun commitDocumentEdits() {
+        commitPendingOpacity()
+        adjustSession?.let { commitAdjust(it.first) }
         if (_state.value.animation?.playing == true) stopAnimationPlayback()
         // Saving keeps the preview frame the user is looking at as the editing frame.
         if (videoPreviewActive || _state.value.video?.playing == true) commitVideoPreviewFrame()
@@ -5104,11 +5192,15 @@ class StudioViewModel(
         }
         dirtySinceSave = false
         val docRef = doc
-        val incremental = docOnDisk
-        val delta = if (incremental) saveTracker.collect(docRef) else null
-        // Metadata only when the pixels come from the deltas and the project directory.
-        val snapshot = snapshotDocument(docRef, pixels = !incremental)
-        val versions = if (incremental) null else saveTracker.capture(docRef)
+        val revision = editRevision
+        val (snapshot, delta, versions) = try {
+            prepareDocumentSave(docRef, saveTracker, onDisk = docOnDisk, savePending = saveJob?.isActive == true)
+        } catch (error: Exception) {
+            dirtySinceSave = true
+            lastSaveSucceeded = false
+            saveError.value = uiString(R.string.save_project_failed)
+            return
+        }
         val dir = store.dirFor(docRef.id)
         val thumbNeeded = withThumbnail || !ProjectIO.thumbnailFile(dir).isFile
         val previous = saveJob
@@ -5125,27 +5217,42 @@ class StudioViewModel(
                                 thumbnail = if (thumbNeeded) { written -> renderThumbnailPng(written) } else null,
                             )
                         } else {
-                            ProjectIO.save(snapshot, dir, if (thumbNeeded) renderThumbnailPng(snapshot) else null)
+                            val thumbnail = if (thumbNeeded) {
+                                renderThumbnailPng(snapshot)
+                            } else {
+                                ProjectIO.thumbnailFile(dir).takeIf { it.isFile }?.readBytes()
+                            }
+                            ProjectIO.save(snapshot, dir, thumbnail)
                         }
                     }
                 }
             }.isSuccess
+            lastSaveSucceeded = ok
+            if (ok && autoSync) scheduleDriveAutoSync(docRef.id, snapshot.name)
+            // A completed write of the previous project must not replace the new project's tracker.
+            if (doc !== docRef) {
+                if (ok && refreshList) refreshProjects()
+                return@launch
+            }
             if (ok) {
                 // Only now are the collected tiles known to be on disk; a failure keeps them dirty.
                 if (delta != null) saveTracker.commit(delta) else saveTracker.commitVersions(versions!!)
+                savedRevision = revision
+                dirtySinceSave = savedRevision != editRevision
                 docOnDisk = true
                 thumbStale = !thumbNeeded
                 if (refreshList) refreshProjects()
-                if (autoSync) scheduleDriveAutoSync()
             } else {
                 dirtySinceSave = true
+                saveError.value = uiString(R.string.save_project_failed)
             }
         }
     }
 
     /** Refreshes `thumb.png` of a project whose tiles are already saved (an autosave kept the old preview). */
     private fun updateThumbnailOnly(refreshList: Boolean, autoSync: Boolean = false) {
-        val dir = store.dirFor(doc.id)
+        val docRef = doc
+        val dir = store.dirFor(docRef.id)
         val previous = saveJob
         saveJob = viewModelScope.launch {
             previous?.join()
@@ -5154,9 +5261,11 @@ class StudioViewModel(
                     ioLock.withLock { ProjectIO.updateThumbnail(dir, ::renderThumbnailPng) }
                 }
             }.isSuccess
-            if (ok) thumbStale = false
+            lastSaveSucceeded = ok
+            if (!ok) saveError.value = uiString(R.string.save_project_failed)
+            if (ok && doc === docRef) thumbStale = false
             if (refreshList) refreshProjects()
-            if (ok && autoSync) scheduleDriveAutoSync()
+            if (ok && autoSync) scheduleDriveAutoSync(docRef.id, docRef.name)
         }
     }
 
@@ -5168,6 +5277,7 @@ class StudioViewModel(
         // Project recency in the gallery comes from the manifest: strokes are pushed to history without
         // going through Command.apply, so they have to stamp the document here.
         doc.modified = maxOf(System.currentTimeMillis(), doc.modified + 1)
+        editRevision++
         dirtySinceSave = true
         autosaveJob?.cancel()
         autosaveJob = viewModelScope.launch {
@@ -5334,6 +5444,7 @@ class StudioViewModel(
      * canvas, clipped by the selection, as one undo step. The Transform tool moves it afterwards.
      */
     override fun stampText(text: String, sizePx: Float) {
+        if (rejectVectorRasterEdit()) return
         finishShape(commit = true)
         finishTransform(apply = true)
         finishGradient(apply = true)
@@ -5401,8 +5512,13 @@ class StudioViewModel(
         finishGradient(apply = true)
         finishLiquify(commit = true)
         commitPendingOpacity()
-        val cmd = canvasCommand(doc, op, name)
-        history.execute(doc, cmd)
+        try {
+            val cmd = canvasCommand(doc, op, name)
+            history.execute(doc, cmd)
+        } catch (_: VectorOperationException) {
+            saveError.value = uiString(R.string.vector_operation_unsupported)
+            return
+        }
         lastCanvasWidth = doc.width
         lastCanvasHeight = doc.height
         canvas?.setDocument(doc)
@@ -5465,6 +5581,7 @@ class StudioViewModel(
         val repo = drive ?: throw DriveException(0, uiString(R.string.drive_unavailable))
         autoSyncJob?.cancel()
         autoSyncJob = null
+        pendingAutoSync.clear()
         repo.disconnect()
         _driveState.update {
             it.copy(account = null, backups = emptyList(), loaded = false, lastSyncMs = 0L)
@@ -5475,15 +5592,18 @@ class StudioViewModel(
     override fun driveSetAutoSync(on: Boolean) {
         driveSettings.autoSync = on
         _driveState.update { it.copy(autoSync = on) }
+        if (on) drive?.let(::startPendingAutoSync)
     }
 
     override fun driveSyncCurrent() = driveOperation {
         val repo = drive ?: throw DriveException(0, uiString(R.string.drive_unavailable))
         if (_state.value.video?.recordingAudio == true) stopAudioRecording()
         commitDocumentEdits()
+        val target = doc
         save(refreshList = true)
         saveJob?.join()
-        val backup = repo.backup(doc.id, doc.name, store.dirFor(doc.id))
+        if (doc !== target || dirtySinceSave || !docOnDisk) throw DriveException(0, "The project could not be saved before backup")
+        val backup = repo.backup(target.id, target.name, store.dirFor(target.id))
         _driveState.update { it.copy(lastSyncMs = repo.lastSyncMs) }
         upsertDriveBackup(backup.toUi())
         uiString(R.string.drive_backed_up, backup.name)
@@ -5493,8 +5613,10 @@ class StudioViewModel(
         val repo = drive ?: throw DriveException(0, uiString(R.string.drive_unavailable))
         if (_state.value.video?.recordingAudio == true) stopAudioRecording()
         commitDocumentEdits()
+        val target = doc
         save(refreshList = true)
         saveJob?.join()
+        if (doc !== target || dirtySinceSave || !docOnDisk) throw DriveException(0, "The project could not be saved before backup")
         val projects = withContext(Dispatchers.IO) { ioLock.withLock { store.list() } }
         if (projects.isEmpty()) return@driveOperation uiString(R.string.drive_no_projects)
         projects.forEachIndexed { index, project ->
@@ -5587,33 +5709,44 @@ class StudioViewModel(
      * It is called at the end of a successful write, so the upload reads the archive of the saved state;
      * autosave and project switches do not trigger it, which keeps Drive traffic to deliberate saves.
      */
-    private fun scheduleDriveAutoSync() {
+    private fun scheduleDriveAutoSync(id: String = doc.id, name: String = doc.name) {
         val repo = drive ?: return
         if (!driveSettings.autoSync || _driveState.value.account == null) return
-        if (autoSyncJob?.isActive == true) return
-        val id = doc.id
-        val name = doc.name
+        pendingAutoSync[id] = name
+        startPendingAutoSync(repo)
+    }
+
+    private fun startPendingAutoSync(repo: DriveRepository) {
+        if (autoSyncJob?.isActive == true || _driveState.value.busy || pendingAutoSync.isEmpty()) return
         autoSyncJob = viewModelScope.launch {
-            // A manual backup already in flight wins; its result updates the same remote file.
-            if (_driveState.value.busy) return@launch
-            _driveState.update { it.copy(busy = true, error = false) }
-            runCatching { repo.backup(id, name, store.dirFor(id)) }
-                .onSuccess { backup ->
-                    _driveState.update {
-                        it.copy(busy = false, lastSyncMs = repo.lastSyncMs, error = false)
+            while (pendingAutoSync.isNotEmpty() && driveSettings.autoSync && _driveState.value.account != null) {
+                val (id, name) = pendingAutoSync.entries.first().let { it.key to it.value }
+                pendingAutoSync.remove(id)
+                _driveState.update { it.copy(busy = true, error = false) }
+                try {
+                    saveJob?.join()
+                    if (doc.id == id && (dirtySinceSave || !docOnDisk)) {
+                        throw DriveException(0, "The project could not be saved before backup")
                     }
+                    val backup = repo.backup(id, name, store.dirFor(id))
+                    _driveState.update { it.copy(busy = false, lastSyncMs = repo.lastSyncMs, error = false) }
                     upsertDriveBackup(backup.toUi())
+                } catch (e: CancellationException) {
+                    pendingAutoSync.putIfAbsent(id, name)
+                    _driveState.update { it.copy(busy = false) }
+                    throw e
+                } catch (error: Exception) {
+                    pendingAutoSync.putIfAbsent(id, name)
+                    _driveState.update { it.copy(busy = false, message = driveErrorText(error), error = true) }
+                    break
                 }
-                .onFailure { error ->
-                    _driveState.update {
-                        it.copy(busy = false, message = driveErrorText(error), error = true)
-                    }
-                }
+            }
         }
     }
 
     /** Runs a Drive operation with the busy flag; token prompts happen on the main thread before network I/O. */
     private fun driveOperation(showSuccess: Boolean = true, block: suspend () -> String) {
+        if (_driveState.value.busy) return
         viewModelScope.launch {
             _driveState.update { it.copy(busy = true, message = null, error = false) }
             runCatching { block() }
@@ -5631,6 +5764,7 @@ class StudioViewModel(
                         it.copy(busy = false, message = driveErrorText(error), error = true)
                     }
                 }
+            drive?.let(::startPendingAutoSync)
         }
     }
 
@@ -6070,8 +6204,8 @@ class StudioViewModel(
             it.copy(
                 layers = rows,
                 activeLayerId = doc.activeId,
-                canUndo = history.canUndo,
-                canRedo = history.canRedo,
+                canUndo = !filterBusy && !videoExportBusy && history.canUndo,
+                canRedo = !filterBusy && !videoExportBusy && history.canRedo,
                 projectName = doc.name,
                 layerLimit = layerLimitFor(doc.width, doc.height),
                 // Drop the editor when its node was deleted or undone away; otherwise keep it in sync.

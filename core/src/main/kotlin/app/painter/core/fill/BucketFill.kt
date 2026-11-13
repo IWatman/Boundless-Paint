@@ -3,6 +3,7 @@ package app.painter.core.fill
 import app.painter.core.color.Rgba
 import app.painter.core.doc.Document
 import app.painter.core.doc.RasterLayer
+import app.painter.core.doc.effectivelyLocked
 import app.painter.core.history.Command
 import app.painter.core.history.touch
 import app.painter.core.raster.IntRect
@@ -53,7 +54,7 @@ object BucketFill {
         clipSelection: Boolean = true,
     ): TilePatch? {
         val layer = doc.findNode(layerId) as? RasterLayer ?: return null
-        if (layer.locked || opacity <= 0f) return null
+        if (layer.effectivelyLocked || opacity <= 0f) return null
         val mask = if (clipSelection) MaskMath.multiply(cov, doc.selection.coverageOrNull()) else cov
         val keys = mask.keys().filter { mask.isInBounds(it.tx, it.ty) && !mask.get(it)!!.isEmpty() }
         val o = opacity.coerceIn(0f, 1f)

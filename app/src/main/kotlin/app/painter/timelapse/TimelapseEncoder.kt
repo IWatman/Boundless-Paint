@@ -54,32 +54,35 @@ object TimelapseEncoder {
             codec.start()
             val yuv = YuvFrame(width, height)
             var frameIndex = 0
-            var eos = false
-            while (!eos) {
-                val inIndex = codec.dequeueInputBuffer(10_000)
+            var inputDone = false
+            var outputDone = false
+            var lastProgress = System.nanoTime()
+            while (!outputDone) {
+                val inIndex = if (!inputDone) codec.dequeueInputBuffer(10_000) else -1
                 if (inIndex >= 0) {
+                    lastProgress = System.nanoTime()
                     if (frameIndex < sequence.size) {
                         val file = frames[sequence[frameIndex]]
-                        val src = BitmapFactory.decodeFile(file.path)
-                        if (src == null) {
-                            codec.queueInputBuffer(inIndex, 0, 0, frameIndex * 1_000_000L / FPS, 0)
-                        } else {
-                            val scaled = if (src.width == width && src.height == height) src
-                            else Bitmap.createScaledBitmap(src, width, height, true).also { if (it !== src) src.recycle() }
+                        val src = BitmapFactory.decodeFile(file.path) ?: error("cannot decode timelapse frame: ${file.name}")
+                        val scaled = if (src.width == width && src.height == height) src
+                        else Bitmap.createScaledBitmap(src, width, height, true).also { if (it !== src) src.recycle() }
+                        try {
                             yuv.fill(codec, inIndex, scaled)
+                        } finally {
                             scaled.recycle()
-                            codec.queueInputBuffer(inIndex, 0, yuv.byteCount(width, height), frameIndex * 1_000_000L / FPS, 0)
                         }
+                        codec.queueInputBuffer(inIndex, 0, yuv.byteCount(width, height), frameIndex * 1_000_000L / FPS, 0)
                         frameIndex++
                     } else {
                         codec.queueInputBuffer(inIndex, 0, 0, frameIndex * 1_000_000L / FPS, MediaCodec.BUFFER_FLAG_END_OF_STREAM)
-                        eos = true
+                        inputDone = true
                     }
                 }
                 while (true) {
-                    val outIndex = codec.dequeueOutputBuffer(info, 0)
+                    val outIndex = codec.dequeueOutputBuffer(info, if (inputDone) 10_000 else 0)
                     if (outIndex == MediaCodec.INFO_TRY_AGAIN_LATER) break
                     if (outIndex == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
+                        lastProgress = System.nanoTime()
                         if (!muxerStarted) {
                             track = muxer.addTrack(codec.outputFormat)
                             muxer.start()
@@ -88,16 +91,26 @@ object TimelapseEncoder {
                         continue
                     }
                     if (outIndex < 0) continue
+                    lastProgress = System.nanoTime()
                     val buf = codec.getOutputBuffer(outIndex)
-                    if (buf != null && info.size > 0 && muxerStarted) {
+                    if (buf != null && info.size > 0 && muxerStarted &&
+                        info.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG == 0
+                    ) {
                         buf.position(info.offset)
                         buf.limit(info.offset + info.size)
                         muxer.writeSampleData(track, buf, info)
                     }
                     codec.releaseOutputBuffer(outIndex, false)
-                    if (info.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0) break
+                    if (info.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0) {
+                        outputDone = true
+                        break
+                    }
                 }
+                check(System.nanoTime() - lastProgress < 30_000_000_000L) { "timelapse encoder stalled" }
             }
+            check(muxerStarted) { "encoder produced no video track" }
+            muxer.stop()
+            muxerStarted = false
             return Result(width, height, sequence.size)
         } finally {
             runCatching { codec.stop() }
@@ -147,7 +160,7 @@ object TimelapseEncoder {
                 return
             }
             // Fallback: the input buffer is the I420 plane in order.
-            val buffer = codec.getInputBuffer(index) ?: return
+            val buffer = codec.getInputBuffer(index) ?: error("timelapse encoder returned no input buffer")
             val row = IntArray(width)
             var yPos = 0
             val uStart = width * height

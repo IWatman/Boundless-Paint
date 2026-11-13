@@ -3,6 +3,10 @@ package app.painter.drive
 import app.painter.core.doc.Document
 import app.painter.core.io.ProjectIO
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.async
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.withTimeout
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -68,6 +72,7 @@ class DriveRepositoryTest {
         var failListWith401 = false
         var failListWith404 = false
         var uploadedBytes = ByteArray(0)
+        var onUpload: (() -> Unit)? = null
 
         override fun about(accessToken: String) = DriveAccount("artist@example.com", "Artist")
 
@@ -96,6 +101,7 @@ class DriveRepositoryTest {
             file: File,
             existingId: String?,
         ): DriveBackup {
+            onUpload?.invoke()
             uploads += Upload(folderId, projectId, projectName, file, existingId)
             uploadedBytes = file.readBytes()
             val backup = DriveBackup(
@@ -194,6 +200,34 @@ class DriveRepositoryTest {
         assertEquals("remote-1", backup.id)
         assertEquals(42L, preferences.lastSyncMs)
         assertTrue(File(root, "cache").listFiles().orEmpty().isEmpty())
+    }
+
+    @Test
+    fun backupWaitsForProjectWriterAndReleasesLockBeforeUpload() = runBlocking {
+        val dir = projectDir()
+        val lock = Mutex(locked = true)
+        val gateway = FakeGateway().apply {
+            onUpload = { assertTrue("network upload must not hold the project lock", !lock.isLocked) }
+        }
+        val preferences = FakePreferences().apply { folders = gateway.folders }
+        val repository = DriveRepository(
+            tokens = FakeTokens("token"),
+            preferences = preferences,
+            cacheDir = File(root, "cache").apply { mkdirs() },
+            gateway = gateway,
+            projectIoLock = lock,
+        )
+
+        val backup = async { repository.backup("p1", "Sketch", dir) }
+        try {
+            delay(100)
+            assertTrue("backup must wait for the writer", !backup.isCompleted)
+            assertTrue(gateway.uploads.isEmpty())
+        } finally {
+            lock.unlock()
+        }
+        withTimeout(5_000) { backup.await() }
+        assertEquals(1, gateway.uploads.size)
     }
 
     @Test

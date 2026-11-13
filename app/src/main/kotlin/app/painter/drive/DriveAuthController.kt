@@ -18,7 +18,7 @@ import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
 /**
- * Google authorization for the Drive app-data scope through Google Play services.
+ * Google authorization for the Drive file scope through Google Play services.
  *
  * The first request opens Google's account chooser / consent sheet; once the grant exists the same call returns
  * a cached or silently refreshed access token. The app therefore never handles refresh tokens, client secrets or
@@ -59,6 +59,12 @@ class DriveAuthController(private val activity: ComponentActivity) : DriveTokenR
 
     private var pending: CancellableContinuation<String>? = null
 
+    fun close() {
+        val current = pending
+        pending = null
+        current?.cancel()
+    }
+
     override suspend fun invalidateToken(token: String) {
         // GoogleAuthUtil uses the same Play services token cache as AuthorizationClient, but unlike
         // AuthorizationClient.clearToken it exists in older Play services builds as well.
@@ -68,7 +74,10 @@ class DriveAuthController(private val activity: ComponentActivity) : DriveTokenR
     }
 
     override suspend fun requestToken(): String = suspendCancellableCoroutine { continuation ->
-        pending?.resumeWithException(DriveException(0, "Another Google authorization is already running"))
+        if (pending != null) {
+            continuation.resumeWithException(DriveException(0, "Another Google authorization is already running"))
+            return@suspendCancellableCoroutine
+        }
         pending = continuation
         val request = AuthorizationRequest.builder()
             .setRequestedScopes(listOf(Scope(DRIVE_SCOPE)))
@@ -76,6 +85,7 @@ class DriveAuthController(private val activity: ComponentActivity) : DriveTokenR
         Identity.getAuthorizationClient(activity)
             .authorize(request)
             .addOnSuccessListener { result ->
+                if (pending !== continuation || !continuation.isActive) return@addOnSuccessListener
                 if (result.hasResolution()) {
                     val intentSender = result.pendingIntent?.intentSender
                     if (intentSender == null) {
@@ -95,6 +105,7 @@ class DriveAuthController(private val activity: ComponentActivity) : DriveTokenR
                 }
             }
             .addOnFailureListener { error ->
+                if (pending !== continuation || !continuation.isActive) return@addOnFailureListener
                 pending = null
                 continuation.resumeWithException(
                     if (error is ApiException && error.statusCode == CommonStatusCodes.CANCELED) {
@@ -104,6 +115,6 @@ class DriveAuthController(private val activity: ComponentActivity) : DriveTokenR
                     },
                 )
             }
-        continuation.invokeOnCancellation { pending = null }
+        continuation.invokeOnCancellation { if (pending === continuation) pending = null }
     }
 }

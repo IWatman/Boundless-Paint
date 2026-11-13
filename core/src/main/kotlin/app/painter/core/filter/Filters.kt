@@ -107,9 +107,8 @@ object Filters {
         }
         val keys = padded.tileKeys(grid.width, grid.height)
         if (keys.isEmpty()) return
-        // Cell filters need the same pre-filter view as the history path; other filters keep the zero-copy
-        // path that avoids doubling the heap while a live filter layer is recomputed after every stroke.
-        val source = if (params.needsStableSource) snapshotTiles(grid, keys) else null
+        // Any neighbourhood reader must see pre-filter pixels, not an adjacent worker's output.
+        val source = if (params.needsStableSource || params.reach > 0) snapshotTiles(grid, keys) else null
         process(grid, params, padded, keys, null, false, Geometry(content), threads, source)
     }
 
@@ -125,6 +124,9 @@ object Filters {
         threads: Int,
         source: Map<TileKey, Tile?>?,
     ) {
+        // TileGrid uses a HashMap: structurally modifying it from multiple worker threads loses entries.
+        // Allocate on the caller thread after the source snapshot and before the first worker starts.
+        for (key in keys) grid.getOrCreate(key.tx, key.ty)
         if (params.needsFullSource) {
             processFullSource(grid, params, out, keys, selection, alphaLock, geometry, threads)
             return

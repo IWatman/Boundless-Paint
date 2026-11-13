@@ -2,6 +2,8 @@ package app.painter.drive
 
 import app.painter.core.io.ProjectIO
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
@@ -20,6 +22,7 @@ class DriveRepository(
     private val cacheDir: File,
     private val gateway: DriveGateway = DriveApi(),
     private val now: () -> Long = System::currentTimeMillis,
+    private val projectIoLock: Mutex = Mutex(),
 ) {
 
     val account: DriveAccount? get() = preferences.account
@@ -38,14 +41,19 @@ class DriveRepository(
         withToken { gateway.listBackups(it, folders.projectsId) }
     }
 
-    /** Packs [projectDir] into `Boundless Paint/Projects`. The temporary archive is removed afterwards. */
+    /**
+     * Packs [projectDir] into `Boundless Paint/Projects`. [projectIoLock] must be shared with every writer
+     * and recovery operation for the project; network requests do not hold it.
+     */
     suspend fun backup(projectId: String, projectName: String, projectDir: File): DriveBackup {
-        if (!projectDir.isDirectory) throw DriveException(0, "The project directory is missing")
         cacheDir.mkdirs()
         val archive = File.createTempFile("boundless-", ".pnt", cacheDir)
         try {
             withContext(Dispatchers.IO) {
-                FileOutputStream(archive).use { ProjectIO.exportPnt(projectDir, it) }
+                projectIoLock.withLock {
+                    if (!projectDir.isDirectory) throw DriveException(0, "The project directory is missing")
+                    FileOutputStream(archive).use { ProjectIO.exportPnt(projectDir, it) }
+                }
             }
             var folders = folders()
             return try {

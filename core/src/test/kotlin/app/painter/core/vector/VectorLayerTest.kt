@@ -8,6 +8,7 @@ import app.painter.core.history.ClearLayer
 import app.painter.core.history.History
 import app.painter.core.history.VectorStrokeCommand
 import app.painter.core.io.ProjectIO
+import app.painter.core.io.SaveTracker
 import app.painter.core.raster.TileGrid
 import app.painter.core.stroke.BrushParams
 import app.painter.core.stroke.Curve
@@ -15,11 +16,13 @@ import app.painter.core.stroke.StrokeMode
 import app.painter.core.symmetry.SymmetryConfig
 import app.painter.core.symmetry.SymmetryType
 import java.io.File
+import java.io.IOException
 import kotlin.io.path.createTempDirectory
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
@@ -142,7 +145,7 @@ class VectorLayerTest {
     }
 
     @Test
-    fun projectRoundTripKeepsVectorPathsAndRebuildsCache() {
+    fun projectRoundTripKeepsVectorPathsAndSavedCache() {
         val (doc, layer) = documentWithVector()
         val symmetric = SymmetryConfig(
             on = true,
@@ -152,7 +155,7 @@ class VectorLayerTest {
         VectorRenderService.appendStroke(doc, layer, stroke(symmetry = symmetric))
         VectorRenderService.appendStroke(doc, layer, stroke(dy = 40f, mode = StrokeMode.ERASE))
         doc.activeId = layer.id
-        // A nested vector layer also exercises the deferred cache replay in ProjectIO.load.
+        // Nested vector layers must preserve their saved cache too.
         doc.root.remove(layer)
         val group = GroupNode("g1", "Group")
         group.add(layer)
@@ -168,8 +171,73 @@ class VectorLayerTest {
         val node = loaded.findNode("v1")
         assertTrue(node is VectorLayer)
         assertEquals(layer.strokes, node.strokes)
-        assertTrue(node.pixels.keys().isNotEmpty(), "the cache is re-rendered on load")
+        assertEquals(tileHash(layer), tileHash(node))
         assertFalse(node.strokes.any { it.points.isEmpty() })
+    }
+
+    @Test
+    fun projectLoadKeepsCacheThatDiffersFromStrokeReplay() {
+        val (doc, layer) = documentWithVector()
+        VectorRenderService.appendStroke(doc, layer, stroke())
+        // A selection-clipped stroke or an unavailable textured brush can leave a cache that replay cannot reproduce.
+        layer.pixels.clear()
+        layer.pixels.setPixel(5, 5, 1f, 0f, 0f, 1f)
+        val expected = tileHash(layer)
+        val dir = File(tmpRoot, "distinct-cache")
+        ProjectIO.save(doc, dir, thumbnailPng = null)
+
+        val loaded = ProjectIO.load(dir).findNode(layer.id) as VectorLayer
+        assertEquals(layer.strokes, loaded.strokes)
+        assertEquals(expected, tileHash(loaded))
+    }
+
+    @Test
+    fun incrementalSaveKeepsEmptyCacheEvenWhenPathsRemain() {
+        val (doc, layer) = documentWithVector()
+        VectorRenderService.appendStroke(doc, layer, stroke())
+        val dir = File(tmpRoot, "empty-cache")
+        ProjectIO.save(doc, dir, thumbnailPng = null)
+        val tracker = SaveTracker().also { it.commitAll(doc) }
+        layer.pixels.clear()
+        val delta = tracker.collect(doc)
+        ProjectIO.saveDelta(doc, dir, delta)
+
+        val loaded = ProjectIO.load(dir).findNode(layer.id) as VectorLayer
+        assertEquals(layer.strokes, loaded.strokes)
+        assertTrue(loaded.pixels.keys().isEmpty())
+    }
+
+    @Test
+    fun missingLegacyCacheReplaysPathsEvenUnderLockedGroup() {
+        val (doc, layer) = documentWithVector()
+        VectorRenderService.appendStroke(doc, layer, stroke())
+        val expected = tileHash(layer)
+        doc.root.remove(layer)
+        val group = GroupNode("locked", "Locked").also { it.add(layer); it.locked = true }
+        doc.root.add(group)
+        val dir = File(tmpRoot, "legacy")
+        ProjectIO.save(doc, dir, thumbnailPng = null)
+        assertTrue(File(dir, "layers/${layer.id}/tiles.idx").delete())
+        assertTrue(File(dir, "layers/${layer.id}/tiles.bin").delete())
+
+        val loaded = ProjectIO.load(dir)
+        val loadedLayer = loaded.findNode(layer.id) as VectorLayer
+        assertEquals(expected, tileHash(loadedLayer))
+        assertTrue(loaded.findNode(group.id)!!.locked)
+        val tracker = SaveTracker().also { it.commitAll(loaded) }
+        ProjectIO.saveDelta(loaded, dir, tracker.collect(loaded))
+        assertEquals(expected, tileHash(ProjectIO.load(dir).findNode(layer.id) as VectorLayer))
+    }
+
+    @Test
+    fun incompleteVectorCacheFailsInsteadOfDiscardingPixels() {
+        val (doc, layer) = documentWithVector()
+        VectorRenderService.appendStroke(doc, layer, stroke())
+        val dir = File(tmpRoot, "incomplete")
+        ProjectIO.save(doc, dir, thumbnailPng = null)
+        assertTrue(File(dir, "layers/${layer.id}/tiles.bin").delete())
+
+        assertFailsWith<IOException> { ProjectIO.load(dir) }
     }
 
     private fun tileHash(layer: VectorLayer): String = tileHash(layer.pixels)

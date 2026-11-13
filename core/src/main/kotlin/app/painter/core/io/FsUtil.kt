@@ -15,7 +15,7 @@ internal object FsUtil {
     fun tmpOf(dir: File) = File(dir.absoluteFile.parentFile, dir.name + TMP_SUFFIX)
     fun oldOf(dir: File) = File(dir.absoluteFile.parentFile, dir.name + OLD_SUFFIX)
 
-    /** Moves [src] to [dst] (which must not exist): atomic if possible, else plain move, else copy+delete. */
+    /** Moves [src] to [dst] (which must not exist), falling back to copy+delete only for files. */
     fun move(src: File, dst: File) {
         if (dst.exists()) throw IOException("target exists: $dst")
         try {
@@ -30,8 +30,32 @@ internal object FsUtil {
         } catch (_: IOException) {
         }
         if (src.renameTo(dst)) return
-        if (!src.copyRecursively(dst, overwrite = false)) throw IOException("cannot move $src to $dst")
-        if (!deleteRecursively(src)) throw IOException("moved but cannot delete $src")
+        copyAndDeleteForMove(src, dst)
+    }
+
+    internal fun copyAndDeleteForMove(src: File, dst: File, delete: (File) -> Boolean = { it.delete() }) {
+        // A failed recursive delete can destroy part of the source while leaving both paths visible.
+        // Project recovery cannot safely determine which tree is authoritative in that state.
+        if (src.isDirectory) throw IOException("cannot safely move directory $src to $dst")
+        copyForMove(src, dst)
+        if (!delete(src)) throw IOException("copied to $dst but cannot delete $src; both paths remain")
+    }
+
+    /** Copy into a private sibling first so a failed copy cannot look like a completed move. */
+    internal fun copyForMove(
+        src: File,
+        dst: File,
+        copy: (File, File) -> Boolean = { from, to -> from.copyRecursively(to, overwrite = false) },
+    ) {
+        val parent = dst.absoluteFile.parentFile
+        val staging = Files.createTempDirectory(parent.toPath(), ".painter-move-").toFile()
+        try {
+            val candidate = File(staging, "content")
+            if (!copy(src, candidate)) throw IOException("cannot move $src to $dst")
+            Files.move(candidate.toPath(), dst.toPath())
+        } finally {
+            deleteRecursively(staging)
+        }
     }
 
     /** Writes a single file atomically by writing a sibling temp file and replacing. */

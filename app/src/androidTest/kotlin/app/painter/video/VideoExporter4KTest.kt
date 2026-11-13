@@ -72,13 +72,8 @@ class VideoExporter4KTest {
         val (doc, meta) = sourceDocument()
         val out = File(context.cacheDir, "video-export-4k-${System.nanoTime()}.mp4")
         try {
-            val result = try {
-                VideoExporter.encode(doc, meta, plan, encoder, out)
-            } catch (t: Exception) {
-                // A codec that advertises 4K but cannot configure or encode it is a device limitation here.
-                Assume.assumeNoException("4K encoding is unavailable on this device", t)
-                return
-            }
+            // An advertised mode that fails to configure or encode is a failure, not an unsupported-mode skip.
+            val result = VideoExporter.encode(doc, meta, plan, encoder, out)
             assertEquals(VideoExportPlan.frameCount(2L, plan.fps), result.frames)
             assertTrue("MP4 was not written", out.length() > 0L)
 

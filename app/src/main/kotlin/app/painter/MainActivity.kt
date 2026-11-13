@@ -55,7 +55,14 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        vm.bindDriveTokens(driveAuth)
         setContent { PainterTheme { App(vm, updateVm) } }
+    }
+
+    override fun onDestroy() {
+        vm.unbindDriveTokens(driveAuth)
+        driveAuth.close()
+        super.onDestroy()
     }
 
     /** Pen hover and pen buttons go to the canvas before Compose, which filters them (see CanvasView.onPenInAir). */
@@ -123,6 +130,7 @@ private fun App(vm: StudioViewModel, updateVm: UpdateViewModel) {
     val scope = rememberCoroutineScope()
     val projects by vm.projects.collectAsState()
     val homeRequest by vm.homeRequest.collectAsState()
+    val saveError by vm.saveError.collectAsState()
     val updateState by updateVm.state.collectAsState()
     val drive by vm.driveState.collectAsState()
     val context = androidx.compose.ui.platform.LocalContext.current
@@ -152,6 +160,13 @@ private fun App(vm: StudioViewModel, updateVm: UpdateViewModel) {
         if (homeRequest) {
             vm.homeRequest.value = false
             screen = Screen.HOME
+        }
+    }
+
+    LaunchedEffect(saveError) {
+        saveError?.let {
+            Toast.makeText(context, it, Toast.LENGTH_LONG).show()
+            vm.saveError.value = null
         }
     }
 
@@ -194,8 +209,9 @@ private fun App(vm: StudioViewModel, updateVm: UpdateViewModel) {
             val density = LocalDensity.current.density
             NewCanvasScreen(
                 onCreate = { name, w, h ->
-                    vm.newDocument(name, w, h)
-                    screen = Screen.STUDIO
+                    scope.launch {
+                        if (vm.createDocument(name, w, h)) screen = Screen.STUDIO
+                    }
                 },
                 screenW = (cfg.screenWidthDp * density).toInt(),
                 screenH = (cfg.screenHeightDp * density).toInt(),
@@ -251,7 +267,7 @@ private fun Studio(vm: StudioViewModel, drive: DriveUiState) {
                     }
                     vm.encodeComposite(format, opts.quality, opts.transparentBackground)
                 }
-                context.contentResolver.openOutputStream(uri)?.use { it.write(bytes) }
+                (context.contentResolver.openOutputStream(uri) ?: error("no output stream")).use { it.write(bytes) }
             }.isSuccess
             Toast.makeText(context, if (ok) R.string.export_done else R.string.export_failed, Toast.LENGTH_SHORT).show()
         }
@@ -274,7 +290,7 @@ private fun Studio(vm: StudioViewModel, drive: DriveUiState) {
         if (uri != null) scope.launch {
             val ok = runCatching {
                 val bytes = vm.encodePsd()
-                context.contentResolver.openOutputStream(uri)?.use { it.write(bytes) }
+                (context.contentResolver.openOutputStream(uri) ?: error("no output stream")).use { it.write(bytes) }
             }.isSuccess
             Toast.makeText(context, if (ok) R.string.psd_exported else R.string.psd_export_failed, Toast.LENGTH_LONG).show()
         }

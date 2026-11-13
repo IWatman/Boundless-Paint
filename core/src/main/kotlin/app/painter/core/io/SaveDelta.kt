@@ -6,6 +6,15 @@ import app.painter.core.raster.MaskGrid
 import app.painter.core.raster.Tile
 import app.painter.core.raster.TileGrid
 import app.painter.core.raster.TileKey
+import java.lang.ref.WeakReference
+
+/** Tile-local versions can repeat after replacement; do not keep obsolete pixel arrays alive. */
+internal class SavedTileVersion(tile: Any, private val version: Long) {
+    private val reference = WeakReference(tile)
+
+    fun matches(tile: Any, version: Long): Boolean =
+        this.version == version && reference.get() === tile
+}
 
 /** Pixels of the tiles of one layer that are new or changed since the last save. */
 class LayerDelta internal constructor(
@@ -14,14 +23,14 @@ class LayerDelta internal constructor(
     /** Keys whose tile became empty: the stored tile must disappear. */
     val removed: Set<TileKey>,
     /** Versions of every tile of the layer after this delta (committed after a successful write). */
-    internal val versions: Map<TileKey, Long>,
+    internal val versions: Map<TileKey, SavedTileVersion>,
 )
 
 /** Coverage of the mask tiles that are new or changed since the last save. */
 class MaskDelta internal constructor(
     val changed: Map<TileKey, ByteArray>,
     val removed: Set<TileKey>,
-    internal val versions: Map<TileKey, Long>,
+    internal val versions: Map<TileKey, SavedTileVersion>,
 )
 
 /**
@@ -39,11 +48,11 @@ class SaveDelta internal constructor(
     internal val versions: Versions,
 )
 
-/** Saved tile versions of every grid; captured on the main thread, committed after the write. */
+/** Saved tile identities and versions; captured on the main thread, committed after the write. */
 class Versions internal constructor(
-    internal val layers: Map<String, Map<TileKey, Long>>,
-    internal val masks: Map<String, Map<TileKey, Long>>,
-    internal val selection: Map<TileKey, Long>,
+    internal val layers: Map<String, Map<TileKey, SavedTileVersion>>,
+    internal val masks: Map<String, Map<TileKey, SavedTileVersion>>,
+    internal val selection: Map<TileKey, SavedTileVersion>,
 )
 
 /**
@@ -54,9 +63,9 @@ class Versions internal constructor(
  */
 class SaveTracker {
 
-    private var layers: Map<String, Map<TileKey, Long>> = emptyMap()
-    private var masks: Map<String, Map<TileKey, Long>> = emptyMap()
-    private var selection: Map<TileKey, Long> = emptyMap()
+    private var layers: Map<String, Map<TileKey, SavedTileVersion>> = emptyMap()
+    private var masks: Map<String, Map<TileKey, SavedTileVersion>> = emptyMap()
+    private var selection: Map<TileKey, SavedTileVersion> = emptyMap()
 
     /** Forgets the saved state: the next [collect] copies every tile of every grid. */
     fun reset() {
@@ -70,8 +79,8 @@ class SaveTracker {
 
     /** Versions of every tile of [doc] without copying any pixels. */
     fun capture(doc: Document): Versions {
-        val l = HashMap<String, Map<TileKey, Long>>()
-        val m = HashMap<String, Map<TileKey, Long>>()
+        val l = HashMap<String, Map<TileKey, SavedTileVersion>>()
+        val m = HashMap<String, Map<TileKey, SavedTileVersion>>()
         doc.root.walk { node ->
             if (node is RasterLayer) l[node.id] = versionsOf(node.pixels)
             node.mask?.let { mask -> m[node.id] = versionsOfMask(mask.tiles) }
@@ -94,21 +103,22 @@ class SaveTracker {
      * [ProjectIO.saveDelta] needs; the caller writes it and then calls [commitVersions].
      */
     fun collect(doc: Document): SaveDelta {
-        val layerVersions = HashMap<String, Map<TileKey, Long>>()
-        val maskVersions = HashMap<String, Map<TileKey, Long>>()
+        val layerVersions = HashMap<String, Map<TileKey, SavedTileVersion>>()
+        val maskVersions = HashMap<String, Map<TileKey, SavedTileVersion>>()
         val layerDeltas = HashMap<String, LayerDelta>()
         val maskDeltas = HashMap<String, MaskDelta>()
 
         doc.root.walk { node ->
             if (node is RasterLayer) {
                 val known = layers[node.id].orEmpty()
-                val merged = HashMap<TileKey, Long>(known.size + 4)
+                val merged = HashMap<TileKey, SavedTileVersion>(known.size + 4)
                 val changed = HashMap<TileKey, ShortArray>()
                 val removed = HashSet<TileKey>()
                 for ((key, tile) in node.pixels.entries()) {
                     val v = tile.version
-                    if (known[key] == v) {
-                        merged[key] = v
+                    val saved = known[key]
+                    if (saved?.matches(tile, v) == true) {
+                        merged[key] = saved
                         continue
                     }
                     // ProjectIO never stores empty tiles: an empty tile that used to exist is a removal.
@@ -119,7 +129,7 @@ class SaveTracker {
                     val halves = ShortArray(Tile.CHANNELS)
                     tile.copyHalvesTo(halves)
                     changed[key] = halves
-                    merged[key] = v
+                    merged[key] = SavedTileVersion(tile, v)
                 }
                 for (key in known.keys) if (node.pixels.get(key) == null) removed.add(key)
                 layerVersions[node.id] = merged
@@ -130,13 +140,14 @@ class SaveTracker {
             node.mask?.let { mask ->
                 val grid = mask.tiles
                 val known = masks[node.id].orEmpty()
-                val merged = HashMap<TileKey, Long>(known.size + 2)
+                val merged = HashMap<TileKey, SavedTileVersion>(known.size + 2)
                 val changed = HashMap<TileKey, ByteArray>()
                 val removed = HashSet<TileKey>()
                 for ((key, tile) in grid.entries()) {
                     val v = tile.version
-                    if (known[key] == v) {
-                        merged[key] = v
+                    val saved = known[key]
+                    if (saved?.matches(tile, v) == true) {
+                        merged[key] = saved
                         continue
                     }
                     // Tiles equal to the grid default are not stored either.
@@ -145,7 +156,7 @@ class SaveTracker {
                         continue
                     }
                     changed[key] = tile.data.copyOf()
-                    merged[key] = v
+                    merged[key] = SavedTileVersion(tile, v)
                 }
                 for (key in known.keys) if (grid.get(key) == null) removed.add(key)
                 maskVersions[node.id] = merged
@@ -156,13 +167,14 @@ class SaveTracker {
         }
 
         val selGrid = doc.selection.mask
-        val selMerged = HashMap<TileKey, Long>(selection.size + 2)
+        val selMerged = HashMap<TileKey, SavedTileVersion>(selection.size + 2)
         val selChanged = HashMap<TileKey, ByteArray>()
         val selRemoved = HashSet<TileKey>()
         for ((key, tile) in selGrid.entries()) {
             val v = tile.version
-            if (selection[key] == v) {
-                selMerged[key] = v
+            val saved = selection[key]
+            if (saved?.matches(tile, v) == true) {
+                selMerged[key] = saved
                 continue
             }
             if (tile.isUniform(selGrid.defaultValue)) {
@@ -170,7 +182,7 @@ class SaveTracker {
                 continue
             }
             selChanged[key] = tile.data.copyOf()
-            selMerged[key] = v
+            selMerged[key] = SavedTileVersion(tile, v)
         }
         for (key in selection.keys) if (selGrid.get(key) == null) selRemoved.add(key)
         val selDelta = if (selChanged.isNotEmpty() || selRemoved.isNotEmpty()) {
@@ -188,15 +200,15 @@ class SaveTracker {
         )
     }
 
-    private fun versionsOf(grid: TileGrid): Map<TileKey, Long> {
-        val out = HashMap<TileKey, Long>(grid.keys().size)
-        for ((key, tile) in grid.entries()) out[key] = tile.version
+    private fun versionsOf(grid: TileGrid): Map<TileKey, SavedTileVersion> {
+        val out = HashMap<TileKey, SavedTileVersion>(grid.keys().size)
+        for ((key, tile) in grid.entries()) out[key] = SavedTileVersion(tile, tile.version)
         return out
     }
 
-    private fun versionsOfMask(grid: MaskGrid): Map<TileKey, Long> {
-        val out = HashMap<TileKey, Long>(grid.keys().size)
-        for ((key, tile) in grid.entries()) out[key] = tile.version
+    private fun versionsOfMask(grid: MaskGrid): Map<TileKey, SavedTileVersion> {
+        val out = HashMap<TileKey, SavedTileVersion>(grid.keys().size)
+        for ((key, tile) in grid.entries()) out[key] = SavedTileVersion(tile, tile.version)
         return out
     }
 }
