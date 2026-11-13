@@ -12,8 +12,8 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -31,10 +31,10 @@ import kotlinx.coroutines.withContext
 fun TimelapseDialog(state: StudioUiState, actions: StudioActions, onDismiss: () -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    var duration by remember { mutableIntStateOf(30) }
-    var quality by remember { mutableIntStateOf(1080) }
-    var pendingDuration = 30
-    var pendingQuality = 1080
+    var duration by rememberSaveable { mutableIntStateOf(30) }
+    var quality by rememberSaveable { mutableIntStateOf(1080) }
+    var pendingDuration by rememberSaveable { mutableIntStateOf(30) }
+    var pendingQuality by rememberSaveable { mutableIntStateOf(1080) }
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("video/mp4")) { uri ->
         if (uri != null) scope.launch {
             val bytes = actions.encodeTimelapse(pendingDuration, pendingQuality)

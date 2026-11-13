@@ -1,5 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="save_project_failed">Could not save the project. Your changes remain open; please retry.</string>
+    <string name="save_project_busy">Finish the current stroke or operation before leaving the project.</string>
+    <string name="vector_operation_unsupported">This operation cannot be applied to a vector layer. Rasterize or remove the vector layer first.</string>
     <string name="app_name" translatable="false">Boundless Paint</string>
     <string name="add_layer">Add layer</string>
     <string name="add_to_palette">Add to palette</string>

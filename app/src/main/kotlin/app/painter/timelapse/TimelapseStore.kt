@@ -23,14 +23,21 @@ class TimelapseStore(projectDir: File) {
 
     /** Flattens [doc] into a 720 px JPEG frame; returns the new count, or the old one on failure. */
     fun capture(doc: Document): Int {
-        val before = frames().size
+        val existing = frames()
+        val before = existing.size
         val grid = Compositor.flatten(doc, includePaper = true)
         val bmp = gridToBitmap(grid, doc.width, doc.height, maxSide = MAX_SIDE)
         framesDir.mkdirs()
-        val file = File(framesDir, "%06d.jpg".format(before))
+        val next = (existing.mapNotNull { it.nameWithoutExtension.toLongOrNull() }.maxOrNull() ?: -1L) + 1L
+        val file = File(framesDir, "%06d.jpg".format(next))
+        if (!runCatching { file.createNewFile() }.getOrDefault(false)) {
+            bmp.recycle()
+            return before
+        }
         val ok = runCatching {
             file.outputStream().use { out -> bmp.compress(Bitmap.CompressFormat.JPEG, 82, out) }
-        }.isSuccess
+        }.getOrDefault(false)
+        if (!ok) file.delete()
         bmp.recycle()
         return if (ok) before + 1 else before
     }

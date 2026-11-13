@@ -6,6 +6,8 @@ import app.painter.core.doc.Node
 import app.painter.core.doc.RasterLayer
 import app.painter.core.doc.Selection
 import app.painter.core.history.CanvasCommand
+import app.painter.core.history.VectorOperationException
+import app.painter.core.history.firstVectorLayer
 import app.painter.core.raster.IntRect
 import app.painter.core.raster.MaskGrid
 import app.painter.core.raster.TileGrid
@@ -80,6 +82,8 @@ private class Mapping(
 fun canvasCommand(doc: Document, op: CanvasOp, name: String = "Canvas"): CanvasCommand {
     val (dstW, dstH) = CanvasOp.sizeOf(op, doc.width, doc.height)
     require(dstW > 0 && dstH > 0) { "canvas must not be empty" }
+    val vector = firstVectorLayer(doc.root)
+    if (vector != null) throw VectorOperationException("Canvas operation", vector.id)
     val mapping = mappingOf(op, doc.width, doc.height, dstW, dstH)
     val beforeLayers = LinkedHashMap<String, TileGrid>()
     val afterLayers = LinkedHashMap<String, TileGrid>()
@@ -129,7 +133,7 @@ private fun mappingOf(op: CanvasOp, srcW: Int, srcH: Int, dstW: Int, dstH: Int):
         if (op.scaleContent) {
             val sx = srcW.toFloat() / dstW
             val sy = srcH.toFloat() / dstH
-            Mapping(srcW, srcH, dstW, dstH, exact = false, mapX = { x, _ -> (x + 0.5f) * sx - 0.5f }, mapY = { _, y -> (y + 0.5f) * sy - 0.5f })
+            Mapping(srcW, srcH, dstW, dstH, exact = false, mapX = { x, _ -> x * sx - 0.5f }, mapY = { _, y -> y * sy - 0.5f })
         } else {
             val ox = (dstW - srcW) * op.anchorX.coerceIn(0f, 1f)
             val oy = (dstH - srcH) * op.anchorY.coerceIn(0f, 1f)

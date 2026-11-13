@@ -85,7 +85,7 @@ internal fun BrushBrowser(state: StudioUiState, actions: StudioActions, modifier
     if (categories.isEmpty()) return
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    var importAsTexture by remember { mutableStateOf(false) }
+    var importAsTexture by rememberSaveable { mutableStateOf(false) }
     var menu by remember { mutableStateOf(false) }
     val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) scope.launch {
@@ -113,7 +113,7 @@ internal fun BrushBrowser(state: StudioUiState, actions: StudioActions, modifier
         if (uri != null) scope.launch {
             val bytes = withContext(Dispatchers.Default) { actions.exportBrushBytes() }
             val ok = bytes != null && withContext(Dispatchers.IO) {
-                runCatching { context.contentResolver.openOutputStream(uri)?.use { it.write(bytes) } }.isSuccess
+                runCatching { (context.contentResolver.openOutputStream(uri) ?: error("no output stream")).use { it.write(bytes) } }.isSuccess
             }
             Toast.makeText(context, if (ok) R.string.brush_exported else R.string.brush_export_failed, Toast.LENGTH_SHORT).show()
         }
@@ -122,7 +122,7 @@ internal fun BrushBrowser(state: StudioUiState, actions: StudioActions, modifier
         if (uri != null) scope.launch {
             val bytes = withContext(Dispatchers.Default) { actions.exportBrushPackBytes() }
             val ok = bytes != null && withContext(Dispatchers.IO) {
-                runCatching { context.contentResolver.openOutputStream(uri)?.use { it.write(bytes) } }.isSuccess
+                runCatching { (context.contentResolver.openOutputStream(uri) ?: error("no output stream")).use { it.write(bytes) } }.isSuccess
             }
             Toast.makeText(context, if (ok) R.string.brush_exported else R.string.brush_export_failed, Toast.LENGTH_SHORT).show()
         }

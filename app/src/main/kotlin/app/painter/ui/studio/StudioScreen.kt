@@ -43,6 +43,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -87,7 +88,7 @@ fun StudioScreen(
     var cropOpen by remember { mutableStateOf(false) }
     var resizeOpen by remember { mutableStateOf(false) }
     var straightenOpen by remember { mutableStateOf(false) }
-    var timelapseOpen by remember { mutableStateOf(false) }
+    var timelapseOpen by rememberSaveable { mutableStateOf(false) }
     var videoConfirmOpen by remember { mutableStateOf(false) }
     var videoExportOpen by remember { mutableStateOf(false) }
     // Back leaves the transient pattern path mode before it leaves the document.
@@ -1275,6 +1276,7 @@ private fun UndoRedoBar(state: StudioUiState, actions: StudioActions, modifier: 
                 stringResource(R.string.undo),
                 onClick = { if (state.canUndo) actions.undo() },
                 onLongClick = actions::clearLayerLongPress,
+                enabled = !state.filterBusy,
                 tint = if (state.canUndo) MaterialTheme.colorScheme.onSurface else dim,
             )
             AnimatedVisibility(visible = state.canRedo) {

@@ -139,6 +139,18 @@ object ProjectIO {
     fun saveDelta(doc: Document, dir: File, delta: SaveDelta, thumbnail: ((Document) -> ByteArray?)? = null) {
         if (!File(dir, MANIFEST).isFile) throw IOException("no project to update at $dir")
         recover(dir)
+        // A loaded legacy project may have reconstructed a missing vector cache in memory. Recover the
+        // old baseline before creating tmp: load() runs recovery and would otherwise delete our staging tree.
+        var needsVectorBaseline = false
+        doc.root.walk { node ->
+            if (node is VectorLayer) {
+                val oldGrid = File(File(dir, LAYERS), safeName(node.id))
+                if (!File(oldGrid, TILES_IDX).exists() && !File(oldGrid, TILES_BIN).exists()) {
+                    needsVectorBaseline = true
+                }
+            }
+        }
+        val vectorBaseline = if (needsVectorBaseline) load(dir) else null
         val tmp = FsUtil.tmpOf(dir)
         FsUtil.deleteRecursively(tmp)
         if (!tmp.mkdirs()) throw IOException("cannot create $tmp")
@@ -149,10 +161,23 @@ object ProjectIO {
         val newMasks = File(tmp, MASKS)
         doc.root.walk { node ->
             if (node is RasterLayer) {
-                val from = File(oldLayers, safeName(node.id))
+                var from = File(oldLayers, safeName(node.id))
                 val to = File(newLayers, safeName(node.id))
+                if (node is VectorLayer && !File(from, TILES_IDX).exists() && !File(from, TILES_BIN).exists()) {
+                    val recovered = vectorBaseline?.findNode(node.id) as? VectorLayer
+                    if (recovered != null) {
+                        from = File(File(tmp, ".vector-recovery"), safeName(node.id))
+                        writeTiles(recovered.pixels, from)
+                    }
+                }
                 val layerDelta = delta.layers[node.id]
                 if (layerDelta != null) writeLayerDelta(from, to, layerDelta) else copyGridFiles(from, to)
+                // Distinguish a deliberately empty vector cache from a legacy absent cache.
+                if (node is VectorLayer && !File(to, TILES_IDX).exists() && !File(to, TILES_BIN).exists()) {
+                    if (!to.mkdirs() && !to.isDirectory) throw IOException("cannot create $to")
+                    File(to, TILES_IDX).writeBytes(ByteArray(0))
+                    File(to, TILES_BIN).writeBytes(ByteArray(0))
+                }
             }
             node.mask?.let {
                 val from = File(oldMasks, safeName(node.id))
@@ -161,13 +186,18 @@ object ProjectIO {
                 if (maskDelta != null) writeMaskDelta(from, to, maskDelta) else copyGridFiles(from, to)
             }
         }
+        FsUtil.deleteRecursively(File(tmp, ".vector-recovery"))
         if (delta.selectionPresent) {
             val from = File(dir, SELECTION)
             val to = File(tmp, SELECTION)
             val selectionDelta = delta.selection
             if (selectionDelta != null) writeMaskDelta(from, to, selectionDelta) else copyGridFiles(from, to)
         }
-        File(tmp, MANIFEST).writeText(manifestJson.encodeToString(ManifestDto.serializer(), toDto(doc)))
+        // Metadata-only snapshots have empty grids; the delta owns selection presence.
+        val manifest = toDto(doc).copy(
+            selection = if (delta.selectionPresent) SelectionDto(doc.selection.active) else null,
+        )
+        File(tmp, MANIFEST).writeText(manifestJson.encodeToString(ManifestDto.serializer(), manifest))
         File(tmp, FsUtil.COMPLETE_MARKER).writeBytes(ByteArray(0))
         if (thumbnail != null) {
             thumbnail(load(tmp))?.let { File(tmp, THUMB).writeBytes(it) }
@@ -200,10 +230,17 @@ object ProjectIO {
         doc.paper.textureScale = m.paper.texScale
         val layersDir = File(dir, LAYERS)
         val masksDir = File(dir, MASKS)
-        val vectorLayers = ArrayList<VectorLayer>()
-        for (n in m.nodes) fromDto(n, doc, layersDir, masksDir, vectorLayers)?.let { doc.root.add(it) }
-        // The cache is replayed after the whole tree exists: StrokeEngine resolves its target through the document.
-        for (layer in vectorLayers) VectorRenderService.renderAll(doc, layer)
+        val missingVectorCaches = ArrayList<VectorLayer>()
+        for (n in m.nodes) fromDto(n, doc, layersDir, masksDir, missingVectorCaches)?.let { doc.root.add(it) }
+        for (layer in missingVectorCaches) {
+            // Render on an isolated unlocked document so layer and ancestor locks do not prevent recovery.
+            val recoveryDoc = Document(doc.width, doc.height)
+            val recovered = VectorLayer(layer.id, layer.name, TileGrid(doc.width, doc.height), layer.strokes)
+            recoveryDoc.root.add(recovered)
+            VectorRenderService.renderAll(recoveryDoc, recovered)
+            layer.pixels = recovered.pixels
+            warn("reconstructed missing vector cache ${layer.id}; selection and brush resources may be unavailable")
+        }
         doc.activeId = m.activeId?.takeIf { doc.findNode(it) != null }
         doc.activeTarget =
             if (m.activeTarget == "mask" && doc.activeNode?.mask != null) EditTarget.MASK else EditTarget.LAYER
@@ -266,38 +303,70 @@ object ProjectIO {
         zip.flush()
     }
 
-    /**
-     * Unpacks a `.pnt` archive into [targetDir], replacing it atomically. Rejects entries
-     * that would escape the target directory. The stream is not closed.
+    /** Limits apply to uncompressed bytes, including data in directory and reserved entries. */
+    internal data class ArchiveLimits(
+        val maxEntries: Int = 100_000,
+        val maxEntryBytes: Long = 8L * 1024 * 1024 * 1024,
+        val maxTotalBytes: Long = 32L * 1024 * 1024 * 1024,
+    ) {
+        init {
+            require(maxEntries > 0 && maxEntryBytes >= 0 && maxTotalBytes >= 0)
+        }
+    }
+
+    /** Unpacks a `.pnt` into [targetDir], replacing it only after a bounded extraction succeeds.
+     * The input stream is not closed.
      */
-    fun importPnt(input: InputStream, targetDir: File) {
+    fun importPnt(input: InputStream, targetDir: File) = importPnt(input, targetDir, ArchiveLimits())
+
+    internal fun importPnt(input: InputStream, targetDir: File, limits: ArchiveLimits) {
         recover(targetDir)
         val tmp = FsUtil.tmpOf(targetDir)
         FsUtil.deleteRecursively(tmp)
         if (!tmp.mkdirs()) throw IOException("cannot create $tmp")
-        val base = tmp.canonicalFile
-        val zip = ZipInputStream(input)
-        while (true) {
-            val e = zip.nextEntry ?: break
-            val f = File(base, e.name).canonicalFile
-            if (!f.toPath().startsWith(base.toPath()) || (f == base && !e.isDirectory)) {
-                throw IOException("illegal zip entry: ${e.name}")
+        try {
+            val base = tmp.canonicalFile
+            val zip = ZipInputStream(input)
+            val seen = HashSet<String>()
+            val buffer = ByteArray(64 * 1024)
+            var entries = 0
+            var total = 0L
+            while (true) {
+                val e = zip.nextEntry ?: break
+                if (++entries > limits.maxEntries) throw IOException("archive has too many entries")
+                val f = File(base, e.name).canonicalFile
+                if (!f.toPath().startsWith(base.toPath()) || (f == base && !e.isDirectory)) {
+                    throw IOException("illegal zip entry: ${e.name}")
+                }
+                if (!seen.add(f.path)) throw IOException("duplicate zip entry: ${e.name}")
+                if (f.name == FsUtil.COMPLETE_MARKER) throw IOException("reserved zip entry: ${e.name}")
+                if (e.isDirectory) {
+                    if (!f.mkdirs() && !f.isDirectory) throw IOException("cannot create $f")
+                } else if (!f.parentFile.mkdirs() && !f.parentFile.isDirectory) {
+                    throw IOException("cannot create ${f.parentFile}")
+                }
+                var entryBytes = 0L
+                fun copyEntry(out: OutputStream?) {
+                    while (true) {
+                        val n = zip.read(buffer)
+                        if (n < 0) break
+                        if (n.toLong() > limits.maxEntryBytes - entryBytes || n.toLong() > limits.maxTotalBytes - total) {
+                            throw IOException("archive exceeds uncompressed size limit: ${e.name}")
+                        }
+                        entryBytes += n
+                        total += n
+                        out?.write(buffer, 0, n)
+                    }
+                }
+                if (e.isDirectory) copyEntry(null) else FileOutputStream(f).use { copyEntry(it) }
+                zip.closeEntry()
             }
-            if (f.name == FsUtil.COMPLETE_MARKER) continue
-            if (e.isDirectory) {
-                f.mkdirs()
-            } else {
-                f.parentFile.mkdirs()
-                FileOutputStream(f).use { zip.copyTo(it) }
-            }
-            zip.closeEntry()
-        }
-        if (!File(tmp, MANIFEST).isFile) {
+            if (!File(tmp, MANIFEST).isFile) throw IOException("archive has no $MANIFEST")
+            File(tmp, FsUtil.COMPLETE_MARKER).writeBytes(ByteArray(0))
+            commit(targetDir, tmp, carryOver = false)
+        } finally {
             FsUtil.deleteRecursively(tmp)
-            throw IOException("archive has no $MANIFEST")
         }
-        File(tmp, FsUtil.COMPLETE_MARKER).writeBytes(ByteArray(0))
-        commit(targetDir, tmp, carryOver = false)
     }
 
     /**
@@ -695,12 +764,12 @@ object ProjectIO {
         doc: Document,
         layersDir: File,
         masksDir: File,
-        vectorLayers: MutableList<VectorLayer>,
+        missingVectorCaches: MutableList<VectorLayer>,
     ): Node? {
         val node: Node = when (d.kind) {
             NodeKind.GROUP -> GroupNode(d.id, d.name).also { g ->
                 g.expanded = d.expanded
-                for (c in d.children) fromDto(c, doc, layersDir, masksDir, vectorLayers)?.let { g.add(it) }
+                for (c in d.children) fromDto(c, doc, layersDir, masksDir, missingVectorCaches)?.let { g.add(it) }
             }
             NodeKind.RASTER -> {
                 val grid = TileGrid(doc.width, doc.height)
@@ -709,16 +778,23 @@ object ProjectIO {
             }
             NodeKind.VECTOR -> {
                 val grid = TileGrid(doc.width, doc.height)
-                readTiles(grid, File(layersDir, safeName(d.id)))
-                // A malformed vector block keeps the stored cache instead of clearing the layer.
+                val cacheDir = File(layersDir, safeName(d.id))
+                val hasIndex = File(cacheDir, TILES_IDX).isFile
+                val hasData = File(cacheDir, TILES_BIN).isFile
+                if (hasIndex != hasData) throw IOException("incomplete vector cache at $cacheDir")
+                if (hasIndex) readTiles(grid, cacheDir)
+                // Refuse invalid vector data: falling back to an empty list would overwrite the original strokes.
                 val strokes = d.vector?.let {
-                    runCatching { VectorCodec.fromJson(it) }
-                        .onFailure { e -> warn("keeping the cache of vector layer ${d.id}: ${e.message}") }
-                        .getOrNull()
+                    try {
+                        VectorCodec.fromJson(it)
+                    } catch (e: Exception) {
+                        throw IOException("invalid vector data for layer ${d.id}", e)
+                    }
                 }
+                // The saved cache is authoritative: replay lacks selection and brush resources.
                 VectorLayer(d.id, d.name, grid, strokes.orEmpty()).also {
                     it.alphaLock = d.alphaLock
-                    if (strokes != null) vectorLayers.add(it)
+                    if (!hasIndex && !strokes.isNullOrEmpty()) missingVectorCaches.add(it)
                 }
             }
             NodeKind.FILTER -> {

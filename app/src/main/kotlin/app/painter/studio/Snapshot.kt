@@ -2,6 +2,7 @@ package app.painter.studio
 
 import app.painter.core.doc.AdjustmentLayer
 import app.painter.core.doc.Document
+import app.painter.core.doc.FilterLayer
 import app.painter.core.doc.GroupNode
 import app.painter.core.doc.LayerMask
 import app.painter.core.doc.Node
@@ -9,6 +10,33 @@ import app.painter.core.doc.RasterLayer
 import app.painter.core.doc.VectorLayer
 import app.painter.core.raster.MaskGrid
 import app.painter.core.raster.TileGrid
+import app.painter.core.io.SaveDelta
+import app.painter.core.io.SaveTracker
+import app.painter.core.io.Versions
+
+internal data class DocumentSaveSnapshot(
+    val document: Document,
+    val delta: SaveDelta?,
+    val versions: Versions?,
+)
+
+/**
+ * A queued writer may change disk tiles that are absent from the last committed tracker state.
+ * Capture a full replacement in that case; ordinary saves still copy only changed tiles.
+ */
+internal fun prepareDocumentSave(
+    doc: Document,
+    tracker: SaveTracker,
+    onDisk: Boolean,
+    savePending: Boolean,
+): DocumentSaveSnapshot {
+    val incremental = onDisk && !savePending
+    return DocumentSaveSnapshot(
+        document = snapshotDocument(doc, pixels = !incremental),
+        delta = if (incremental) tracker.collect(doc) else null,
+        versions = if (incremental) null else tracker.capture(doc),
+    )
+}
 
 /**
  * Copy of [doc] with identical ids, safe to read on a background thread while the original keeps being edited.
@@ -53,6 +81,15 @@ private fun copyKeepingIds(node: Node, pixels: Boolean): Node = when (node) {
         node.name,
         if (pixels) node.pixels.copy() else TileGrid(node.pixels.width, node.pixels.height),
         node.strokes.toList(),
+    ).also {
+        copyBase(node, it, pixels)
+        it.alphaLock = node.alphaLock
+    }
+    is FilterLayer -> FilterLayer(
+        node.id,
+        node.name,
+        node.params,
+        if (pixels) node.pixels.copy() else TileGrid(node.pixels.width, node.pixels.height),
     ).also {
         copyBase(node, it, pixels)
         it.alphaLock = node.alphaLock

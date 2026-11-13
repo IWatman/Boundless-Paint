@@ -10,6 +10,8 @@ import android.media.MediaMuxer
 import app.painter.core.doc.VideoAudio
 import app.painter.core.video.AudioMix
 import app.painter.core.video.AudioSource
+import app.painter.video.VideoExportCancelled
+import kotlinx.coroutines.CancellationException
 import java.io.BufferedOutputStream
 import java.io.File
 import java.io.FileOutputStream
@@ -258,6 +260,12 @@ object AudioMixer {
         } catch (failure: AudioMixFailure) {
             temp.delete()
             throw failure
+        } catch (cancelled: VideoExportCancelled) {
+            temp.delete()
+            throw cancelled
+        } catch (cancelled: CancellationException) {
+            temp.delete()
+            throw cancelled
         } catch (t: Throwable) {
             temp.delete()
             throw AudioMixFailure(clipName, AudioMixFailure.Kind.DECODE_FAILED, file.name, t)
@@ -510,6 +518,10 @@ object AudioMixer {
             muxerStarted = false
         } catch (failure: AudioMixFailure) {
             throw failure
+        } catch (cancelled: VideoExportCancelled) {
+            throw cancelled
+        } catch (cancelled: CancellationException) {
+            throw cancelled
         } catch (t: Throwable) {
             throw AudioMixFailure(null, AudioMixFailure.Kind.ENCODE_FAILED, "AAC-LC", t)
         } finally {
@@ -525,11 +537,12 @@ object AudioMixer {
     }
 
     /** Keeps the cache small without deleting the file the caller is about to use. */
-    private fun prune(dir: File, keep: String) {
+    internal fun prune(dir: File, keep: String) {
         val files = dir.listFiles()?.filter { it.isFile && it.name.endsWith(".m4a") } ?: return
-        val sorted = files.sortedByDescending { it.lastModified() }
-        for ((index, file) in sorted.withIndex()) {
-            if (index >= CACHE_KEEP || file.name == keep) continue
+        val keepExists = files.any { it.name == keep }
+        val sorted = files.filterNot { it.name == keep }.sortedByDescending { it.lastModified() }
+        val remaining = CACHE_KEEP - if (keepExists) 1 else 0
+        for (file in sorted.drop(remaining)) {
             file.delete()
         }
         dir.listFiles()?.filter {

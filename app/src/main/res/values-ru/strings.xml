@@ -1,5 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="save_project_failed">Не удалось сохранить проект. Изменения остаются открытыми; повторите попытку.</string>
+    <string name="save_project_busy">Завершите текущий штрих или операцию перед выходом из проекта.</string>
+    <string name="vector_operation_unsupported">Эту операцию нельзя применить к векторному слою. Сначала растрируйте или удалите векторный слой.</string>
     <string name="add_layer">Добавить слой</string>
     <string name="add_to_palette">Добавить в палитру</string>
     <string name="alpha_lock">Блокировка прозрачности</string>

@@ -7,10 +7,23 @@ import app.painter.core.doc.GroupNode
 import app.painter.core.doc.LayerMask
 import app.painter.core.doc.Node
 import app.painter.core.doc.RasterLayer
+import app.painter.core.doc.VectorLayer
 import app.painter.core.doc.newNodeId
 import app.painter.core.raster.Tile
 import app.painter.core.raster.TileGrid
 import app.painter.core.raster.TileKey
+
+/** An operation cannot preserve editable vector paths; callers should display this error to the user. */
+class VectorOperationException(val operation: String, val layerId: String) :
+    IllegalStateException("$operation cannot preserve vector layer $layerId; rasterize it explicitly first")
+
+/** Finds a vector layer in a node or its descendants, including hidden and locked layers. */
+internal fun firstVectorLayer(node: Node): VectorLayer? {
+    if (node is VectorLayer) return node
+    var found: VectorLayer? = null
+    if (node is GroupNode) node.walk { if (found == null && it is VectorLayer) found = it }
+    return found
+}
 
 /**
  * Merges node [layerId] (raster, group or adjustment) into the node directly below it. The lower node's
@@ -60,6 +73,8 @@ class MergeDown private constructor(
         val low = parent.children.getOrNull(idx - 1) ?: error("no layer below $layerId")
         if (legacy && low !is RasterLayer) error("no raster layer below $layerId")
         if (low is AdjustmentLayer) error("cannot merge onto an adjustment layer")
+        val vector = firstVectorLayer(up) ?: firstVectorLayer(low)
+        if (vector != null) throw VectorOperationException("Merge down", vector.id)
         requireTreeUnlocked(up)
         requireTreeUnlocked(low)
         upper = up

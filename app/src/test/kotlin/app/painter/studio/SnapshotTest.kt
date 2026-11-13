@@ -6,6 +6,7 @@ import app.painter.core.doc.AnimationMeta
 import app.painter.core.doc.AnimationPlayback
 import app.painter.core.doc.AudioClip
 import app.painter.core.doc.Document
+import app.painter.core.doc.FilterLayer
 import app.painter.core.doc.GroupNode
 import app.painter.core.doc.RasterLayer
 import app.painter.core.doc.VectorLayer
@@ -16,6 +17,8 @@ import app.painter.core.doc.VideoEdit
 import app.painter.core.doc.VideoTrack
 import app.painter.core.io.ProjectIO
 import app.painter.core.io.SaveTracker
+import app.painter.core.filter.BlurParams
+import app.painter.core.raster.TileGrid
 import app.painter.core.vector.VectorPoint
 import app.painter.core.vector.VectorStroke
 import org.junit.Assert.assertEquals
@@ -27,6 +30,38 @@ import java.io.File
 import kotlin.io.path.createTempDirectory
 
 class SnapshotTest {
+    @Test
+    fun snapshotsAndSavesKeepLiveFilterParametersAndIndependentPixels() {
+        val doc = Document.create(32, 32)
+        val filter = FilterLayer("filter", "Blur", BlurParams(radius = 17f), TileGrid(32, 32))
+        filter.pixels.setPixel(3, 4, 1f, 0f, 0f, 1f)
+        filter.opacity = 0.6f
+        filter.alphaLock = true
+        doc.root.add(filter)
+        val dir = createTempDirectory("painter-snapshot-filter").toFile()
+        try {
+            ProjectIO.save(snapshotDocument(doc), dir, null)
+            val tracker = SaveTracker().also { it.commitAll(doc) }
+            for (pixels in listOf(true, false)) {
+                val snapshot = snapshotDocument(doc, pixels)
+                val copy = snapshot.findNode(filter.id) as FilterLayer
+                assertEquals(filter.params, copy.params)
+                assertEquals(filter.opacity, copy.opacity)
+                assertTrue(copy.alphaLock)
+                if (pixels) {
+                    copy.pixels.clear()
+                    assertFalse(filter.pixels.keys().isEmpty())
+                } else {
+                    assertTrue(copy.pixels.keys().isEmpty())
+                    ProjectIO.saveDelta(snapshot, dir, tracker.collect(doc))
+                }
+                val loaded = ProjectIO.load(dir).findNode(filter.id) as FilterLayer
+                assertEquals(filter.params, loaded.params)
+                assertFalse(loaded.pixels.keys().isEmpty())
+            }
+        } finally { dir.deleteRecursively() }
+    }
+
     @Test
     fun snapshotsKeepVectorLayerAndItsPaths() {
         val doc = Document(64, 64, name = "Vectors")
