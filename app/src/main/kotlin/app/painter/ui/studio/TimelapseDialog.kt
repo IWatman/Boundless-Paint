@@ -32,9 +32,9 @@ fun TimelapseDialog(state: StudioUiState, actions: StudioActions, onDismiss: () 
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var duration by rememberSaveable { mutableIntStateOf(30) }
-    var quality by rememberSaveable { mutableIntStateOf(1080) }
+    var quality by rememberSaveable { mutableIntStateOf(1920) }
     var pendingDuration by rememberSaveable { mutableIntStateOf(30) }
-    var pendingQuality by rememberSaveable { mutableIntStateOf(1080) }
+    var pendingQuality by rememberSaveable { mutableIntStateOf(1920) }
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("video/mp4")) { uri ->
         if (uri != null) scope.launch {
             val bytes = actions.encodeTimelapse(pendingDuration, pendingQuality)
@@ -80,14 +80,19 @@ fun TimelapseDialog(state: StudioUiState, actions: StudioActions, onDismiss: () 
                 }
                 Text(stringResource(R.string.timelapse_quality))
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    for (side in listOf(720, 1080, 2160)) {
+                    for (side in listOf(1280, 1920, 3840)) {
                         ToggleChip(
-                            label = if (side >= 2160) "4K" else "${side}p",
+                            label = when (side) {
+                                1280 -> "720p"
+                                1920 -> "1080p"
+                                else -> "4K"
+                            },
                             checked = quality == side,
                             onToggle = { quality = side },
                         )
                     }
                 }
+                Text(stringResource(R.string.timelapse_resolution_note))
             }
         },
         confirmButton = {

@@ -371,7 +371,7 @@ internal class CanvasRenderer(
         GL.glUniform1i(uTex, 0)
         GL.glUniform2f(uOrigin, 0f, 0f)
         GL.glUniform2f(uSize, docW.toFloat(), docH.toFloat())
-        GL.glUniform2f(uUvScale, 1f / overviewW, 1f / overviewH)
+        GL.glUniform2f(uUvScale, 1f / docW, 1f / docH)
         GL.glActiveTexture(GL.GL_TEXTURE0)
         GL.glBindTexture(GL.GL_TEXTURE_2D, overviewTex)
         GL.glBindSampler(0, if (wantMips) samplerMip else samplerLinear)
@@ -425,14 +425,12 @@ internal class CanvasRenderer(
     private fun blitIntoOverview(scratch: Target, tx: Int, ty: Int) {
         GL.glBindFramebuffer(GL.GL_READ_FRAMEBUFFER, scratch.fbo)
         GL.glBindFramebuffer(GL.GL_DRAW_FRAMEBUFFER, overviewFbo)
-        val s = overviewScale
-        val x0 = (tx * Tile.SIZE * s).roundToInt().coerceIn(0, overviewW)
-        val y0 = (ty * Tile.SIZE * s).roundToInt().coerceIn(0, overviewH)
-        val x1 = ((tx + 1) * Tile.SIZE * s).roundToInt().coerceIn(0, overviewW)
-        val y1 = ((ty + 1) * Tile.SIZE * s).roundToInt().coerceIn(0, overviewH)
-        if (x1 > x0 && y1 > y0) {
+        val x = overviewTileBounds(tx, docW, overviewW)
+        val y = overviewTileBounds(ty, docH, overviewH)
+        if (x.destinationEnd > x.destinationStart && y.destinationEnd > y.destinationStart) {
             GL.glBlitFramebuffer(
-                0, 0, Tile.SIZE, Tile.SIZE, x0, y0, x1, y1,
+                0, 0, x.sourceEnd, y.sourceEnd,
+                x.destinationStart, y.destinationStart, x.destinationEnd, y.destinationEnd,
                 GL.GL_COLOR_BUFFER_BIT, GL.GL_LINEAR,
             )
         }

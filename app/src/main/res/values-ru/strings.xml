@@ -558,6 +558,7 @@
     <string name="timelapse_duration">Длительность</string>
     <string name="timelapse_full">Полный</string>
     <string name="timelapse_quality">Качество</string>
+    <string name="timelapse_resolution_note">Разрешение видео ограничено размером записанного холста. Кадры, записанные в старых версиях, могут быть менее чёткими.</string>
     <string name="timelapse_exported">Таймлапс экспортирован</string>
     <string name="timelapse_failed">Не удалось экспортировать таймлапс</string>
     <string name="settings_about">О приложении</string>

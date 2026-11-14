@@ -71,8 +71,8 @@ internal fun PatternKind.titleRes(): Int = when (this) {
 
 /**
  * Pattern fill dialog (spec §09): one of twelve built-in procedural patterns blended between a background
- * and an ink colour, with tile size, rotation, phase offset, contrast, invert and opacity. Both swatches
- * start at the current ink. Every control updates the twelve live previews; Apply fills the active layer or
+ * and an ink colour, with tile size, rotation, phase offset, contrast, invert and opacity. The ink starts
+ * at the current ink, with a contrasting background. Every control updates the twelve live previews; Apply fills the active layer or
  * the selection as one undo step.
  */
 @Composable
@@ -92,7 +92,7 @@ fun PatternDialog(
     var editing by remember { mutableStateOf(PatternColorRole.BACKGROUND) }
     // The two colours are kept as HSV so that hue survives a trip through zero saturation or brightness.
     val alpha = ink.a.coerceIn(0f, 1f)
-    var backgroundHsv by remember { mutableStateOf(ink.toHsvUi()) }
+    var backgroundHsv by remember { mutableStateOf(patternBackgroundHsv(ink)) }
     var inkHsv by remember { mutableStateOf(ink.toHsvUi()) }
     val background = backgroundHsv.toRgba(alpha)
     val patternInk = inkHsv.toRgba(alpha)

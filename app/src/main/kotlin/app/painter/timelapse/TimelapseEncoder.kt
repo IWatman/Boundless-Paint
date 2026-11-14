@@ -12,7 +12,7 @@ import kotlin.math.max
 /**
  * Encodes recorded JPEG frames into an H.264 MP4 with MediaCodec (spec/GAPS.md "Timelapse", M3).
  *
- * The caller picks [maxSide] (720/1080/2160) and [durationSec] (0 = every frame once). Frames are repeated or
+ * The caller picks [maxSide] (1280/1920/3840) and [durationSec] (0 = every frame once). Frames are repeated or
  * sampled evenly to fill the requested duration at 30 fps. Conversion is RGB -> YUV 4:2:0; the encoder's
  * flexible input image is used when the device offers one, with a planar fallback.
  */
@@ -24,18 +24,24 @@ object TimelapseEncoder {
 
     fun encode(frames: List<File>, out: File, maxSide: Int, durationSec: Int): Result {
         require(frames.isNotEmpty()) { "no timelapse frames" }
-        val first = BitmapFactory.decodeFile(frames.first().path) ?: error("cannot decode the first frame")
-        val scale = maxSide.toFloat() / max(first.width, first.height)
-        var width = (first.width * minOf(scale, 1f)).toInt()
-        var height = (first.height * minOf(scale, 1f)).toInt()
-        first.recycle()
+        // Older recordings may contain 720px frames followed by larger frames. Use the largest source
+        // for the output size so the older frames do not lower the resolution of the entire video.
+        val bounds = frames.map { file ->
+            val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            BitmapFactory.decodeFile(file.path, options)
+            require(options.outWidth > 0 && options.outHeight > 0) { "cannot decode timelapse frame: ${file.name}" }
+            options.outWidth to options.outHeight
+        }.maxByOrNull { (w, h) -> w.toLong() * h } ?: error("no timelapse frames")
+        val scale = maxSide.toFloat() / max(bounds.first, bounds.second)
+        var width = (bounds.first * minOf(scale, 1f)).toInt()
+        var height = (bounds.second * minOf(scale, 1f)).toInt()
         width = (width / 2 * 2).coerceAtLeast(2)
         height = (height / 2 * 2).coerceAtLeast(2)
         val targetFrames = if (durationSec > 0) durationSec * FPS else frames.size
         val sequence = buildSequence(frames.size, targetFrames)
         val bitRate = when {
-            maxSide >= 2160 -> 20_000_000
-            maxSide >= 1080 -> 8_000_000
+            maxSide >= 3840 -> 20_000_000
+            maxSide >= 1920 -> 8_000_000
             else -> 4_000_000
         }
         val format = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, width, height).apply {

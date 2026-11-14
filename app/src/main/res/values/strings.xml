@@ -558,6 +558,7 @@
     <string name="timelapse_duration">Duration</string>
     <string name="timelapse_full">Full</string>
     <string name="timelapse_quality">Quality</string>
+    <string name="timelapse_resolution_note">Output resolution is limited by the recorded canvas size. Frames recorded in older versions may have lower detail.</string>
     <string name="timelapse_exported">Timelapse exported</string>
     <string name="timelapse_failed">Could not export the timelapse</string>
     <string name="settings_about">About</string>

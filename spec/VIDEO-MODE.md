@@ -69,12 +69,13 @@ where the reference is silent or where Android cannot follow it.
 
 ### 2.2 Timelapse
 
-- `TimelapseStore(projectDir)` writes a **720 px** JPEG (quality 82) of the flattened document to
+- `TimelapseStore(projectDir)` writes a JPEG (quality 82) of the flattened document, up to **3840 px** on its
+  longest side, to
   `timelapse/frames/NNNNNN.jpg` after a change; `StudioViewModel` schedules at most one capture per 500 ms and
   copies the document on the main thread before encoding off it.
 - `TimelapseEncoder` encodes JPEGs to H.264 MP4 at **30 fps** with `MediaCodec` and `MediaMuxer`, flexible YUV
   input with an I420 fallback, 8 Mbps at 1080p and 20 Mbps at 4K. The dialog offers 15/30/60 s or full and
-  720p/1080p/4K.
+  720p/1080p/4K, capped by the recorded frame dimensions. Older 720 px frames retain their original detail.
 - `encodeTimelapse` writes the whole MP4 into a `ByteArray`, then `TimelapseDialog` writes those bytes to the
   system file picker URI. This is acceptable for a 720p/30 fps clip but **must not be copied** for video mode:
   a 60 fps 4K video can be far larger than the heap.

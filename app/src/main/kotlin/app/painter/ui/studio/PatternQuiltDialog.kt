@@ -71,7 +71,7 @@ fun PatternQuiltDialog(
     var editing by remember { mutableStateOf(PatternColorRole.BACKGROUND) }
     // The two colours are kept as HSV so that hue survives a trip through zero saturation or brightness.
     val alpha = ink.a.coerceIn(0f, 1f)
-    var backgroundHsv by remember { mutableStateOf(ink.toHsvUi()) }
+    var backgroundHsv by remember { mutableStateOf(patternBackgroundHsv(ink)) }
     var inkHsv by remember { mutableStateOf(ink.toHsvUi()) }
     val background = backgroundHsv.toRgba(alpha)
     val patternInk = inkHsv.toRgba(alpha)

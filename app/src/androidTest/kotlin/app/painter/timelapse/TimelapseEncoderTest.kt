@@ -1,6 +1,7 @@
 package app.painter.timelapse
 
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.media.MediaExtractor
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -16,6 +17,45 @@ import java.nio.ByteBuffer
 
 @RunWith(AndroidJUnit4::class)
 class TimelapseEncoderTest {
+    @Test
+    fun capturePreservesFullHdFrames() {
+        val root = File(InstrumentationRegistry.getInstrumentation().targetContext.cacheDir, "timelapse-resolution-${System.nanoTime()}")
+        try {
+            val store = TimelapseStore(root)
+            assertEquals(1, store.capture(Document.create(1920, 1080)))
+            val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            BitmapFactory.decodeFile(store.frames().single().path, options)
+            assertEquals(1920, options.outWidth)
+            assertEquals(1080, options.outHeight)
+        } finally {
+            root.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun mixedOldAndNewFramesDoNotLimitExportToOldResolution() {
+        val root = File(InstrumentationRegistry.getInstrumentation().targetContext.cacheDir, "timelapse-mixed-${System.nanoTime()}")
+        root.mkdirs()
+        try {
+            fun frame(name: String, width: Int, height: Int): File {
+                val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+                bitmap.eraseColor(Color.RED)
+                return File(root, name).also { file ->
+                    file.outputStream().use { assertTrue(bitmap.compress(Bitmap.CompressFormat.JPEG, 90, it)) }
+                    bitmap.recycle()
+                }
+            }
+            val old = frame("old.jpg", 720, 404)
+            val recent = frame("new.jpg", 1920, 1080)
+            val result = TimelapseEncoder.encode(listOf(old, recent), File(root, "video.mp4"), 1920, 0)
+            assertEquals(1920, result.width)
+            assertEquals(1080, result.height)
+            assertEquals(2, result.frames)
+        } finally {
+            root.deleteRecursively()
+        }
+    }
+
     @Test
     fun captureDoesNotOverwriteAnExistingFrameAfterAGap() {
         val root = File(InstrumentationRegistry.getInstrumentation().targetContext.cacheDir, "timelapse-gap-${System.nanoTime()}")

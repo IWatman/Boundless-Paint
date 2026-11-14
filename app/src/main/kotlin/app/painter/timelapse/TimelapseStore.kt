@@ -21,7 +21,7 @@ class TimelapseStore(projectDir: File) {
 
     val frameCount: Int get() = frames().size
 
-    /** Flattens [doc] into a 720 px JPEG frame; returns the new count, or the old one on failure. */
+    /** Flattens [doc] into a JPEG frame up to 4K; returns the new count, or the old one on failure. */
     fun capture(doc: Document): Int {
         val existing = frames()
         val before = existing.size
@@ -48,6 +48,6 @@ class TimelapseStore(projectDir: File) {
     }
 
     private companion object {
-        const val MAX_SIDE = 720
+        const val MAX_SIDE = 3840
     }
 }

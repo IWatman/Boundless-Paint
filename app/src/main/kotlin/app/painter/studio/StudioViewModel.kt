@@ -5808,7 +5808,7 @@ class StudioViewModel(
         val out = java.io.File(getApplication<Application>().cacheDir, "timelapse-${doc.id}.mp4")
         return withContext(Dispatchers.IO) {
             runCatching {
-                TimelapseEncoder.encode(frames, out, maxSide.coerceIn(480, 2160), durationSec)
+                TimelapseEncoder.encode(frames, out, maxSide.coerceIn(480, 3840), durationSec)
                 out.readBytes()
             }.onFailure {
                 android.util.Log.e("PainterTimelapse", "encode failed", it)
