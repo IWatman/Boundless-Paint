@@ -75,6 +75,48 @@ class StudioRegressionTest {
     }
 
     @Test
+    fun liquifyCancelRestoresOnlyTheOriginalLayerAcrossDrags() {
+        instrumentation.runOnMainSync {
+            val doc = document()
+            val a = doc.activeRaster!!
+            vm.addLayer()
+            val b = doc.activeRaster!!
+            a.pixels.setPixel(20, 20, 1f, 0f, 0f, 1f)
+            b.pixels.setPixel(20, 20, 0f, 0f, 1f, 1f)
+            val originalA = a.pixels.get(0, 0)!!.copy()
+            val originalB = b.pixels.get(0, 0)!!.copy()
+            vm.selectLayer(a.id)
+            vm.selectTool(ToolUi.LIQUIFY)
+            vm.setLiquifySize(32f)
+            vm.setLiquifyStrength(1f)
+            repeat(2) {
+                vm.onToolDown(20f, 20f)
+                vm.onToolMove(26f, 20f)
+                vm.onToolUp(26f, 20f)
+            }
+            assertFalse(originalA.contentEquals(a.pixels.get(0, 0)!!))
+            vm.selectLayer(b.id)
+            vm.finishLiquify(commit = false)
+            assertTrue(originalA.contentEquals(a.pixels.get(0, 0)!!))
+            assertTrue(originalB.contentEquals(b.pixels.get(0, 0)!!))
+        }
+    }
+
+    @Test
+    fun liveFilterStaysAtRootWhenGroupingOrStartingAnimation() {
+        instrumentation.runOnMainSync {
+            val doc = document()
+            vm.addFilterLayer(BlurParams())
+            val filter = doc.activeRaster as FilterLayer
+            vm.groupLayer(filter.id)
+            assertSame(doc.root, filter.parent)
+            vm.startAnimation()
+            assertSame(doc.root, filter.parent)
+            assertNotNull(doc.animation)
+        }
+    }
+
+    @Test
     fun clearingLayerDuringPatternOrMaterialRenderDoesNotResurrectPixels() {
         val operations: List<() -> Unit> = listOf(
             { vm.patternFill(PatternSpec(PatternKind.CHECKS), Rgba.WHITE, Rgba.BLACK, 1f) },

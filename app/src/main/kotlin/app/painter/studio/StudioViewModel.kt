@@ -1303,8 +1303,9 @@ class StudioViewModel(
     /** Lasso trail in document pixels while dragging (points closer than 2 px are merged). */
     private val lassoPoints = ArrayList<PointUi>()
 
-    /** Open liquify gesture: pushes the active layer's pixels and remembers their originals. */
-    private var liquify: LiquifySession? = null
+    /** A liquify draft always writes and restores pixels on the layer where it began. */
+    private data class LiquifyDraft(val layer: RasterLayer, val session: LiquifySession)
+    private var liquify: LiquifyDraft? = null
 
     override val toolActive: Boolean
         get() = _state.value.tool == ToolUi.TRANSFORM || _state.value.tool == ToolUi.FILL ||
@@ -1511,7 +1512,7 @@ class StudioViewModel(
         }
         if (_state.value.tool == ToolUi.LIQUIFY) {
             liquifyMove(x, y)
-            liquify?.end()
+            liquify?.session?.end()
             return
         }
         if (_state.value.tool == ToolUi.SHAPE) {
@@ -1574,6 +1575,10 @@ class StudioViewModel(
     }
 
     override fun onToolCancel() {
+        if (_state.value.tool == ToolUi.LIQUIFY) {
+            liquify?.session?.end()
+            return
+        }
         // A cancelled pattern path gesture paints nothing: its tiles only exist in the one patch built on release.
         if (_state.value.tool == ToolUi.PATTERN_PATH) {
             patternPathCancel()
@@ -2783,6 +2788,10 @@ class StudioViewModel(
 
     override fun undo() {
         if (videoExportBusy || filterBusy) return
+        if (liquify?.session?.touched?.isNotEmpty() == true) {
+            finishLiquify(commit = false)
+            return
+        }
         // Undo is a document edit: leave the preview on the frame the user was editing.
         stopVideoPlayback(restoreEditingFrame = true)
         // An open shape draft has pixels only in its preview: undo drops it instead of a history step.
@@ -2800,6 +2809,7 @@ class StudioViewModel(
 
     override fun redo() {
         if (videoExportBusy || filterBusy) return
+        if (liquify?.session?.touched?.isNotEmpty() == true) return
         stopVideoPlayback(restoreEditingFrame = true)
         if (shapeDraft != null) return
         if (transformSession != null || gradientLayerId != null) return
@@ -3000,6 +3010,7 @@ class StudioViewModel(
 
     override fun groupLayer(id: String) {
         val n = doc.findNode(id) ?: return
+        if (n is FilterLayer) return
         exec(GroupNodes(listOf(n.id), getApplication<Application>().getString(R.string.group_default_name, groupCount() + 1)))
     }
 
@@ -4337,9 +4348,9 @@ class StudioViewModel(
             if (Animation.frames(doc).isNotEmpty()) return
             doc.animation = null
         }
-        val layer = doc.activeRaster ?: run {
+        val layer = doc.activeRaster?.takeUnless { it is FilterLayer } ?: run {
             var found: RasterLayer? = null
-            doc.root.walk { if (found == null && it is RasterLayer) found = it }
+            doc.root.walk { if (found == null && it is RasterLayer && it !is FilterLayer) found = it }
             found
         } ?: return
         finishShape(commit = true)
@@ -5284,7 +5295,9 @@ class StudioViewModel(
             delay(AUTOSAVE_DELAY_MS)
             // A stroke, a transform session or a gradient preview may already have touched layer tiles and
             // hold pixels outside history: save only once all of them are done.
-            while (stroke != null || transformSession != null || gradientLayerId != null) delay(AUTOSAVE_DELAY_MS)
+            while (stroke != null || transformSession != null || gradientLayerId != null ||
+                liquify?.session?.touched?.isNotEmpty() == true
+            ) delay(AUTOSAVE_DELAY_MS)
             autosaveJob = null
             save(refreshList = false, withThumbnail = false)
         }
@@ -5354,18 +5367,23 @@ class StudioViewModel(
 
     private fun liquifyDown(x: Float, y: Float) {
         val layer = doc.activeRaster ?: return
-        if (!layer.visible || layer.effectivelyLocked) return
+        if (layer is FilterLayer || !layer.visible || layer.effectivelyLocked) return
         val s = _state.value
-        liquify = LiquifySession(layer.pixels, s.liquifySize, s.liquifyStrength).also {
-            it.begin(clampX(x), clampY(y))
+        val existing = liquify
+        val draft = if (existing != null && existing.layer === layer) existing else {
+            finishLiquify(commit = true)
+            LiquifyDraft(layer, LiquifySession(layer.pixels, s.liquifySize, s.liquifyStrength))
         }
+        liquify = draft
+        draft.session.begin(clampX(x), clampY(y))
     }
 
     private fun liquifyMove(x: Float, y: Float) {
-        val session = liquify ?: return
+        val (layer, session) = liquify ?: return
+        if (doc.activeRaster !== layer) return
         session.move(clampX(x), clampY(y))
         val keys = session.takeDirty()
-        if (keys.isNotEmpty()) canvas?.invalidate(doc.activeId, keys)
+        if (keys.isNotEmpty()) canvas?.invalidate(layer.id, keys)
     }
 
     /**
@@ -5410,20 +5428,20 @@ class StudioViewModel(
 
     override fun setLiquifySize(size: Float) {
         val v = size.coerceIn(8f, 800f)
-        liquify?.size = v
+        liquify?.session?.size = v
         _state.update { it.copy(liquifySize = v) }
     }
 
     override fun setLiquifyStrength(strength: Float) {
         val v = strength.coerceIn(0f, 1f)
-        liquify?.strength = v
+        liquify?.session?.strength = v
         _state.update { it.copy(liquifyStrength = v) }
     }
 
     override fun finishLiquify(commit: Boolean) {
-        val session = liquify ?: return
+        val (layer, session) = liquify ?: return
         liquify = null
-        val layer = doc.activeRaster ?: return
+        if (doc.findNode(layer.id) !== layer) return
         val keys = session.touched
         if (keys.isEmpty()) return
         if (!commit) {
@@ -5796,7 +5814,7 @@ class StudioViewModel(
             // Copy on the main thread, encode off it: the document must not change under the encoder.
             val snapshot = snapshotDocument(doc, pixels = true)
             lastTimelapseFrameAt = SystemClock.elapsedRealtime()
-            val count = withContext(Dispatchers.IO) { store.capture(snapshot) }
+            val count = withContext(Dispatchers.IO) { ioLock.withLock { store.capture(snapshot) } }
             _state.update { it.copy(timelapseFrames = count) }
         }
     }
@@ -5822,6 +5840,7 @@ class StudioViewModel(
         finishShape(commit = true)
         finishTransform(apply = true)
         finishGradient(apply = true)
+        finishLiquify(commit = true)
         commitPendingOpacity()
         history.execute(doc, cmd)
         canvas?.invalidate(null, null)
@@ -6240,6 +6259,7 @@ class StudioViewModel(
         isAdjustment = this is AdjustmentLayer,
         adjustKind = (this as? AdjustmentLayer)?.params?.kind,
         isVector = this is VectorLayer,
+        isFilter = this is FilterLayer,
     )
 
     private fun thumbnailOf(layer: RasterLayer): ImageBitmap? {

@@ -154,6 +154,7 @@ data class LayerUi(
     val adjustKind: String? = null,
     /** Node is an editable vector layer: the thumbnail shows a small "V" badge. */
     val isVector: Boolean = false,
+    val isFilter: Boolean = false,
 )
 
 /** One frame in the animation timeline. [index] is its zero-based position in playback order. */

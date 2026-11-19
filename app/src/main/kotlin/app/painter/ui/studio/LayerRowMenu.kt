@@ -48,7 +48,7 @@ fun LayerRowMenu(
             MenuItem(stringResource(R.string.ungroup_layers), onDismiss, {
                 actions.ungroupLayer(layer.id)
             })
-        } else {
+        } else if (!layer.isFilter) {
             MenuItem(stringResource(R.string.group_layers), onDismiss, {
                 actions.groupLayer(layer.id)
             })

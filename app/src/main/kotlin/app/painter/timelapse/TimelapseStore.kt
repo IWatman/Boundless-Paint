@@ -5,6 +5,10 @@ import app.painter.core.blend.Compositor
 import app.painter.core.doc.Document
 import app.painter.studio.gridToBitmap
 import java.io.File
+import java.io.OutputStream
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
+import java.util.Locale
 
 /**
  * Timelapse frame store of one project (spec/document-model.md "Timelapse", M3): a JPEG of the flattened
@@ -23,23 +27,32 @@ class TimelapseStore(projectDir: File) {
 
     /** Flattens [doc] into a JPEG frame up to 4K; returns the new count, or the old one on failure. */
     fun capture(doc: Document): Int {
-        val existing = frames()
-        val before = existing.size
         val grid = Compositor.flatten(doc, includePaper = true)
         val bmp = gridToBitmap(grid, doc.width, doc.height, maxSide = MAX_SIDE)
-        framesDir.mkdirs()
-        val next = (existing.mapNotNull { it.nameWithoutExtension.toLongOrNull() }.maxOrNull() ?: -1L) + 1L
-        val file = File(framesDir, "%06d.jpg".format(next))
-        if (!runCatching { file.createNewFile() }.getOrDefault(false)) {
+        return try {
+            publishFrame { out -> bmp.compress(Bitmap.CompressFormat.JPEG, 82, out) }
+        } finally {
             bmp.recycle()
-            return before
         }
-        val ok = runCatching {
-            file.outputStream().use { out -> bmp.compress(Bitmap.CompressFormat.JPEG, 82, out) }
+    }
+
+    /** Only completed frames get a .jpg name, so an export can list frames during a capture. */
+    internal fun publishFrame(writeJpeg: (OutputStream) -> Boolean): Int {
+        val existing = frames()
+        val next = (existing.mapNotNull { it.nameWithoutExtension.toLongOrNull() }.maxOrNull() ?: -1L) + 1L
+        val target = File(framesDir, String.format(Locale.ROOT, "%06d.jpg", next))
+        val written = runCatching {
+            framesDir.mkdirs()
+            val tmp = Files.createTempFile(framesDir.toPath(), ".frame-", ".tmp")
+            try {
+                if (!tmp.toFile().outputStream().use(writeJpeg)) return@runCatching false
+                Files.move(tmp, target.toPath(), StandardCopyOption.ATOMIC_MOVE)
+                true
+            } finally {
+                Files.deleteIfExists(tmp)
+            }
         }.getOrDefault(false)
-        if (!ok) file.delete()
-        bmp.recycle()
-        return if (ok) before + 1 else before
+        return existing.size + if (written) 1 else 0
     }
 
     /** Deletes every recorded frame. */
